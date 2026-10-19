@@ -4,7 +4,7 @@ Preprocess a PR diff: drop non-reviewable files, number new-file lines, list heu
 
 .DESCRIPTION
 Prints a summary, heuristic candidates (clues only) and a compact diff with new-file line numbers.
-With -Root, reads ROOT/step1/pr.diff and writes ROOT/step2/prepared.txt unless -Out is given.
+With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 2 bad arguments or input.
 
@@ -32,8 +32,8 @@ if (@($Root, $InputPath, $Git | Where-Object { $_ }).Count -gt 1) { Exit-WithErr
 if ($Root) {
     $InputPath = Join-Path $Root 'step1/pr.diff'
     if (-not $Out) {
-        [void][IO.Directory]::CreateDirectory((Resolve-UserPath (Join-Path $Root 'step2')))
-        $Out = Join-Path $Root 'step2/prepared.txt'
+        [void][IO.Directory]::CreateDirectory((Resolve-UserPath (Join-Path $Root 'step3')))
+        $Out = Join-Path $Root 'step3/prepared.txt'
     }
 }
 $diffText = Get-DiffText -InputPath $InputPath -Git $Git -Repo $Repo

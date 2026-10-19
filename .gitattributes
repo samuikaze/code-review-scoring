@@ -1,0 +1,10 @@
+# bash / zsh / awk 只能讀 LF 換行；在 core.autocrlf=true 的 Windows 上也要維持 LF
+*.sh   text eol=lf
+*.zsh  text eol=lf
+*.awk  text eol=lf
+*.tsv  text eol=lf
+*.ini  text eol=lf
+*.md   text eol=lf
+
+# PowerShell 腳本以 UTF-8 with BOM 儲存，換行交給 git 依平台處理
+*.ps1  text

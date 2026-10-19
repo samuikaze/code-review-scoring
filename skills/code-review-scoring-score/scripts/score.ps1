@@ -3,8 +3,8 @@
 Validate findings.txt and compute dimension scores, total and grade.
 
 .DESCRIPTION
-With -Root (default tmp): uses ROOT/step2/findings.txt and ROOT/step1/pr.diff, refuses unanswered
-questions in step1/step2, and writes ROOT/step3/score.tsv and ROOT/step3/score.json.
+With -Root (default tmp): uses ROOT/step3/findings.txt and ROOT/step1/pr.diff, refuses unanswered
+questions in step1/step3, and writes ROOT/step4/score.tsv and ROOT/step4/score.json.
 With -Findings: standalone use without the root layout. Works on Windows PowerShell 5.1 and PowerShell 7+.
 Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad arguments,
@@ -30,10 +30,10 @@ Initialize-Utf8
 if (-not $Root -and -not $Findings) { $Root = 'tmp' }
 if ($Root) {
     if (-not [IO.Directory]::Exists((Resolve-UserPath $Root))) { Exit-WithError "review root not found: $Root" }
-    if (-not $Findings) { $Findings = Join-Path $Root 'step2/findings.txt' }
+    if (-not $Findings) { $Findings = Join-Path $Root 'step3/findings.txt' }
     if (-not $Diff -and -not $Git -and (Test-UserFile (Join-Path $Root 'step1/pr.diff'))) { $Diff = Join-Path $Root 'step1/pr.diff' }
     if (-not $OutDir) {
-        $OutDir = Join-Path $Root 'step3'
+        $OutDir = Join-Path $Root 'step4'
         [void][IO.Directory]::CreateDirectory((Resolve-UserPath $OutDir))
     }
     # Scoring must wait until every input is resolved and every question is answered.
@@ -47,7 +47,7 @@ if ($Root) {
             exit 3
         }
     }
-    foreach ($s in 'step1', 'step2') {
+    foreach ($s in 'step1', 'step3') {
         if ((Test-UserFile (Join-Path $Root "$s/questions.md")) -and -not (Test-UserFile (Join-Path $Root "$s/answers.md"))) {
             [Console]::Error.WriteLine("error: $(Join-Path $Root "$s/questions.md") has no answers.md yet; ask the user first")
             exit 3
@@ -138,7 +138,7 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
         $key = $Matches[1]; $val = $Matches[2].Trim()
         if ($rec -eq 'skip') { continue }
         if ($rec -eq '') { Add-Error $no "field `"$key`" is not under an F or U record"; continue }
-        if ($rec -eq 'F' -and $key -cnotin 'problem', 'suggestion', 'assumption') { Add-Error $no "unknown field `"$key`" for F (allowed: problem, suggestion, assumption)"; continue }
+        if ($rec -eq 'F' -and $key -cnotin 'problem', 'suggestion', 'assumption', 'source') { Add-Error $no "unknown field `"$key`" for F (allowed: problem, suggestion, assumption, source)"; continue }
         if ($rec -eq 'U' -and $key -cnotin 'content', 'code', 'ticket') { Add-Error $no "unknown field `"$key`" for U (allowed: content, code, ticket)"; continue }
         if (-not $val) { Add-Error $no "field `"$key`" is empty"; continue }
         $fld[$key] = $val

@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-spec-reading
-description: Step 1 of the code-review-scoring workflow (read specs → analyze code → score → code review → report), usable on its own. Saves the PR diff, inventories the inputs (PR description, SD spec, third-party core-system spec, change log, static analysis report, vulnerability scan), collects everything missing in one round of questions, and records requirements and severity facts from the specs in tmp/step1/spec-context.md. Use when dispatched by code-review-scoring, or when the user says 「閱讀規格書」、「先讀 SD 規格書」、「整理 PR 的規格需求」、「盤點評分資料」.
+description: Step 1 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Saves the PR diff, inventories the inputs (PR description, SD spec, third-party core-system spec, change log, static analysis report, vulnerability scan), collects everything missing in one round of questions, and records requirements and severity facts from the specs in tmp/step1/spec-context.md. Use when dispatched by code-review-scoring, or when the user says 「閱讀規格書」、「先讀 SD 規格書」、「整理 PR 的規格需求」、「盤點評分資料」.
 compatibility: Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "1/5"

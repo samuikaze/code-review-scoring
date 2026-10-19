@@ -8,13 +8,13 @@ usage() {
 Usage: score.zsh [--root DIR] [options]
        score.zsh --findings FILE [--diff FILE | --git RANGE [--repo DIR]] [--out-dir DIR]
 
-      --root DIR       review root (default: tmp). Uses ROOT/step2/findings.txt and ROOT/step1/pr.diff,
-                       refuses unanswered questions in step1/step2, writes ROOT/step3/score.tsv and score.json
+      --root DIR       review root (default: tmp). Uses ROOT/step3/findings.txt and ROOT/step1/pr.diff,
+                       refuses unanswered questions in step1/step3, writes ROOT/step4/score.tsv and score.json
   -f, --findings FILE  findings file (standalone use without the root layout)
   -d, --diff FILE      diff used to verify that every location is an added line
   -g, --git RANGE      run git diff RANGE as the verification diff
   -r, --repo DIR       repository for --git
-  -o, --out-dir DIR    where score.tsv / score.json are written (default: ROOT/step3 or the findings dir)
+  -o, --out-dir DIR    where score.tsv / score.json are written (default: ROOT/step4 or the findings dir)
   -h, --help           show this help
 
 Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun),
@@ -39,9 +39,9 @@ done
 [[ -z "$root" && -z "$findings" ]] && root="tmp"
 if [[ -n "$root" ]]; then
   [[ -d "$root" ]] || { echo "error: review root not found: $root" >&2; exit 2; }
-  [[ -z "$findings" ]] && findings="$root/step2/findings.txt"
+  [[ -z "$findings" ]] && findings="$root/step3/findings.txt"
   [[ -z "$diff" && -z "$git_range" && -f "$root/step1/pr.diff" ]] && diff="$root/step1/pr.diff"
-  [[ -z "$out_dir" ]] && { mkdir -p "$root/step3"; out_dir="$root/step3"; }
+  [[ -z "$out_dir" ]] && { mkdir -p "$root/step4"; out_dir="$root/step4"; }
   # Scoring must wait until every input is resolved and every question is answered.
   ctx="$root/step1/spec-context.md"
   if [[ -f "$ctx" ]]; then
@@ -52,7 +52,7 @@ if [[ -n "$root" ]]; then
       exit 3
     fi
   fi
-  for s in step1 step2; do
+  for s in step1 step3; do
     if [[ -f "$root/$s/questions.md" && ! -f "$root/$s/answers.md" ]]; then
       echo "error: $root/$s/questions.md has no answers.md yet; ask the user first" >&2
       exit 3

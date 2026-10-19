@@ -1,0 +1,20 @@
+# 評分過程的暫存檔（各步驟產出與狀態檔），保留 .gitkeep
+tmp/*
+!tmp/.gitkeep
+
+# 最終版報告，保留 .gitkeep
+reports/*
+!reports/.gitkeep
+
+# scripts/link-skills.* 產生的連結，各環境自行執行腳本建立
+.agents/
+.github/skills/
+.claude/skills/
+
+# 各使用者自行選擇的 Sub-Agent model 與 reasoning 設定
+skills/code-review-scoring/configs.ini
+
+# 作業系統產生的檔案
+.DS_Store
+Thumbs.db
+desktop.ini

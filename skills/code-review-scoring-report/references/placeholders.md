@@ -19,11 +19,11 @@ Must be alone on their line. Replaced by several lines; an empty block becomes t
 
 | Placeholder | Content | Source |
 | --- | --- | --- |
-| `{{CR_OVERVIEW}}` | Markdown table with one row per code review plugin: files reviewed, comment counts per severity, conclusion (header from labels); or label `cr.no_plugins` / `cr.not_run` | `step4/plan.tsv` + `cr.txt` |
-| `{{CR_DETAILS}}` | one `### <plugin>` section per plugin: conclusion, comments sorted Critical → Major → Minor → Nit with problem and suggestion, highlights. Empty (not `none`) when no plugin ran | `step4/<plugin>/cr.txt` |
-| `{{CR_SKIPPED}}` | plugins of `plugins.ini` that did not run because no changed file matched their `applies` | `step4/skipped.tsv` |
+| `{{CR_OVERVIEW}}` | Markdown table with one row per code review plugin: files reviewed, comment counts per severity, conclusion (header from labels); or label `cr.no_plugins` / `cr.not_run` | `step2/plan.tsv` + `cr.txt` |
+| `{{CR_DETAILS}}` | one `### <plugin>` section per plugin: conclusion, comments sorted Critical → Major → Minor → Nit with problem and suggestion, highlights. Empty (not `none`) when no plugin ran | `step2/<plugin>/cr.txt` |
+| `{{CR_SKIPPED}}` | plugins of `plugins.ini` that did not run because no changed file matched their `applies` | `step2/skipped.tsv` |
 | `{{SCORE_ROWS}}` | one Markdown table row per dimension: `\| A 正確性 \| 20/25 \| A1 Major -5 \|` (put the header row in the template) | `score.tsv` |
-| `{{FINDINGS}}` | numbered deductions sorted Critical → Major → Minor, each with problem, suggestion and optional assumption | `score.tsv` + `F` lines |
+| `{{FINDINGS}}` | numbered deductions sorted Critical → Major → Minor, each with problem, suggestion, optional assumption and, for deductions confirmed from code review comments, the source plugin and rule | `score.tsv` + `F` lines |
 | `{{SUGGESTIONS}}` | `Nit` findings, then `N` lines | `findings.txt` |
 | `{{UPSTREAM}}` | numbered suspected upstream factors with content, code and vendor ticket | `U` lines |
 | `{{HIGHLIGHTS}}` | bullet list | `H` lines |
@@ -34,4 +34,4 @@ Must be alone on their line. Replaced by several lines; an empty block becomes t
 
 ## Labels
 
-`assets/labels.tsv` holds `key<TAB>text` pairs. Keys: `none`, `title.missing`, `capped_note`, `sep.list`, `sep.bracket`, `sep.colon`, `dim.A`–`dim.G`, `field.*` (problem, suggestion, assumption, content, code, ticket), `upstream.*`, `sub.*`, `impact.*`, and for code review `cr.not_run`, `cr.no_plugins`, `cr.missing`, `cr.col.*` (table headers), `cr.summary`, `cr.highlights`, `cr.no_comments`, `cr.skipped` (`{applies}` is replaced by the plugin's patterns), `cr.all_files`. A missing key is printed as the key itself.
+`assets/labels.tsv` holds `key<TAB>text` pairs. Keys: `none`, `title.missing`, `capped_note`, `sep.list`, `sep.bracket`, `sep.colon`, `dim.A`–`dim.G`, `field.*` (problem, suggestion, assumption, source, content, code, ticket), `upstream.*`, `sub.*`, `impact.*`, and for code review `cr.not_run`, `cr.no_plugins`, `cr.missing`, `cr.col.*` (table headers), `cr.summary`, `cr.highlights`, `cr.no_comments`, `cr.skipped` (`{applies}` is replaced by the plugin's patterns), `cr.all_files`. A missing key is printed as the key itself.

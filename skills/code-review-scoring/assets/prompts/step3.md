@@ -1,16 +1,18 @@
-# Step 3 of 5: Score
+# Step 3 of 5: Analyze code
 
-You are the subagent for step 3 of a code review scoring workflow. Load the `code-review-scoring-score` skill with your skill tool and follow it exactly. If the skill tool is unavailable or cannot find it, read `{{SKILLS_DIR}}/code-review-scoring-score/SKILL.md` and follow it instead, resolving its relative paths (`scripts/`, `references/`, `assets/`) against `{{SKILLS_DIR}}/code-review-scoring-score/`. Workflow settings:
+You are the subagent for step 3 of a code review scoring workflow. Load the `code-review-scoring-code-analysis` skill with your skill tool and follow it exactly. If the skill tool is unavailable or cannot find it, read `{{SKILLS_DIR}}/code-review-scoring-code-analysis/SKILL.md` and follow it instead, resolving its relative paths (`scripts/`, `references/`, `assets/`) against `{{SKILLS_DIR}}/code-review-scoring-code-analysis/`. Workflow settings:
 
 - Review root: `{{ROOT}}` (pass `--root "{{ROOT}}"` to the skill's scripts)
-- Inputs: `{{ROOT}}/step2/findings.txt`, `{{ROOT}}/step1/pr.diff`, `{{ROOT}}/step1/spec-context.md`
-- Outputs: `{{ROOT}}/step3/score.tsv`, `{{ROOT}}/step3/score.json`
+- Inputs: `{{ROOT}}/step1/pr.diff`, `{{ROOT}}/step1/spec-context.md`, and the code review results of step 2: `{{ROOT}}/step2/plan.tsv` (plugin, path, mode, file count) and `{{ROOT}}/step2/<plugin>/cr.txt`
+- Outputs: `{{ROOT}}/step3/prepared.txt`, `{{ROOT}}/step3/findings.txt`
 
 Tasks:
-1. Run `score --root "{{ROOT}}"`.
-2. Do not edit `findings.txt`; it belongs to step 2. If validation fails (exit 1), save the complete error output to `{{ROOT}}/step3/errors.log` and report failed with the message "findings.txt failed validation; redo step 2".
-3. Exit 3 (unanswered questions) means an earlier step is incomplete: report failed with the script's message.
-4. Report success with the grade and total in the message.
+1. Run `prepare-diff --root "{{ROOT}}"`.
+2. Use the code review results as described in the skill's "Using code review results" section: confirm each comment of a `mapped` plugin against the code and the checklist, and record the confirmed ones as findings with a `source:` line. Comments of `advisory` plugins never become findings.
+3. Review every remaining check of the skill's checklist. Do not re-derive problems the code review already found; confirm them instead.
+4. Questions for the user (row counts, cross-timezone business, springdoc, missing documents for a suspected upstream factor, …) go to `questions.md` after the whole diff has been reviewed; then report pending.
+5. Write `findings.txt` in the skill's format and run the skill's self-check before reporting success.
+6. If `{{ROOT}}/step4/errors.log` exists and is newer than `findings.txt`, this is a rerun after scoring rejected the findings: fix every listed error (recheck the code and the checklist, not only the format).
 
 ## Status protocol (mandatory)
 

@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-report
-description: Step 5 of the code-review-scoring workflow (read specs → analyze code → score → code review → report), usable on its own. Renders one final report that combines the code review results and the score results to reports/ (working copy in tmp/step5/report.md) from the earlier steps (spec-context.md, findings.txt, score.tsv, score.json, step4 code review results) using an editable report template and label file, then presents it. Use when dispatched by code-review-scoring, or when the user says 「產出分數報告」、「產生評分報告」、「輸出 PR 評分結果」、「給我評分報告」、「調整報告模板」.
+description: Step 5 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Renders one final report that combines the code review results and the score results to reports/ (working copy in tmp/step5/report.md) from the earlier steps (spec-context.md, findings.txt, score.tsv, score.json, step4 code review results) using an editable report template and label file, then presents it. Use when dispatched by code-review-scoring, or when the user says 「產出分數報告」、「產生評分報告」、「輸出 PR 評分結果」、「給我評分報告」、「調整報告模板」.
 compatibility: Requires bash or zsh with awk, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "5/5"
@@ -11,7 +11,7 @@ metadata:
 
 Render the review report: part one holds the code review results of every plugin, part two the score results. Do not write the report by hand and do not change any number or comment in it.
 
-**Input:** `tmp/step1/spec-context.md`, `tmp/step2/findings.txt`, `tmp/step3/score.tsv`, `tmp/step3/score.json`, and the code review results `tmp/step4/plan.tsv`, `tmp/step4/skipped.tsv`, `tmp/step4/<plugin>/cr.txt` (`tmp` is the review root; scripts take `--root`). Without `tmp/step4/plan.tsv` the report states that no code review was run.
+**Input:** `tmp/step1/spec-context.md`, the code review results `tmp/step2/plan.tsv`, `tmp/step2/skipped.tsv`, `tmp/step2/<plugin>/cr.txt`, `tmp/step3/findings.txt`, `tmp/step4/score.tsv` and `tmp/step4/score.json` (`tmp` is the review root; scripts take `--root`). Without `tmp/step2/plan.tsv` the report states that no code review was run.
 **Output:** the final report `reports/<YYYY-MM-DD>_<PR title>.md`, a working copy `tmp/step5/report.md`, and `tmp/step5/report-path.txt` with the final report's absolute path.
 
 ## Modes
@@ -34,7 +34,7 @@ The final report name is built from the render date and the PR title, with chara
 ## Procedure
 
 1. Run `render-report --root tmp`.
-2. Exit 1 means the scores are missing or older than `findings.txt` (rerun `code-review-scoring-score`), or a planned code review plugin has no `cr.txt` yet (finish step 4). Then retry.
+2. Exit 1 means the scores are missing or older than `findings.txt` (rerun `code-review-scoring-score`), or a planned code review plugin has no `cr.txt` yet (finish step 2). Then retry.
 3. A warning about an unknown placeholder means the template has a typo or a block placeholder that is not alone on its line; fix the template.
 4. Standalone mode: reply with the content of the published report (path in the `published` output line) exactly as rendered, followed by one line with its path.
 
@@ -46,5 +46,5 @@ The final report name is built from the render date and the PR title, with chara
 
 ## Gotchas
 
-- The report contains only what the earlier steps recorded. If something is missing or wrong in the content, fix `tmp/step2/findings.txt` (step 2), rerun scoring (step 3), then render again.
+- The report contains only what the earlier steps recorded. If something is missing or wrong in the content, fix `tmp/step3/findings.txt` (step 3), rerun scoring (step 4), then render again.
 - Empty sections render as the `none` label (無) automatically; do not delete the placeholders to hide them.
