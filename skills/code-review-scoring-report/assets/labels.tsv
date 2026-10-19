@@ -1,0 +1,48 @@
+# Display labels used by render-report. Columns: key<TAB>text. Edit the text to change the report wording.
+none	無
+title.missing	（未提供）
+capped_note	（有 Critical 扣分項，等級上限為 B）
+sep.list	、
+sep.bracket	｜
+sep.colon	：
+dim.A	正確性
+dim.B	安全性
+dim.C	測試品質
+dim.D	架構與設計
+dim.E	效能與資源使用
+dim.F	可讀性
+dim.G	可維護性
+field.problem	問題
+field.suggestion	建議
+field.assumption	假設
+field.content	內容
+field.code	相關程式碼
+field.ticket	廠商問題單號
+upstream.spec-gap	疑似規格缺漏
+upstream.third-party	疑似第三方問題
+upstream.ownership-change	疑似主責單位變更
+sub.missing	缺漏
+sub.wrong	錯誤
+sub.ambiguous	模糊
+sub.spec-missing	規格缺漏
+sub.spec-wrong	規格錯誤
+sub.behavior-mismatch	行為和規格不符
+sub.not-delivered	功能未交付
+sub.bug	Bug
+sub.spec	規格變更
+sub.interface	介面變更
+sub.process	流程變更
+impact.high	高
+impact.medium	中
+impact.low	低
+cr.not_run	本次未執行 CR
+cr.no_plugins	本次沒有適用的 CR 外掛
+cr.missing	（缺少 CR 結果）
+cr.col.plugin	CR 外掛
+cr.col.files	審查檔案數
+cr.col.summary	結論
+cr.summary	結論
+cr.highlights	亮點
+cr.no_comments	無 CR 意見
+cr.skipped	沒有符合適用範圍的異動檔案（{applies}）
+cr.all_files	全部檔案

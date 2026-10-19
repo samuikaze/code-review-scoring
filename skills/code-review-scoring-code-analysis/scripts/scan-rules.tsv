@@ -1,0 +1,46 @@
+# Heuristic scan rules used by prepare-diff. Hits are CANDIDATES only; confirm each against the code before deducting.
+# Columns (TAB-separated): id  scope  flags  regex  prev-regex  exclude-regex  hint
+# scope: main=src/main code  test=test files  java=all Java/Kotlin  nontest=non-test files  controller=*Controller in main  ctrltest=Controller/Repository tests  any=all
+# flags: i=case-insensitive  c=also match comment lines  -=none. prev-regex: previous non-blank new-side line must match (- = none). exclude-regex is matched against "previous line + current line".
+# Regexes must use the subset shared by POSIX ERE and .NET (no \b, \s, \d, lookaround).
+API	main	-	@(Get|Post|Put|Delete|Patch|Request)Mapping	-	-	Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+SPRINGDOC	any	i	springdoc|io\.swagger\.v3|@Operation\(	-	-	springdoc visible in diff, so G4 applies
+A1	java	-	\)\.get\(\)|Optional<.*>.*\.get\(\)	-	-	possible Optional.get() without check
+A2	java	i	(^|[^a-z0-9_])(double|float)[ \t]+[a-z0-9_]*(amount|price|total|fee|balance|cost|money|tax|interest)	-	-	money-like variable uses double/float
+A3	main	-	^[ \t]*private[ \t][^=;]*\(	@Transactional	-	@Transactional on a private method
+A3	main	-	@Transactional.*private[ \t]	-	-	@Transactional on a private method
+A4	main	-	throws[ \t]+[A-Za-z]	@Transactional	rollbackFor	@Transactional method throws without rollbackFor (check if checked exception)
+A5	java	-	catch[ \t]*\([^)]*\)[ \t]*\{[ \t]*\}	-	-	empty catch block
+A5	java	-	^[ \t]*\}[ \t]*$	catch[ \t]*\(	-	empty catch block
+A5	java	-	(log|logger|LOG|LOGGER)\.(error|warn|info|debug)\(	catch[ \t]*\(	-	catch starts with a log call; check whether the exception is swallowed
+A7	java	-	(^|[^A-Za-z0-9_@])(Date|Calendar|SimpleDateFormat)[^A-Za-z0-9_]|(LocalDate|LocalDateTime|LocalTime|ZonedDateTime|OffsetDateTime)\.now\(\)|ZoneId\.systemDefault\(\)	-	-	Date/Calendar or no explicit time zone
+B1	nontest	i	(password|passwd|pwd|secret|token|api[-_]?key|private[-_]?key|access[-_]?key)[a-z0-9_.-]*"?[ \t]*[:=][ \t]*"?[^ \t"$<{(][^ \t"]{3,}	-	\$\{|getenv|getproperty|\(|null;|"";|\[	possible hard-coded password/token/key
+B2	java	i	(select|update|delete|insert|where|order by|from)[ \t][^"]*"[ \t]*\+|string\.format\([ \t]*"[^"]*(select|update|delete|insert)	-	-	possible SQL/JPQL built by string concatenation
+B4	main	-	@RequestBody	-	@Valid|@Validated	@RequestBody without @Valid
+B5	java	i	csrf[^;]*disable	-	-	CSRF disabled; check for a comment or PR description reason
+B6	java	-	(requestMatchers|antMatchers|mvcMatchers)\([^)]*"/(api/)?\*\*"|anyRequest\(\)\.permitAll	-	-	broad path pattern; check whether it is permitAll()
+B7	java	i	(log|logger)\.(trace|debug|info|warn|error)\(.*(password|token|secret|idno|phone|email|request|body|cardno)|printstacktrace\(	-	-	log may expose sensitive data or stack traces
+B7	nontest	i	include-stacktrace[ \t]*[:=][ \t]*always	-	-	error response includes stack trace
+B8	any	i	allowedorigins\([ \t]*"\*"|addallowedorigin\([ \t]*"\*"|allowedoriginpatterns\([ \t]*"\*"|allowed-origins[ \t]*[:=][ \t]*"?\*	-	-	CORS allows any origin; check whether credentials are allowed too
+C3	test	-	assertNotNull\(	-	-	assertNotNull only? check for meaningful assertions
+C4	ctrltest	-	@SpringBootTest	-	-	Controller/Repository test uses @SpringBootTest
+C5	any	i	jdbc:h2|h2database	-	-	H2 in use; check for production-DB-specific SQL
+C6	test	-	Thread\.sleep\(|@TestMethodOrder|@Order\(	-	-	test order dependency or Thread.sleep
+C7	test	-	void[ \t]+test[0-9]*[ \t]*\(|void[ \t]+test[A-Z][A-Za-z]{0,12}[ \t]*\(	-	-	test name does not state scenario and expectation
+D1	controller	-	Repository[ \t;>,)]	-	-	Controller uses a Repository directly
+D2	controller	i	import[ \t].*\.(entity|entities)\.	-	-	Controller imports an Entity; check if used as request/response
+D4	java	-	@Autowired[ \t]+(private|protected|public)?[ \t]*[A-Za-z_][A-Za-z0-9_<>,? ]*[ \t]+[a-z_][A-Za-z0-9_]*[ \t]*;	-	-	field injection
+D4	java	-	^[ \t]*(private|protected|public)?[ \t]*[A-Z][A-Za-z0-9_<>,? ]*[ \t]+[a-z_][A-Za-z0-9_]*[ \t]*;[ \t]*$	@Autowired[ \t]*$	-	field injection
+D5	controller	-	@ExceptionHandler	-	-	exception handled inside Controller; check @RestControllerAdvice + ProblemDetail
+D6	java	-	import[ \t]+javax\.(persistence|validation|servlet|annotation\.(PostConstruct|PreDestroy|Resource)|transaction\.Transactional|inject|ws\.rs|xml\.bind|mail|json)	-	-	javax.* namespace
+E1	main	i	repository\.[a-z]+\(|\.findby[a-z0-9_]*\(	(^|[^a-z])for[ \t]*\(|\.foreach\(|\.map\(	-	query inside a loop (N+1)
+E2	main	-	findAll\([ \t]*\)|List<[A-Za-z0-9_]+>[ \t]+findBy[A-Za-z0-9_]*\(	-	Pageable|Limit	unpaged query; check whether the table keeps growing
+E4	main	-	new[ \t]+RestTemplate\([ \t]*\)|RestClient\.create\(|WebClient\.create\(|@FeignClient|HttpClient\.newHttpClient\(\)	-	-	external call; check timeout/retry/circuit breaker
+E5	main	-	new[ \t]+(FileInputStream|FileOutputStream|FileReader|FileWriter|BufferedReader|BufferedWriter|InputStreamReader|OutputStreamWriter|Scanner|ZipInputStream|ZipOutputStream)\(|Files\.(lines|list|walk|find|newBufferedReader|newBufferedWriter|newInputStream|newOutputStream)\(|\.getConnection\(\)	-	try[ \t]*\(	resource not in try-with-resources
+E6	java	-	FetchType\.EAGER	-	-	FetchType.EAGER; check necessity
+F3	main	-	(==|!=|<=|>=|<|>|\*|/|%)[ \t]*-?[0-9][0-9]+|[^A-Za-z0-9_."][0-9][0-9]+[ \t]*(==|!=|<=|>=|<|>|\*|/|%)	-	static final|^[ \t]*@|//	possible magic number
+F3	main	-	\.equals\([ \t]*"|"[^"]+"\.equals\(	-	static final	possible meaningful string literal
+F5	java	c	System\.(out|err)\.print|^[ \t]*//.*(;|\{|\})[ \t]*$	-	-	System.out or commented-out code
+G2	main	-	@Value\(|"https?://[^"]+"	-	-	@Value or hard-coded URL; check @ConfigurationProperties
+G3	java	-	(log|logger|LOG|LOGGER)\.(trace|debug|info|warn|error)\([ \t]*"[^"]*"[ \t]*\+|(log|logger|LOG|LOGGER)\.(trace|debug|info|warn|error)\([ \t]*String\.format\(	-	-	log message built by concatenation
+G5	any	ci	(todo|fixme)	-	#[0-9]+|[a-z][a-z0-9]+-[0-9]+	TODO without issue number
