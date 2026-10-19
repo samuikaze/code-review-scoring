@@ -3,9 +3,9 @@
 State control for the code review scoring workflow.
 
 .DESCRIPTION
-Steps: 1 read specs, 2 analyze code, 3 score, 4 code review plugins, 5 report.
-Status files ROOT/stepN-{pending,working,success,failed} gate the steps; step 4 has one status file per
-plugin (ROOT/step4-<plugin>-<state>). Outputs live in ROOT/stepN/ (step 4: ROOT/step4/<plugin>/).
+Steps: 1 read specs, 2 code review plugins, 3 analyze code (uses the code review results), 4 score, 5 report.
+Status files ROOT/stepN-{pending,working,success,failed} gate the steps; step 2 has one status file per
+plugin (ROOT/step2-<plugin>-<state>). Outputs live in ROOT/stepN/ (step 2: ROOT/step2/<plugin>/).
 Uses the same GNU-style arguments as review-state.sh so subagent prompts work on every platform:
 
   review-state.ps1 init --git RANGE [--repo DIR] [--title TEXT] [--reset] [--root DIR]
@@ -16,8 +16,8 @@ Uses the same GNU-style arguments as review-state.sh so subagent prompts work on
   review-state.ps1 config --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
 
 cr-plan picks the plugins of plugins.ini whose "applies" patterns match files in the PR diff and writes
-ROOT/step4/plan.tsv and ROOT/step4/<plugin>/files.txt. Step 4 is success when every planned plugin is
-success (no plugins = success).
+ROOT/step2/plan.tsv, ROOT/step2/<plugin>/files.txt and ROOT/step2/<plugin>/diff.patch (only that plugin's
+files, to save tokens). Step 2 is success when every planned plugin is success (no plugins = success).
 
 Gates enforced by "set":
   working  the previous step must be success; clears the status of every later step
@@ -86,12 +86,14 @@ function Get-RequestField([string]$Name) {
 }
 function Assert-Review { if (-not (Test-Exists 'request.md')) { Exit-WithError "no review in $root; run init first" } }
 
-# A "unit" is a step ("1", "2", "3", "5") or a step 4 plugin ("4-<plugin>").
+# Step 2 runs the code review plugins; each plugin is its own unit with its own status file.
+$CR = 2
+# A "unit" is a step ("1", "3", "4", "5") or a step 2 plugin ("2-<plugin>").
 function Get-UnitState([string]$U) {
     foreach ($s in 'working', 'pending', 'success', 'failed') { if ([IO.File]::Exists((P "step$U-$s"))) { return $s } }
     return 'not-started'
 }
-function Get-UnitDir([string]$U) { if ($U.StartsWith('4-')) { return "step4/$($U.Substring(2))" } return "step$U" }
+function Get-UnitDir([string]$U) { if ($U.StartsWith("$CR-")) { return "step$CR/$($U.Substring(2))" } return "step$U" }
 function Get-UnitField([string]$U, [string]$S, [string]$Key) {
     $p = P "step$U-$S"
     if (-not [IO.File]::Exists($p)) { return '' }
@@ -101,28 +103,28 @@ function Get-UnitField([string]$U, [string]$S, [string]$Key) {
 function Clear-Unit([string]$U) { foreach ($s in $states) { $p = P "step$U-$s"; if ([IO.File]::Exists($p)) { [IO.File]::Delete($p) } } }
 function Test-Unanswered([string]$U) { $d = Get-UnitDir $U; return (Test-Exists "$d/questions.md") -and -not (Test-NotOlder "$d/answers.md" "$d/questions.md") }
 function Get-PlanNames {
-    if (-not (Test-Exists 'step4/plan.tsv')) { return @() }
-    return @(Read-Utf8Lines (P 'step4/plan.tsv') | Where-Object { $_ } | ForEach-Object { ($_ -split "`t")[0] })
+    if (-not (Test-Exists "step$CR/plan.tsv")) { return @() }
+    return @(Read-Utf8Lines (P "step$CR/plan.tsv") | Where-Object { $_ } | ForEach-Object { ($_ -split "`t")[0] })
 }
 function Get-PlanField([string]$Name, [int]$Index) {
-    $l = Read-Utf8Lines (P 'step4/plan.tsv') | Where-Object { ($_ -split "`t")[0] -eq $Name } | Select-Object -First 1
+    $l = Read-Utf8Lines (P "step$CR/plan.tsv") | Where-Object { ($_ -split "`t")[0] -eq $Name } | Select-Object -First 1
     if ($l) { return ($l -split "`t")[$Index] } return ''
 }
-# Clears the status of step N (step 4: every plugin status and the plan)
+# Clears the status of step N (step 2: every plugin status and the plan)
 function Clear-Step([int]$N) {
-    if ($N -eq 4) {
+    if ($N -eq $CR) {
         if ([IO.Directory]::Exists($rootAbs)) {
-            Get-ChildItem -LiteralPath $rootAbs -File -Filter 'step4-*' -Force | ForEach-Object { [IO.File]::Delete($_.FullName) }
+            Get-ChildItem -LiteralPath $rootAbs -File -Filter "step$CR-*" -Force | ForEach-Object { [IO.File]::Delete($_.FullName) }
         }
-        if (Test-Exists 'step4/plan.tsv') { [IO.File]::Delete((P 'step4/plan.tsv')) }
+        if (Test-Exists "step$CR/plan.tsv") { [IO.File]::Delete((P "step$CR/plan.tsv")) }
     }
     else { Clear-Unit "$N" }
 }
-# Aggregate state of a step; step 4 combines its plugins
+# Aggregate state of a step; step 2 combines its plugins
 function Get-StepState([int]$N) {
-    if ($N -ne 4) { return Get-UnitState "$N" }
-    if (-not (Test-Exists 'step4/plan.tsv')) { return 'not-started' }
-    $all = @(Get-PlanNames | ForEach-Object { Get-UnitState "4-$_" })
+    if ($N -ne $CR) { return Get-UnitState "$N" }
+    if (-not (Test-Exists "step$CR/plan.tsv")) { return 'not-started' }
+    $all = @(Get-PlanNames | ForEach-Object { Get-UnitState "$CR-$_" })
     if ($all -contains 'failed') { return 'failed' }
     if ($all -contains 'pending') { return 'pending' }
     if ($all -contains 'working') { return 'working' }
@@ -132,11 +134,11 @@ function Get-StepState([int]$N) {
 function Test-Step {
     if ($opt.step -notmatch '^[1-5]$') { Exit-WithError '--step must be 1 to 5' }
     $n = [int]$opt.step
-    if ($n -eq 4) {
-        if (-not $opt.plugin) { Exit-WithError 'step 4 needs --plugin NAME (see cr-plan)' }
-        if ((Get-PlanNames) -notcontains $opt.plugin) { Stop-Refused "plugin $($opt.plugin) is not in step 4's plan; run cr-plan first" }
+    if ($n -eq $CR) {
+        if (-not $opt.plugin) { Exit-WithError "step $CR needs --plugin NAME (see cr-plan)" }
+        if ((Get-PlanNames) -notcontains $opt.plugin) { Stop-Refused "plugin $($opt.plugin) is not in step $CR's plan; run cr-plan first" }
     }
-    elseif ($opt.plugin) { Exit-WithError '--plugin is only used with --step 4' }
+    elseif ($opt.plugin) { Exit-WithError "--plugin is only used with --step $CR" }
     return $n
 }
 function Assert-Previous([int]$N) {
@@ -148,6 +150,20 @@ function Get-DiffFiles {
     return @(Read-Utf8Lines (P 'step1/pr.diff') | Where-Object { $_.StartsWith('+++ ') } | ForEach-Object {
             ($_.Substring(4) -split "`t")[0].Trim('"')
         } | Where-Object { $_ -ne '/dev/null' } | ForEach-Object { $_ -replace '^b/', '' } | Where-Object { $_ -notmatch $exclude })
+}
+# The parts of step 1's diff that touch the given files (each plugin reads only its own files)
+function Get-PluginDiff([string[]]$Files) {
+    $want = @{}; foreach ($f in $Files) { $want[$f] = $true }
+    $sb = New-Object System.Text.StringBuilder
+    $keep = $false
+    foreach ($line in ((Read-Utf8Text (P 'step1/pr.diff')) -split "`n")) {
+        if ($line.StartsWith('diff --git ')) {
+            $p = if ($line -match ' "?b/(.*?)"?\s*$') { $Matches[1] } else { '' }
+            $keep = $want.ContainsKey($p)
+        }
+        if ($keep) { [void]$sb.Append("$line`n") }
+    }
+    return $sb.ToString()
 }
 # Checks the normalized code review result; returns the list of problems
 function Test-CrFile([string]$Path) {
@@ -188,7 +204,7 @@ switch ($cmd) {
     'init' {
         if (-not $opt.git) { Exit-WithError 'init needs --git RANGE' }
         $existing = (Test-Exists 'request.md') -or @(1..5 | Where-Object { $n = $_; (Test-Exists "step$n") -or @($states | Where-Object { Test-Exists "step$n-$_" }).Count -gt 0 }).Count -gt 0
-        if (-not $existing -and [IO.Directory]::Exists($rootAbs)) { $existing = @(Get-ChildItem -LiteralPath $rootAbs -File -Filter 'step4-*' -Force).Count -gt 0 }
+        if (-not $existing -and [IO.Directory]::Exists($rootAbs)) { $existing = @(Get-ChildItem -LiteralPath $rootAbs -File -Filter "step$CR-*" -Force).Count -gt 0 }
         if ($existing) {
             if (-not $opt.reset) {
                 [Console]::Error.WriteLine("previous review found in $root; run 'show', then ask the user whether to resume it or start over (--reset)")
@@ -217,24 +233,24 @@ switch ($cmd) {
         $next = ''
         foreach ($n in 1..5) {
             $s = Get-StepState $n
-            if ($n -eq 4) {
+            if ($n -eq $CR) {
                 $names = @(Get-PlanNames)
-                $info = if (Test-Exists 'step4/plan.tsv') { "$($names.Count) plugin(s) planned" } else { 'cr-plan not run' }
-                Write-Output ("step 4  {0,-11} {1}" -f $s, $info)
+                $info = if (Test-Exists "step$CR/plan.tsv") { "$($names.Count) plugin(s) planned" } else { 'cr-plan not run' }
+                Write-Output ("step {0}  {1,-11} {2}" -f $CR, $s, $info)
                 foreach ($p in $names) {
-                    $ps = Get-UnitState "4-$p"
-                    Write-Output ("  - {0,-28} {1,-11} {2}  {3}" -f $p, $ps, (Get-UnitField "4-$p" $ps 'time'), (Get-UnitField "4-$p" $ps 'message'))
-                    if (-not $next -and $s -ne 'success' -and (Get-StepState 3) -eq 'success') {
+                    $ps = Get-UnitState "$CR-$p"
+                    Write-Output ("  - {0,-28} {1,-11} {2}  {3}" -f $p, $ps, (Get-UnitField "$CR-$p" $ps 'time'), (Get-UnitField "$CR-$p" $ps 'message'))
+                    if (-not $next -and $s -ne 'success') {
                         $next = switch ($ps) {
-                            'not-started' { "dispatch step 4 plugin $p (get the prompt with: prompt --step 4 --plugin $p)" }
-                            'working' { "step 4 plugin $p is working. If its subagent has already returned, it stopped abnormally: run 'set --step 4 --plugin $p --state failed --message ...' and ask the user whether to retry" }
-                            'pending' { "relay $(P "step4/$p/questions.md") to the user in one message, save the replies to $(P "step4/$p/answers.md"), then dispatch step 4 plugin $p again" }
-                            'failed' { "tell the user why step 4 plugin $p failed (details: $(P "step4/$p/errors.log")) and ask whether to retry it" }
+                            'not-started' { "dispatch step $CR plugin $p (get the prompt with: prompt --step $CR --plugin $p)" }
+                            'working' { "step $CR plugin $p is working. If its subagent has already returned, it stopped abnormally: run 'set --step $CR --plugin $p --state failed --message ...' and ask the user whether to retry" }
+                            'pending' { "relay $(P "step$CR/$p/questions.md") to the user in one message, save the replies to $(P "step$CR/$p/answers.md"), then dispatch step $CR plugin $p again" }
+                            'failed' { "tell the user why step $CR plugin $p failed (details: $(P "step$CR/$p/errors.log")) and ask whether to retry it" }
                             default { '' }
                         }
                     }
                 }
-                if (-not $next -and $s -eq 'not-started' -and -not (Test-Exists 'step4/plan.tsv')) { $next = 'run cr-plan to choose the code review plugins for step 4' }
+                if (-not $next -and $s -eq 'not-started' -and -not (Test-Exists "step$CR/plan.tsv")) { $next = "run cr-plan to choose the code review plugins for step $CR" }
                 continue
             }
             Write-Output ("step {0}  {1,-11} {2}  {3}" -f $n, $s, (Get-UnitField "$n" $s 'time'), (Get-UnitField "$n" $s 'message'))
@@ -255,10 +271,10 @@ switch ($cmd) {
     }
     'cr-plan' {
         Assert-Review
-        if ((Get-StepState 3) -ne 'success') { Stop-Refused 'step 3 has not succeeded; steps cannot be skipped' }
-        Clear-Step 4; Clear-Step 5
-        if (Test-Exists 'step4') { [IO.Directory]::Delete((P 'step4'), $true) }
-        [void][IO.Directory]::CreateDirectory((P 'step4'))
+        if ((Get-StepState ($CR - 1)) -ne 'success') { Stop-Refused "step $($CR - 1) has not succeeded; steps cannot be skipped" }
+        for ($k = $CR; $k -le 5; $k++) { Clear-Step $k }
+        if (Test-Exists "step$CR") { [IO.Directory]::Delete((P "step$CR"), $true) }
+        [void][IO.Directory]::CreateDirectory((P "step$CR"))
         $plan = New-Object System.Text.StringBuilder
         $skipped = New-Object System.Text.StringBuilder
         $files = Get-DiffFiles
@@ -278,36 +294,37 @@ switch ($cmd) {
                 if (-not [IO.Path]::IsPathRooted($dir)) { $dir = Join-Path $cfgDir $dir }
                 $dir = [IO.Path]::GetFullPath($dir).TrimEnd('\', '/')
                 if (-not [IO.File]::Exists((Join-Path $dir 'SKILL.md'))) { Exit-WithError "plugin ${name}: $dir/SKILL.md not found; run scripts/link-skills first" }
-                $mode = if ($s.mode) { $s.mode } else { 'advisory' }
-                if ($mode -ne 'advisory') { Exit-WithError "plugin ${name}: mode $mode is not supported yet (only advisory)" }
+                $mode = if ($s.mode) { $s.mode } else { 'mapped' }
+                if ($mode -notin 'mapped', 'advisory') { Exit-WithError "plugin ${name}: mode must be mapped or advisory, not $mode" }
                 $pats = @($s.applies -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
                 $matched = @($files | Where-Object { $f = $_; $pats.Count -eq 0 -or @($pats | Where-Object { $f -like $_ }).Count -gt 0 })
                 if ($matched.Count -gt 0) {
-                    [void][IO.Directory]::CreateDirectory((P "step4/$name"))
-                    Write-Utf8File (P "step4/$name/files.txt") (($matched -join "`n") + "`n")
+                    [void][IO.Directory]::CreateDirectory((P "step$CR/$name"))
+                    Write-Utf8File (P "step$CR/$name/files.txt") (($matched -join "`n") + "`n")
+                    Write-Utf8File (P "step$CR/$name/diff.patch") (Get-PluginDiff $matched)
                     [void]$plan.Append("$name`t$dir`t$mode`t$($matched.Count)`n")
                 }
                 else { [void]$skipped.Append("$name`t$($s.applies)`n") }
             }
         }
-        Write-Utf8File (P 'step4/plan.tsv') $plan.ToString()
-        Write-Utf8File (P 'step4/skipped.tsv') $skipped.ToString()
+        Write-Utf8File (P "step$CR/plan.tsv") $plan.ToString()
+        Write-Utf8File (P "step$CR/skipped.tsv") $skipped.ToString()
         $names = @(Get-PlanNames)
-        Write-Output "planned $($names.Count) plugin(s) in $(P 'step4/plan.tsv')"
-        foreach ($n in $names) { Write-Output "  - $n  files: $(Get-PlanField $n 3)" }
+        Write-Output "planned $($names.Count) plugin(s) in $(P "step$CR/plan.tsv")"
+        foreach ($n in $names) { Write-Output "  - $n  mode: $(Get-PlanField $n 2)  files: $(Get-PlanField $n 3)" }
         if ($skipped.Length -gt 0) {
             Write-Output 'skipped:'
             foreach ($l in ($skipped.ToString() -split "`n" | Where-Object { $_ })) { Write-Output ("  - " + ($l -replace "`t", '  no changed file matches: ')) }
         }
-        if ($names.Count -gt 0) { Write-Output 'next: dispatch each plugin in order with prompt --step 4 --plugin NAME' }
-        else { Write-Output 'next: step 4 has nothing to run and counts as success; dispatch step 5' }
+        if ($names.Count -gt 0) { Write-Output "next: dispatch each plugin in order with prompt --step $CR --plugin NAME" }
+        else { Write-Output "next: step $CR has nothing to run and counts as success; dispatch step $($CR + 1)" }
     }
     'prompt' {
         $n = Test-Step; Assert-Review
         Assert-Previous $n
         $stateCmd = "$selfCmd set --root `"$rootAbs`""
         $pPath = ''; $pMode = ''
-        if ($n -eq 4) { $pPath = Get-PlanField $opt.plugin 1; $pMode = Get-PlanField $opt.plugin 2 }
+        if ($n -eq $CR) { $pPath = Get-PlanField $opt.plugin 1; $pMode = Get-PlanField $opt.plugin 2 }
         $tpl = Read-Utf8Text (Join-Path $skillDir "assets/prompts/step$n.md")
         $text = $tpl.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', $stateCmd).Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', (Split-Path -Parent $skillDir)).Replace('{{PLUGIN}}', $opt.plugin).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{MODE}}', $pMode)
         [Console]::Out.Write($text)
@@ -316,8 +333,8 @@ switch ($cmd) {
         $n = Test-Step; Assert-Review
         $state = $opt.state; $message = $opt.message
         if ($state -cnotin $states) { Exit-WithError '--state must be working, pending, success or failed' }
-        $unit = if ($n -eq 4) { "4-$($opt.plugin)" } else { "$n" }
-        $label = if ($n -eq 4) { "step 4 plugin $($opt.plugin)" } else { "step $n" }
+        $unit = if ($n -eq $CR) { "$CR-$($opt.plugin)" } else { "$n" }
+        $label = if ($n -eq $CR) { "step $CR plugin $($opt.plugin)" } else { "step $n" }
         $cur = Get-UnitState $unit
         $d = Get-UnitDir $unit
         switch ($state) {
@@ -347,26 +364,26 @@ switch ($cmd) {
                         if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
                     }
                     2 {
-                        foreach ($f in 'prepared.txt', 'findings.txt') { if (-not (Test-NonEmpty "$d/$f")) { Stop-Refused "missing $(P "$d/$f")" } }
-                        if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
-                    }
-                    3 {
-                        foreach ($f in 'score.tsv', 'score.json') {
-                            if (-not (Test-NonEmpty "$d/$f")) { Stop-Refused "missing $(P "$d/$f")" }
-                            if (-not (Test-NotOlder "$d/$f" 'step2/findings.txt')) { Stop-Refused "$d/$f is older than step2/findings.txt; rerun scoring" }
-                        }
-                    }
-                    4 {
                         if (-not (Test-NonEmpty "$d/cr.txt")) { Stop-Refused "missing $(P "$d/cr.txt")" }
                         if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
                         $problems = @(Test-CrFile (P "$d/cr.txt"))
                         if ($problems.Count -gt 0) { Stop-Refused ("$d/cr.txt is invalid:`n" + ($problems -join "`n")) }
                     }
+                    3 {
+                        foreach ($f in 'prepared.txt', 'findings.txt') { if (-not (Test-NonEmpty "$d/$f")) { Stop-Refused "missing $(P "$d/$f")" } }
+                        if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
+                    }
+                    4 {
+                        foreach ($f in 'score.tsv', 'score.json') {
+                            if (-not (Test-NonEmpty "$d/$f")) { Stop-Refused "missing $(P "$d/$f")" }
+                            if (-not (Test-NotOlder "$d/$f" 'step3/findings.txt')) { Stop-Refused "$d/$f is older than step3/findings.txt; rerun scoring" }
+                        }
+                    }
                     5 {
                         if (-not (Test-NonEmpty "$d/report.md")) { Stop-Refused "missing $(P "$d/report.md")" }
-                        if (-not (Test-NotOlder "$d/report.md" 'step3/score.tsv')) { Stop-Refused 'report.md is older than step3/score.tsv; render again' }
+                        if (-not (Test-NotOlder "$d/report.md" 'step4/score.tsv')) { Stop-Refused 'report.md is older than step4/score.tsv; render again' }
                         foreach ($p in (Get-PlanNames)) {
-                            if (-not (Test-NotOlder "$d/report.md" "step4/$p/cr.txt")) { Stop-Refused "report.md is older than step4/$p/cr.txt; render again" }
+                            if (-not (Test-NotOlder "$d/report.md" "step$CR/$p/cr.txt")) { Stop-Refused "report.md is older than step$CR/$p/cr.txt; render again" }
                         }
                         if (-not (Test-NonEmpty "$d/report-path.txt")) { Stop-Refused "the final report was not published to reports/ (missing $(P "$d/report-path.txt")); render again without -NoPublish" }
                         $final = (Read-Utf8Lines (P "$d/report-path.txt"))[0].Trim()

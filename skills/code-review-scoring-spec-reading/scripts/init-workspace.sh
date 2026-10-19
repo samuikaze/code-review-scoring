@@ -37,7 +37,7 @@ done
 [[ -n "$git_range" && -n "$input" ]] && { echo "error: use only one of --git, --input" >&2; exit 2; }
 [[ -z "$git_range" && -z "$input" ]] && { echo "error: --git or --input is required (see --help)" >&2; exit 2; }
 mkdir -p "$root/step1"
-dir="$(cd "$root/step1" && pwd)"
+dir="$(cd "$root/step1" && { pwd -W 2>/dev/null || pwd; })"
 if [[ $force -eq 0 ]]; then
   for f in pr.diff spec-context.md; do
     [[ -e "$dir/$f" ]] && { echo "error: $dir/$f already exists (use --force to overwrite)" >&2; exit 2; }

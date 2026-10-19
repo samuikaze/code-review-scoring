@@ -23,7 +23,7 @@ function codes(locs,    n, a, i, out) {
 
 function sevrank(s) { return s == "Critical" ? 1 : (s == "Major" ? 2 : (s == "Minor" ? 3 : 4)) }
 
-# Loads ROOT/step4: the plan, skipped plugins and every plugin's normalized cr.txt.
+# Loads ROOT/step2: the plan, skipped plugins and every plugin's normalized cr.txt.
 function load_cr(    l, a, n, i, f, t, cur, key, val) {
     crstate = "not_run"
     if (crdir == "" || (getline l < (crdir "/plan.tsv")) < 0) return
@@ -179,6 +179,7 @@ BEGIN {
         out = out "   - " L("field.problem") c fv["F:" id, "problem"] "\n"
         out = out "   - " L("field.suggestion") c fv["F:" id, "suggestion"] "\n"
         if (("F:" id, "assumption") in fv) out = out "   - " L("field.assumption") c fv["F:" id, "assumption"] "\n"
+        if (("F:" id, "source") in fv) out = out "   - " L("field.source") c fv["F:" id, "source"] "\n"
     }
     blk["FINDINGS"] = out
     out = ""

@@ -6,7 +6,7 @@ usage() {
   cat <<'USAGE'
 Usage: prepare-diff.sh [--root DIR | --input FILE | --git RANGE] [options]
 
-      --root DIR       read ROOT/step1/pr.diff and write ROOT/step2/prepared.txt (unless --out is given)
+      --root DIR       read ROOT/step1/pr.diff and write ROOT/step3/prepared.txt (unless --out is given)
   -i, --input FILE     unified diff file; '-' or omitted = stdin
   -g, --git RANGE      run git diff RANGE (e.g. origin/main...HEAD)
   -r, --repo DIR       repository for --git (default: current directory)
@@ -43,7 +43,7 @@ sources=0
 [[ $sources -gt 1 ]] && { echo "error: use only one of --root, --input, --git" >&2; exit 2; }
 if [[ -n "$root" ]]; then
   input="$root/step1/pr.diff"
-  [[ -z "$out" ]] && { mkdir -p "$root/step2"; out="$root/step2/prepared.txt"; }
+  [[ -z "$out" ]] && { mkdir -p "$root/step3"; out="$root/step3/prepared.txt"; }
 fi
 
 tmp="$(mktemp)"

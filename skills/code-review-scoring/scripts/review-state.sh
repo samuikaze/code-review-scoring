@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # State control for the code review scoring workflow.
-# Steps: 1 read specs, 2 analyze code, 3 score, 4 code review plugins, 5 report.
-# Status files ROOT/stepN-{pending,working,success,failed} gate the steps; step 4 has one status file per
-# plugin (ROOT/step4-<plugin>-<state>). Outputs live in ROOT/stepN/ (step 4: ROOT/step4/<plugin>/).
+# Steps: 1 read specs, 2 code review plugins, 3 analyze code (uses the code review results), 4 score, 5 report.
+# Status files ROOT/stepN-{pending,working,success,failed} gate the steps; step 2 has one status file per
+# plugin (ROOT/step2-<plugin>-<state>). Outputs live in ROOT/stepN/ (step 2: ROOT/step2/<plugin>/).
 set -euo pipefail
 
 usage() {
@@ -13,12 +13,13 @@ Commands:
   init     --git RANGE [--repo DIR] [--title TEXT] [--reset]
            create ROOT and ROOT/request.md (plus ROOT/.gitignore when git does not ignore ROOT yet).
            Exit 4 if a previous review exists (--reset deletes only the workflow's own files)
-  show     print the state of every step (and every step 4 plugin) and the next action
+  show     print the state of every step (and every step 2 plugin) and the next action
   cr-plan  [--plugins FILE]
-           step 4 planning: pick the plugins of plugins.ini whose "applies" patterns match files in the
-           PR diff; writes ROOT/step4/plan.tsv and ROOT/step4/<plugin>/files.txt (refused before step 3 succeeds)
+           step 2 planning: pick the plugins of plugins.ini whose "applies" patterns match files in the
+           PR diff; writes ROOT/step2/plan.tsv, ROOT/step2/<plugin>/files.txt and ROOT/step2/<plugin>/diff.patch
+           (only that plugin's files, to save tokens). Refused before step 1 succeeds
   prompt   --step N [--plugin NAME]
-           print the prompt for step N (step 4 needs --plugin); refused unless the previous step succeeded
+           print the prompt for step N (step 2 needs --plugin); refused unless the previous step succeeded
   set      --step N [--plugin NAME] --state working|pending|success|failed [--message TEXT]
            record a state; enforces the gates below
   config   --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
@@ -32,18 +33,21 @@ Gates enforced by "set":
   pending  the unit must be working; its questions.md must be newer than answers.md; needs --message
   success  the unit must be working; its outputs must exist, be valid and be current
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
-Step 4 is success when cr-plan has run and every planned plugin is success (no plugins = success).
+Step 2 is success when cr-plan has run and every planned plugin is success (no plugins = success).
 
 Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 platform not configured.
 USAGE
 }
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# Absolute path; on Git Bash / MSYS use the Windows form (C:/...) so PowerShell subagents can use it too.
+abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd -P; }); }
+script_dir="$(abspath "$(dirname "${BASH_SOURCE[0]}")")"
 skill_dir="$(dirname "$script_dir")"
 self_cmd="bash \"$script_dir/review-state.sh\""
 
 [[ $# -eq 0 ]] && { usage; exit 2; }
 cmd="$1"; shift
+[[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
 root="tmp" step="" plugin="" state="" message="" git_range="" repo="." title="" reset=0
 config="$skill_dir/configs.ini" platform="" model="" reasoning="" plugins_file="$(dirname "$(dirname "$skill_dir")")/plugins.ini"
 while [[ $# -gt 0 ]]; do
@@ -69,36 +73,38 @@ done
 
 refuse() { echo "refused: $1" >&2; exit 5; }
 now() { date +%Y-%m-%dT%H:%M:%S%z; }
-abs_root() { mkdir -p "$root"; (cd "$root" && pwd); }
+abs_root() { mkdir -p "$root"; abspath "$root"; }
 req_field() { sed -n "s/^- $1: //p" "$root/request.md" | head -1; }
 not_older() { [[ -f "$1" && -f "$2" && ! "$2" -nt "$1" ]]; }  # $1 exists and is not older than $2
 
-# A "unit" is a step (1, 2, 3, 5) or a step 4 plugin ("4-<plugin>").
+# Step 2 runs the code review plugins; each plugin is its own unit with its own status file.
+CR=2
+# A "unit" is a step (1, 3, 4, 5) or a step 2 plugin ("2-<plugin>").
 unit_state() {
   local s
   for s in working pending success failed; do [[ -f "$root/step$1-$s" ]] && { echo "$s"; return; }; done
   echo "not-started"
 }
-unit_dir() { if [[ "$1" == 4-* ]]; then echo "$root/step4/${1#4-}"; else echo "$root/step$1"; fi; }
+unit_dir() { if [[ "$1" == $CR-* ]]; then echo "$root/step$CR/${1#$CR-}"; else echo "$root/step$1"; fi; }
 unit_field() { [[ -f "$root/step$1-$2" ]] && sed -n "s/^$3: //p" "$root/step$1-$2" | head -1 || true; }
 clear_unit() { local s; for s in pending working success failed; do rm -f "$root/step$1-$s"; done; }
 unanswered() { local d; d="$(unit_dir "$1")"; [[ -f "$d/questions.md" ]] && ! not_older "$d/answers.md" "$d/questions.md"; }
-plan_names() { [[ -f "$root/step4/plan.tsv" ]] && cut -f1 "$root/step4/plan.tsv" || true; }
-clear_step() {  # clears the status of step $1 (step 4: every plugin status and the plan)
-  if [[ "$1" == 4 ]]; then
-    find "$root" -maxdepth 1 -type f -name 'step4-*' -exec rm -f {} + 2>/dev/null || true
-    rm -f "$root/step4/plan.tsv"
+plan_names() { [[ -f "$root/step$CR/plan.tsv" ]] && cut -f1 "$root/step$CR/plan.tsv" || true; }
+clear_step() {  # clears the status of step $1 (step 2: every plugin status and the plan)
+  if [[ "$1" == "$CR" ]]; then
+    find "$root" -maxdepth 1 -type f -name "step$CR-*" -exec rm -f {} + 2>/dev/null || true
+    rm -f "$root/step$CR/plan.tsv"
   else
     clear_unit "$1"
   fi
 }
-step_state() {  # aggregate state of a step; step 4 combines its plugins
-  if [[ "$1" != 4 ]]; then unit_state "$1"; return; fi
-  [[ -f "$root/step4/plan.tsv" ]] || { echo "not-started"; return; }
+step_state() {  # aggregate state of a step; step 2 combines its plugins
+  if [[ "$1" != "$CR" ]]; then unit_state "$1"; return; fi
+  [[ -f "$root/step$CR/plan.tsv" ]] || { echo "not-started"; return; }
   local n s any_ws=0 all_ok=1 res=""
   while IFS= read -r n; do
     [[ -n "$n" ]] || continue
-    s="$(unit_state "4-$n")"
+    s="$(unit_state "$CR-$n")"
     case "$s" in
       failed) res="failed" ;;
       pending) [[ "$res" == "failed" ]] || res="pending" ;;
@@ -111,11 +117,11 @@ step_state() {  # aggregate state of a step; step 4 combines its plugins
 }
 check_step() {
   [[ "$step" =~ ^[1-5]$ ]] || { echo "error: --step must be 1 to 5" >&2; exit 2; }
-  if [[ "$step" == 4 ]]; then
-    [[ -n "$plugin" ]] || { echo "error: step 4 needs --plugin NAME (see cr-plan)" >&2; exit 2; }
-    plan_names | grep -qx "$plugin" || refuse "plugin $plugin is not in step 4's plan; run cr-plan first"
+  if [[ "$step" == "$CR" ]]; then
+    [[ -n "$plugin" ]] || { echo "error: step $CR needs --plugin NAME (see cr-plan)" >&2; exit 2; }
+    plan_names | grep -qx "$plugin" || refuse "plugin $plugin is not in step $CR's plan; run cr-plan first"
   elif [[ -n "$plugin" ]]; then
-    echo "error: --plugin is only used with --step 4" >&2; exit 2
+    echo "error: --plugin is only used with --step $CR" >&2; exit 2
   fi
 }
 require_prev() { [[ $1 -gt 1 && "$(step_state $(($1 - 1)))" != "success" ]] && refuse "step $(($1 - 1)) has not succeeded; steps cannot be skipped" || true; }
@@ -126,11 +132,18 @@ has_previous() {
     [[ -e "$root/step$n" ]] && return 0
     for s in pending working success failed; do [[ -e "$root/step$n-$s" ]] && return 0; done
   done
-  [[ -n "$(find "$root" -maxdepth 1 -type f -name 'step4-*' 2>/dev/null | head -1)" ]]
+  [[ -n "$(find "$root" -maxdepth 1 -type f -name "step$CR-*" 2>/dev/null | head -1)" ]]
 }
 diff_files() {  # files added or changed by the PR, from step 1's diff, without build output, generated code or lock files
   sed -n 's/^+++ //p' "$root/step1/pr.diff" | sed -e 's/\t.*$//' -e 's/^"//' -e 's/"$//' | grep -v '^/dev/null$' | sed 's|^b/||' |
     grep -Ev '(^|/)(target|build|out|dist|\.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/|(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$|\.lock$' || true
+}
+plugin_diff() {  # $1 = files.txt; prints the parts of step 1's diff that touch those files
+  LC_ALL=C awk -v list="$1" '
+    BEGIN { while ((getline l < list) > 0) { sub(/\r$/, "", l); if (l != "") want[l] = 1 } }
+    /^diff --git / { p = $0; sub(/^diff --git .* "?b\//, "", p); sub(/"$/, "", p); keep = (p in want) }
+    keep
+  ' "$root/step1/pr.diff"
 }
 validate_cr() {  # checks the normalized code review result
   LC_ALL=C awk '
@@ -177,7 +190,7 @@ case "$cmd" in
       rm -f "$root/request.md"
     fi
     git -C "$repo" rev-parse --git-dir > /dev/null 2>&1 || { echo "error: $repo is not a git repository" >&2; exit 2; }
-    repo_abs="$(cd "$repo" && pwd)"
+    repo_abs="$(abspath "$repo")"
     root_abs="$(abs_root)"
     # Keep review files out of git unless the repository already ignores the root (keep .gitkeep).
     if [[ ! -f "$root/.gitignore" ]] && ! git check-ignore -q "$root/.review-probe" 2>/dev/null; then
@@ -196,22 +209,22 @@ case "$cmd" in
     next=""
     for n in 1 2 3 4 5; do
       s="$(step_state $n)"
-      if [[ $n == 4 ]]; then
-        printf "step 4  %-11s %s\n" "$s" "$([[ -f "$root/step4/plan.tsv" ]] && echo "$(plan_names | grep -c . || true) plugin(s) planned" || echo "cr-plan not run")"
+      if [[ $n == "$CR" ]]; then
+        printf "step %d  %-11s %s\n" "$CR" "$s" "$([[ -f "$root/step$CR/plan.tsv" ]] && echo "$(plan_names | grep -c . || true) plugin(s) planned" || echo "cr-plan not run")"
         while IFS= read -r p; do
           [[ -n "$p" ]] || continue
-          ps="$(unit_state "4-$p")"
-          printf "  - %-28s %-11s %s  %s\n" "$p" "$ps" "$(unit_field "4-$p" "$ps" time)" "$(unit_field "4-$p" "$ps" message)"
-          if [[ -z "$next" && "$s" != "success" && $(step_state 3) == "success" ]]; then
+          ps="$(unit_state "$CR-$p")"
+          printf "  - %-28s %-11s %s  %s\n" "$p" "$ps" "$(unit_field "$CR-$p" "$ps" time)" "$(unit_field "$CR-$p" "$ps" message)"
+          if [[ -z "$next" && "$s" != "success" ]]; then
             case "$ps" in
-              not-started) next="dispatch step 4 plugin $p (get the prompt with: prompt --step 4 --plugin $p)" ;;
-              working) next="step 4 plugin $p is working. If its subagent has already returned, it stopped abnormally: run 'set --step 4 --plugin $p --state failed --message ...' and ask the user whether to retry" ;;
-              pending) next="relay $(abs_root)/step4/$p/questions.md to the user in one message, save the replies to $(abs_root)/step4/$p/answers.md, then dispatch step 4 plugin $p again" ;;
-              failed) next="tell the user why step 4 plugin $p failed (details: $(abs_root)/step4/$p/errors.log) and ask whether to retry it" ;;
+              not-started) next="dispatch step $CR plugin $p (get the prompt with: prompt --step $CR --plugin $p)" ;;
+              working) next="step $CR plugin $p is working. If its subagent has already returned, it stopped abnormally: run 'set --step $CR --plugin $p --state failed --message ...' and ask the user whether to retry" ;;
+              pending) next="relay $(abs_root)/step$CR/$p/questions.md to the user in one message, save the replies to $(abs_root)/step$CR/$p/answers.md, then dispatch step $CR plugin $p again" ;;
+              failed) next="tell the user why step $CR plugin $p failed (details: $(abs_root)/step$CR/$p/errors.log) and ask whether to retry it" ;;
             esac
           fi
         done < <(plan_names)
-        [[ -z "$next" && "$s" == "not-started" && ! -f "$root/step4/plan.tsv" ]] && next="run cr-plan to choose the code review plugins for step 4"
+        [[ -z "$next" && "$s" == "not-started" && ! -f "$root/step$CR/plan.tsv" ]] && next="run cr-plan to choose the code review plugins for step $CR"
         continue
       fi
       printf "step %d  %-11s %s  %s\n" "$n" "$s" "$(unit_field $n "$s" time)" "$(unit_field $n "$s" message)"
@@ -233,10 +246,10 @@ case "$cmd" in
 
   cr-plan)
     [[ -f "$root/request.md" ]] || { echo "error: no review in $root; run init first" >&2; exit 2; }
-    [[ "$(step_state 3)" == "success" ]] || refuse "step 3 has not succeeded; steps cannot be skipped"
-    clear_step 4; clear_step 5
-    rm -rf "${root:?}/step4"; mkdir -p "$root/step4"
-    : > "$root/step4/plan.tsv"; : > "$root/step4/skipped.tsv"
+    [[ "$(step_state $((CR - 1)))" == "success" ]] || refuse "step $((CR - 1)) has not succeeded; steps cannot be skipped"
+    for ((k = CR; k <= 5; k++)); do clear_step "$k"; done
+    rm -rf "${root:?}/step$CR"; mkdir -p "$root/step$CR"
+    : > "$root/step$CR/plan.tsv"; : > "$root/step$CR/skipped.tsv"
     files="$(diff_files)"
     if [[ -f "$plugins_file" ]]; then
       cfg_dir="$(cd "$(dirname "$plugins_file")" && pwd)"
@@ -245,8 +258,8 @@ case "$cmd" in
         [[ -n "$pdir" ]] || { echo "error: plugin $pname has no path in $plugins_file" >&2; exit 2; }
         [[ "$pdir" = /* || "$pdir" =~ ^[A-Za-z]: ]] || pdir="$cfg_dir/$pdir"
         [[ -f "$pdir/SKILL.md" ]] || { echo "error: plugin $pname: $pdir/SKILL.md not found; run scripts/link-skills first" >&2; exit 2; }
-        [[ -n "$mode" ]] || mode="advisory"
-        [[ "$mode" == "advisory" ]] || { echo "error: plugin $pname: mode $mode is not supported yet (only advisory)" >&2; exit 2; }
+        [[ -n "$mode" ]] || mode="mapped"
+        [[ "$mode" == "mapped" || "$mode" == "advisory" ]] || { echo "error: plugin $pname: mode must be mapped or advisory, not $mode" >&2; exit 2; }
         matched=""
         while IFS= read -r f; do
           [[ -n "$f" ]] || continue
@@ -259,11 +272,12 @@ case "$cmd" in
           done
         done <<< "$files"
         if [[ -n "$matched" ]]; then
-          mkdir -p "$root/step4/$pname"
-          printf '%s' "$matched" > "$root/step4/$pname/files.txt"
-          printf '%s\t%s\t%s\t%s\n' "$pname" "$(cd "$pdir" && pwd)" "$mode" "$(printf '%s' "$matched" | grep -c .)" >> "$root/step4/plan.tsv"
+          mkdir -p "$root/step$CR/$pname"
+          printf '%s' "$matched" > "$root/step$CR/$pname/files.txt"
+          plugin_diff "$root/step$CR/$pname/files.txt" > "$root/step$CR/$pname/diff.patch"
+          printf '%s\t%s\t%s\t%s\n' "$pname" "$(abspath "$pdir")" "$mode" "$(printf '%s' "$matched" | grep -c .)" >> "$root/step$CR/plan.tsv"
         else
-          printf '%s\t%s\n' "$pname" "$applies" >> "$root/step4/skipped.tsv"
+          printf '%s\t%s\n' "$pname" "$applies" >> "$root/step$CR/skipped.tsv"
         fi
       done < <(LC_ALL=C awk '
         /^[ \t]*[;#]/ || /^[ \t]*$/ { next }
@@ -272,11 +286,11 @@ case "$cmd" in
         END { if (sec != "") print sec "\037" v["path"] "\037" v["applies"] "\037" v["mode"] }
       ' "$plugins_file")
     fi
-    count="$(grep -c . "$root/step4/plan.tsv" || true)"
-    echo "planned $count plugin(s) in $(abs_root)/step4/plan.tsv"
-    if [[ "$count" -gt 0 ]]; then cut -f1,4 "$root/step4/plan.tsv" | sed 's/\t/  files: /; s/^/  - /'; fi
-    if [[ -s "$root/step4/skipped.tsv" ]]; then echo "skipped:"; sed 's/\t/  no changed file matches: /; s/^/  - /' "$root/step4/skipped.tsv"; fi
-    [[ "$count" -gt 0 ]] && echo "next: dispatch each plugin in order with prompt --step 4 --plugin NAME" || echo "next: step 4 has nothing to run and counts as success; dispatch step 5"
+    count="$(grep -c . "$root/step$CR/plan.tsv" || true)"
+    echo "planned $count plugin(s) in $(abs_root)/step$CR/plan.tsv"
+    if [[ "$count" -gt 0 ]]; then cut -f1,3,4 "$root/step$CR/plan.tsv" | sed 's/\t/  mode: /; s/\t/  files: /; s/^/  - /'; fi
+    if [[ -s "$root/step$CR/skipped.tsv" ]]; then echo "skipped:"; sed 's/\t/  no changed file matches: /; s/^/  - /' "$root/step$CR/skipped.tsv"; fi
+    [[ "$count" -gt 0 ]] && echo "next: dispatch each plugin in order with prompt --step $CR --plugin NAME" || echo "next: step $CR has nothing to run and counts as success; dispatch step $((CR + 1))"
     ;;
 
   prompt)
@@ -286,9 +300,9 @@ case "$cmd" in
     root_abs="$(abs_root)"
     state_cmd="$self_cmd set --root \"$root_abs\""
     p_path="" p_mode=""
-    if [[ "$step" == 4 ]]; then
-      p_path="$(awk -F'\t' -v n="$plugin" '$1 == n { print $2 }' "$root/step4/plan.tsv")"
-      p_mode="$(awk -F'\t' -v n="$plugin" '$1 == n { print $3 }' "$root/step4/plan.tsv")"
+    if [[ "$step" == "$CR" ]]; then
+      p_path="$(awk -F'\t' -v n="$plugin" '$1 == n { print $2 }' "$root/step$CR/plan.tsv")"
+      p_mode="$(awk -F'\t' -v n="$plugin" '$1 == n { print $3 }' "$root/step$CR/plan.tsv")"
     fi
     LC_ALL=C awk -v root="$root_abs" -v sc="$state_cmd" -v repo="$(req_field Repository)" \
       -v range="$(req_field 'Diff range')" -v title="$(req_field Title)" -v skills="$(dirname "$skill_dir")" \
@@ -304,8 +318,8 @@ case "$cmd" in
     check_step
     case "$state" in working|pending|success|failed) ;; *) echo "error: --state must be working, pending, success or failed" >&2; exit 2 ;; esac
     [[ -f "$root/request.md" ]] || { echo "error: no review in $root; run init first" >&2; exit 2; }
-    unit="$step"; [[ "$step" == 4 ]] && unit="4-$plugin"
-    label="step $step"; [[ "$step" == 4 ]] && label="step 4 plugin $plugin"
+    unit="$step"; [[ "$step" == "$CR" ]] && unit="$CR-$plugin"
+    label="step $step"; [[ "$step" == "$CR" ]] && label="step $CR plugin $plugin"
     cur="$(unit_state "$unit")"
     d="$(unit_dir "$unit")"
     case "$state" in
@@ -336,26 +350,26 @@ case "$cmd" in
             unanswered 1 && refuse "$d/questions.md has not been answered"
             ;;
           2)
-            for f in prepared.txt findings.txt; do [[ -s "$d/$f" ]] || refuse "missing $d/$f"; done
-            unanswered 2 && refuse "$d/questions.md has not been answered"
-            ;;
-          3)
-            for f in score.tsv score.json; do
-              [[ -s "$d/$f" ]] || refuse "missing $d/$f"
-              not_older "$d/$f" "$root/step2/findings.txt" || refuse "$d/$f is older than step2/findings.txt; rerun scoring"
-            done
-            ;;
-          4)
             [[ -s "$d/cr.txt" ]] || refuse "missing $d/cr.txt"
             unanswered "$unit" && refuse "$d/questions.md has not been answered"
             if ! out="$(validate_cr "$d/cr.txt")"; then refuse "$d/cr.txt is invalid:"$'\n'"$out"; fi
             ;;
+          3)
+            for f in prepared.txt findings.txt; do [[ -s "$d/$f" ]] || refuse "missing $d/$f"; done
+            unanswered 3 && refuse "$d/questions.md has not been answered"
+            ;;
+          4)
+            for f in score.tsv score.json; do
+              [[ -s "$d/$f" ]] || refuse "missing $d/$f"
+              not_older "$d/$f" "$root/step3/findings.txt" || refuse "$d/$f is older than step3/findings.txt; rerun scoring"
+            done
+            ;;
           5)
             [[ -s "$d/report.md" ]] || refuse "missing $d/report.md"
-            not_older "$d/report.md" "$root/step3/score.tsv" || refuse "report.md is older than step3/score.tsv; render again"
+            not_older "$d/report.md" "$root/step4/score.tsv" || refuse "report.md is older than step4/score.tsv; render again"
             while IFS= read -r p; do
               [[ -n "$p" ]] || continue
-              not_older "$d/report.md" "$root/step4/$p/cr.txt" || refuse "report.md is older than step4/$p/cr.txt; render again"
+              not_older "$d/report.md" "$root/step$CR/$p/cr.txt" || refuse "report.md is older than step$CR/$p/cr.txt; render again"
             done < <(plan_names)
             [[ -s "$d/report-path.txt" ]] || refuse "the final report was not published to reports/ (missing $d/report-path.txt); render again without --no-publish"
             final="$(head -1 "$d/report-path.txt")"

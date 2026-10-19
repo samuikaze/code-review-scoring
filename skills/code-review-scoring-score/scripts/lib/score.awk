@@ -52,7 +52,7 @@ BEGIN {
 /^[ \t]*[a-z]+:/ && $0 !~ /^[A-Z]\|/ {
     if (rec == "skip") next
     line = trim($0); key = line; sub(/:.*/, "", key); val = line; sub(/^[a-z]+:[ \t]*/, "", val)
-    if (rec == "F" && key !~ /^(problem|suggestion|assumption)$/) { err("unknown field \"" key "\" for F (allowed: problem, suggestion, assumption)"); next }
+    if (rec == "F" && key !~ /^(problem|suggestion|assumption|source)$/) { err("unknown field \"" key "\" for F (allowed: problem, suggestion, assumption, source)"); next }
     if (rec == "U" && key !~ /^(content|code|ticket)$/) { err("unknown field \"" key "\" for U (allowed: content, code, ticket)"); next }
     if (rec == "") { err("field \"" key "\" is not under an F or U record"); next }
     if (val == "") { err("field \"" key "\" is empty"); next }

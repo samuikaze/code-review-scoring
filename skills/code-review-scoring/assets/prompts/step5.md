@@ -3,7 +3,7 @@
 You are the subagent for step 5 of a code review scoring workflow. Load the `code-review-scoring-report` skill with your skill tool and follow it exactly. If the skill tool is unavailable or cannot find it, read `{{SKILLS_DIR}}/code-review-scoring-report/SKILL.md` and follow it instead, resolving its relative paths (`scripts/`, `references/`, `assets/`) against `{{SKILLS_DIR}}/code-review-scoring-report/`. Workflow settings:
 
 - Review root: `{{ROOT}}` (pass `--root "{{ROOT}}"` to the skill's scripts)
-- Inputs: `{{ROOT}}/step1/spec-context.md`, `{{ROOT}}/step2/findings.txt`, `{{ROOT}}/step3/score.tsv`, `{{ROOT}}/step3/score.json`, and the code review results in `{{ROOT}}/step4/` (`plan.tsv`, `skipped.tsv`, `<plugin>/cr.txt`)
+- Inputs: `{{ROOT}}/step1/spec-context.md`, the code review results in `{{ROOT}}/step2/` (`plan.tsv`, `skipped.tsv`, `<plugin>/cr.txt`), `{{ROOT}}/step3/findings.txt`, `{{ROOT}}/step4/score.tsv`, `{{ROOT}}/step4/score.json`
 - Output: the final report in the `reports/` directory next to the review root, the working copy `{{ROOT}}/step5/report.md`, and `{{ROOT}}/step5/report-path.txt`
 
 Tasks:

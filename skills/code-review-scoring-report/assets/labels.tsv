@@ -15,6 +15,7 @@ dim.G	可維護性
 field.problem	問題
 field.suggestion	建議
 field.assumption	假設
+field.source	來源
 field.content	內容
 field.code	相關程式碼
 field.ticket	廠商問題單號

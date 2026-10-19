@@ -3,9 +3,9 @@
 Render the PR score report from the review root (tmp/stepN files) and the report template.
 
 .DESCRIPTION
-Reads ROOT/step1/spec-context.md, ROOT/step2/findings.txt, ROOT/step3/score.tsv, ROOT/step3/score.json and the
-code review results in ROOT/step4/, fills the template placeholders and writes ROOT/step5/report.md (working copy).
-ROOT defaults to tmp. Without ROOT/step4/plan.tsv the code review section says that no code review was run.
+Reads ROOT/step1/spec-context.md, ROOT/step3/findings.txt, ROOT/step4/score.tsv, ROOT/step4/score.json and the
+code review results in ROOT/step2/, fills the template placeholders and writes ROOT/step5/report.md (working copy).
+ROOT defaults to tmp. Without ROOT/step2/plan.tsv the code review section says that no code review was run.
 The final report is published as REPORTS/<YYYY-MM-DD>_<PR title>.md (REPORTS defaults to reports; the same
 name is overwritten when the same PR is rendered again on the same day) and its path is recorded in
 ROOT/step5/report-path.txt. Use -NoPublish to write only the working copy; -Out - prints to stdout only.
@@ -33,10 +33,10 @@ Initialize-Utf8
 $skillDir = Split-Path -Parent $PSScriptRoot
 if (-not $Template) { $Template = Join-Path $skillDir 'assets/report-template.md' }
 if (-not $Labels) { $Labels = Join-Path $skillDir 'assets/labels.tsv' }
-$findingsPath = Join-Path $Root 'step2/findings.txt'
+$findingsPath = Join-Path $Root 'step3/findings.txt'
 foreach ($f in $findingsPath, $Template, $Labels) { if (-not (Test-UserFile $f)) { Exit-WithError "file not found: $f" } }
 foreach ($name in 'score.tsv', 'score.json') {
-    $p = Join-Path $Root "step3/$name"
+    $p = Join-Path $Root "step4/$name"
     if (-not (Test-UserFile $p)) { Exit-WithError "$p not found; run the scoring skill first" 1 }
     if ((Get-Item -LiteralPath (Resolve-UserPath $findingsPath)).LastWriteTimeUtc -gt (Get-Item -LiteralPath (Resolve-UserPath $p)).LastWriteTimeUtc) {
         Exit-WithError "findings.txt changed after $name was written; rerun the scoring skill" 1
@@ -46,10 +46,10 @@ if (-not $Out) {
     [void][IO.Directory]::CreateDirectory((Resolve-UserPath (Join-Path $Root 'step5')))
     $Out = Join-Path $Root 'step5/report.md'
 }
-$planFile = Join-Path $Root 'step4/plan.tsv'
+$planFile = Join-Path $Root 'step2/plan.tsv'
 if (Test-UserFile $planFile) {
     foreach ($l in (Read-Utf8Lines $planFile | Where-Object { $_ })) {
-        $crFile = Join-Path $Root "step4/$(($l -split "`t")[0])/cr.txt"
+        $crFile = Join-Path $Root "step2/$(($l -split "`t")[0])/cr.txt"
         if (-not (Test-UserFile $crFile)) { Exit-WithError "$crFile not found; the code review step has not finished" 1 }
     }
 }
@@ -91,7 +91,7 @@ foreach ($raw in (Read-Utf8Lines $findingsPath)) {
 $total = ''; $grade = ''; $capped = '0'
 $dims = New-Object System.Collections.Generic.List[object]
 $scored = New-Object System.Collections.Generic.List[object]
-foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step3/score.tsv'))) {
+foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step4/score.tsv'))) {
     $a = $l -split "`t"
     switch ($a[0]) {
         'total' { $total = $a[1] }
@@ -105,7 +105,7 @@ if ($dims.Count -ne 7 -or -not $grade) { Exit-WithError 'score.tsv is missing or
 $scoredIds = @{}; foreach ($s in $scored) { $scoredIds[$s.Id] = $true }
 foreach ($id in $deductIds.Keys) { if (-not $scoredIds.ContainsKey($id)) { Exit-WithError "finding $id is in findings.txt but not in score.tsv; rerun the scoring skill" 1 } }
 foreach ($id in $scoredIds.Keys) { if (-not $deductIds.ContainsKey($id)) { Exit-WithError "finding $id is in score.tsv but not in findings.txt; rerun the scoring skill" 1 } }
-$json = (Read-Utf8Text (Join-Path $Root 'step3/score.json')).TrimEnd("`r", "`n")
+$json = (Read-Utf8Text (Join-Path $Root 'step4/score.json')).TrimEnd("`r", "`n")
 if (-not $json) { Exit-WithError 'score.json is missing or empty; run the scoring skill first' 1 }
 
 if (-not $Title) {
@@ -136,6 +136,7 @@ foreach ($s in $scored) {
     [void]$sb.Append("   - $(L 'field.problem')$c$($fv["F:$($s.Id)|problem"])`n")
     [void]$sb.Append("   - $(L 'field.suggestion')$c$($fv["F:$($s.Id)|suggestion"])`n")
     if ($fv.ContainsKey("F:$($s.Id)|assumption")) { [void]$sb.Append("   - $(L 'field.assumption')$c$($fv["F:$($s.Id)|assumption"])`n") }
+    if ($fv.ContainsKey("F:$($s.Id)|source")) { [void]$sb.Append("   - $(L 'field.source')$c$($fv["F:$($s.Id)|source"])`n") }
 }
 $blk['FINDINGS'] = $sb.ToString()
 
@@ -164,9 +165,9 @@ foreach ($pair in @(@('HIGHLIGHTS', 'H'), @('SKIPPED', 'S'), @('IGNORED', 'I'), 
 }
 $blk['SCORE_JSON'] = "$json`n"
 
-# Code review results (ROOT/step4): plan, skipped plugins and every plugin's normalized cr.txt
+# Code review results (ROOT/step2): plan, skipped plugins and every plugin's normalized cr.txt
 $sevOrder = @('Critical', 'Major', 'Minor', 'Nit')
-$crDir = Join-Path $Root 'step4'
+$crDir = Join-Path $Root 'step2'
 $crTotals = @{ Critical = 0; Major = 0; Minor = 0; Nit = 0 }
 if (-not (Test-UserFile (Join-Path $crDir 'plan.tsv'))) {
     $blk['CR_OVERVIEW'] = (L 'cr.not_run') + "`n"; $blk['CR_DETAILS'] = ''; $blk['CR_SKIPPED'] = ''; $crTotalsText = L 'cr.not_run'
