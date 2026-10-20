@@ -11,6 +11,7 @@ Usage: review-state.sh <command> [options]
 
 Commands:
   init     --git RANGE [--repo DIR] [--title TEXT] [--reset]
+           (refused with exit 7 while plugins.ini is missing: run setup check first)
            create ROOT and ROOT/request.md (plus ROOT/.gitignore when git does not ignore ROOT yet).
            Exit 4 if a previous review exists (--reset deletes only the workflow's own files)
   show     print the state of every step (and every step 2 plugin) and the next action
@@ -24,7 +25,7 @@ Commands:
            record a state; enforces the gates below
   config   --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
            without --model/--reasoning: print the subagent settings of NAME (exit 6 if not set);
-           with both: save them in the [NAME] section (default file: configs.ini in this skill)
+           with both: save them in the [NAME] section (default file: configs.ini in the project root)
 
 Common option: --root DIR (default: tmp)
 
@@ -35,7 +36,7 @@ Gates enforced by "set":
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 Step 2 is success when cr-plan has run and every planned plugin is success (no plugins = success).
 
-Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 platform not configured.
+Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 platform not configured, 7 setup incomplete (no plugins.ini; see setup check).
 USAGE
 }
 
@@ -43,13 +44,15 @@ USAGE
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd -P; }); }
 script_dir="$(abspath "$(dirname "${BASH_SOURCE[0]}")")"
 skill_dir="$(dirname "$script_dir")"
+# Project root (two levels above the physical skill folder) holds plugins.ini and configs.ini.
+project_root="$(dirname "$(dirname "$skill_dir")")"
 self_cmd="bash \"$script_dir/review-state.sh\""
 
 [[ $# -eq 0 ]] && { usage; exit 2; }
 cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
 root="tmp" step="" plugin="" state="" message="" git_range="" repo="." title="" reset=0
-config="$skill_dir/configs.ini" platform="" model="" reasoning="" plugins_file="$(dirname "$(dirname "$skill_dir")")/plugins.ini"
+config="$project_root/configs.ini" platform="" model="" reasoning="" plugins_file="$project_root/plugins.ini"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -181,6 +184,7 @@ validate_cr() {  # checks the normalized code review result
 case "$cmd" in
   init)
     [[ -z "$git_range" ]] && { echo "error: init needs --git RANGE" >&2; exit 2; }
+    [[ -f "$plugins_file" ]] || { echo "setup incomplete: $plugins_file does not exist; run setup check first" >&2; exit 7; }
     if has_previous; then
       if [[ $reset -eq 0 ]]; then
         echo "previous review found in $root; run 'show', then ask the user whether to resume it or start over (--reset)" >&2

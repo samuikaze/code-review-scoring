@@ -5,6 +5,8 @@ capped_note	（有 Critical 扣分項，等級上限為 B）
 sep.list	、
 sep.bracket	｜
 sep.colon	：
+paren.open	（
+paren.close	）
 dim.A	正確性
 dim.B	安全性
 dim.C	測試品質

@@ -186,7 +186,7 @@ BEGIN {
     for (i = 1; i <= nnit; i++) {
         id = nit[i]
         out = out "- [" id "] " codes(floc[id]) c fv["F:" id, "problem"]
-        if (("F:" id, "suggestion") in fv) out = out "（" L("field.suggestion") c fv["F:" id, "suggestion"] "）"
+        if (("F:" id, "suggestion") in fv) out = out L("paren.open") L("field.suggestion") c fv["F:" id, "suggestion"] L("paren.close")
         out = out "\n"
     }
     blk["SUGGESTIONS"] = out bullets("N")

@@ -15,6 +15,8 @@ Uses the same GNU-style arguments as review-state.sh so subagent prompts work on
   review-state.ps1 set --step N [--plugin NAME] --state working|pending|success|failed [--message TEXT] [--root DIR]
   review-state.ps1 config --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
 
+config reads and writes configs.ini in the project root unless --config is given.
+
 cr-plan picks the plugins of plugins.ini whose "applies" patterns match files in the PR diff and writes
 ROOT/step2/plan.tsv, ROOT/step2/<plugin>/files.txt and ROOT/step2/<plugin>/diff.patch (only that plugin's
 files, to save tokens). Step 2 is success when every planned plugin is success (no plugins = success).
@@ -26,7 +28,7 @@ Gates enforced by "set":
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
-Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 platform not configured.
+Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 platform not configured, 7 setup incomplete (no plugins.ini; see setup check).
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -45,6 +47,8 @@ function Resolve-Physical([string]$Path) {
 }
 $skillDir = Split-Path -Parent $PSScriptRoot
 $skillPhysical = Resolve-Physical $skillDir
+# Project root (two levels above the physical skill folder) holds plugins.ini and configs.ini.
+$projectRoot = Split-Path -Parent (Split-Path -Parent $skillPhysical)
 $isWin = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
 $selfCmd = if ($isWin) { "powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" } else { "pwsh -NoProfile -File `"$PSCommandPath`"" }
 $states = @('pending', 'working', 'success', 'failed')
@@ -53,8 +57,8 @@ $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
 $opt = @{ root = 'tmp'; step = ''; plugin = ''; state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
-    config = (Join-Path $skillDir 'configs.ini'); platform = ''; model = ''; reasoning = ''
-    plugins = (Join-Path (Split-Path -Parent (Split-Path -Parent $skillPhysical)) 'plugins.ini') }
+    config = (Join-Path $projectRoot 'configs.ini'); platform = ''; model = ''; reasoning = ''
+    plugins = (Join-Path $projectRoot 'plugins.ini') }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
@@ -203,6 +207,7 @@ function Test-CrFile([string]$Path) {
 switch ($cmd) {
     'init' {
         if (-not $opt.git) { Exit-WithError 'init needs --git RANGE' }
+        if (-not [IO.File]::Exists((Resolve-UserPath $opt.plugins))) { [Console]::Error.WriteLine("setup incomplete: $(Resolve-UserPath $opt.plugins) does not exist; run setup check first"); exit 7 }
         $existing = (Test-Exists 'request.md') -or @(1..5 | Where-Object { $n = $_; (Test-Exists "step$n") -or @($states | Where-Object { Test-Exists "step$n-$_" }).Count -gt 0 }).Count -gt 0
         if (-not $existing -and [IO.Directory]::Exists($rootAbs)) { $existing = @(Get-ChildItem -LiteralPath $rootAbs -File -Filter "step$CR-*" -Force).Count -gt 0 }
         if ($existing) {

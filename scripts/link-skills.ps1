@@ -1,23 +1,23 @@
 ﻿<#
 .SYNOPSIS
-依 skills/ 與 plugins.ini 同步各 AI 工具讀取 Skill 的目錄：建立缺少的連結、解除已不在清單中的連結。
+Syncs the skill folders that AI tools read with skills/ and plugins.ini: creates missing links and removes links that are no longer listed.
 
 .DESCRIPTION
-Windows 建立 Junction（不需系統管理員權限）；macOS / Linux 的 PowerShell 7 建立 symlink。
-只會變更本腳本建立過的連結（記錄在各目錄的 .managed），不會動到其他連結或實體目錄。
+Windows gets junctions (no administrator rights needed); PowerShell 7 on macOS / Linux gets symlinks.
+Only links created by this script (listed in .managed in each folder) are changed; other links and real folders are left alone.
 
-同步前會檢查：SKILL.md 是否存在、資料夾名稱與 name 是否一致、名稱是否重複、
-是否設定了 disable-model-invocation: true，以及目標位置是否已有不是本腳本建立的同名項目。
-有任何問題時不會做任何變更。
+Before syncing it checks that every SKILL.md exists, that folder names match their name, that names
+are unique, that no skill sets disable-model-invocation: true, and that no target already holds an item
+with the same name that this script did not create. Nothing is changed when a check fails.
 
-目標：
-  agents → .agents/skills（Codex、Gemini CLI 等通用位置）
-  github → .github/skills（GitHub Copilot）
-  claude → .claude/skills（Claude Code）
-  all    → 以上全部
+Targets:
+  agents -> .agents/skills (shared location for Codex, Gemini CLI and others)
+  github -> .github/skills (GitHub Copilot)
+  claude -> .claude/skills (Claude Code)
+  all    -> all of the above
 
-相容 Windows PowerShell 5.1 與 PowerShell 7+。本檔以 UTF-8 with BOM 儲存，請勿改成其他編碼。
-結束代碼：0 成功、1 檢查未通過、2 參數錯誤。
+Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
+Exit codes: 0 ok, 1 check failed, 2 bad arguments.
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File scripts/link-skills.ps1
@@ -43,11 +43,11 @@ $isWin = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
 $cmp = if ($isWin) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
 $dirs = [ordered]@{ agents = '.agents/skills'; github = '.github/skills'; claude = '.claude/skills' }
 
-# 支援 -Target agents,github 與 -Target "agents,github" 兩種寫法
+# Accepts both -Target agents,github and -Target "agents,github"
 $Target = @($Target | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if ($Target -contains 'all') { $Target = @($dirs.Keys) }
 foreach ($t in $Target) {
-    if (-not $dirs.Contains($t)) { [Console]::Error.WriteLine("錯誤：未知的目標 $t（只能是 agents、github、claude、all）"); exit 2 }
+    if (-not $dirs.Contains($t)) { [Console]::Error.WriteLine("error: unknown target $t (must be agents, github, claude or all)"); exit 2 }
 }
 $defaultConfig = Join-Path $root 'plugins.ini'
 if (-not $Config) { $Config = $defaultConfig }
@@ -75,8 +75,8 @@ function Get-LinkTarget([string]$Path) {
     return [IO.Path]::GetFullPath($t).TrimEnd('\', '/')
 }
 function Remove-Link([string]$Path) {
-    # DirectoryInfo.Delete() 不帶 recursive 參數時只會移除連結本身，不會刪到連結目標的內容。
-    # 不使用 Remove-Item，因為 Windows PowerShell 5.1 對 Junction 可能會遞迴刪除目標內容。
+    # DirectoryInfo.Delete() without the recursive argument removes only the link itself, never the content of its target.
+    # Remove-Item is not used because Windows PowerShell 5.1 may delete the content of a junction target recursively.
     (Get-Item -LiteralPath $Path -Force).Delete()
 }
 function New-Link([string]$Path, [string]$SkillPath, [string]$Kind) {
@@ -85,7 +85,7 @@ function New-Link([string]$Path, [string]$SkillPath, [string]$Kind) {
     else { [void](New-Item -ItemType SymbolicLink -Path $Path -Target $SkillPath) }
 }
 
-# ---- 1. 收集要連結的 Skill：skills/ 下的全部 + plugins.ini ----
+# ---- 1. Skills to link: everything under skills/ plus plugins.ini ----
 $skills = New-Object System.Collections.Generic.List[object]
 $errors = New-Object System.Collections.Generic.List[string]
 foreach ($d in (Get-ChildItem -LiteralPath (Join-Path $root 'skills') -Directory | Sort-Object Name)) {
@@ -104,35 +104,35 @@ if ([IO.File]::Exists($Config)) {
     }
     foreach ($name in $sections.Keys) {
         $s = $sections[$name]
-        foreach ($k in $s.Keys) { if ($k -notin 'path', 'applies', 'mode') { $errors.Add("[$name] 未知的設定 $k") } }
-        if ($s.ContainsKey('mode') -and $s['mode'] -notin 'advisory', 'mapped') { $errors.Add("[$name] mode 只能是 advisory 或 mapped，不能是 $($s['mode'])") }
-        if (-not $s.ContainsKey('path')) { $errors.Add("[$name] 缺少 path"); continue }
+        foreach ($k in $s.Keys) { if ($k -notin 'path', 'applies', 'mode') { $errors.Add("[$name] unknown setting $k") } }
+        if ($s.ContainsKey('mode') -and $s['mode'] -notin 'advisory', 'mapped') { $errors.Add("[$name] mode must be advisory or mapped, not $($s['mode'])") }
+        if (-not $s.ContainsKey('path')) { $errors.Add("[$name] path is missing"); continue }
         $p = $s['path']
         if (-not [IO.Path]::IsPathRooted($p)) { $p = Join-Path $configDir $p }
         $p = [IO.Path]::GetFullPath($p).TrimEnd('\', '/')
-        if (-not [IO.Directory]::Exists($p)) { $errors.Add("[$name] 找不到路徑 $p"); continue }
+        if (-not [IO.Directory]::Exists($p)) { $errors.Add("[$name] path not found: $p"); continue }
         $skills.Add([pscustomobject]@{ Name = $name; Path = $p; Kind = 'plugin' })
     }
 }
 elseif ($Config -ne $defaultConfig) {
-    [Console]::Error.WriteLine("錯誤：找不到外掛清單 $Config"); exit 2
+    [Console]::Error.WriteLine("error: plugin list not found: $Config"); exit 2
 }
 
-# ---- 2. 檢查每個 Skill ----
+# ---- 2. Check every skill ----
 for ($i = 0; $i -lt $skills.Count; $i++) {
     $sk = $skills[$i]
     $md = Join-Path $sk.Path 'SKILL.md'
-    if (-not [IO.File]::Exists($md)) { $errors.Add("$($sk.Name)：找不到 $md"); continue }
+    if (-not [IO.File]::Exists($md)) { $errors.Add("$($sk.Name): $md not found"); continue }
     $fm = Get-FrontMatter $md
     $fn = [string]$fm['name']
-    if ($sk.Kind -eq 'plugin' -and $fn -ne $sk.Name) { $errors.Add("$($sk.Name)：外掛區段名稱必須和 SKILL.md 的 name「$fn」一致") }
+    if ($sk.Kind -eq 'plugin' -and $fn -ne $sk.Name) { $errors.Add("$($sk.Name): the plugin section name must match the name in SKILL.md (`"$fn`")") }
     $leaf = Split-Path -Leaf $sk.Path
-    if ($leaf -ne $fn) { $errors.Add("$($sk.Name)：資料夾名稱「$leaf」和 SKILL.md 的 name「$fn」不一致") }
-    if ($fm['disable-model-invocation'] -eq 'true') { $errors.Add("$($sk.Name)：設定了 disable-model-invocation: true，Sub-Agent 將無法透過 Skill 工具載入") }
-    for ($j = 0; $j -lt $i; $j++) { if ($skills[$j].Name -eq $sk.Name) { $errors.Add("$($sk.Name)：名稱重複（$($skills[$j].Path) 與 $($sk.Path)）") } }
+    if ($leaf -ne $fn) { $errors.Add("$($sk.Name): folder name `"$leaf`" does not match the name in SKILL.md (`"$fn`")") }
+    if ($fm['disable-model-invocation'] -eq 'true') { $errors.Add("$($sk.Name): disable-model-invocation: true is set, so subagents cannot load it with the skill tool") }
+    for ($j = 0; $j -lt $i; $j++) { if ($skills[$j].Name -eq $sk.Name) { $errors.Add("$($sk.Name): duplicate name ($($skills[$j].Path) and $($sk.Path))") } }
 }
 
-# ---- 3. 對每個目標比對現況，列出變更 ----
+# ---- 3. Compare every target with its current state and plan the changes ----
 $plan = New-Object System.Collections.Generic.List[object]
 $desired = @($skills | ForEach-Object { $_.Name })
 foreach ($t in $Target) {
@@ -153,10 +153,10 @@ foreach ($t in $Target) {
                 continue
             }
             if ($managed -contains $sk.Name) { $entry.Action = 'relink'; $plan.Add($entry); continue }
-            $errors.Add("$($dirs[$t])/$($sk.Name)：已有不是本腳本建立的連結，指向其他位置，請手動確認後移除")
+            $errors.Add("$($dirs[$t])/$($sk.Name): a link not created by this script points elsewhere; check it and remove it manually")
         }
         elseif (Test-Path -LiteralPath $link) {
-            $errors.Add("$($dirs[$t])/$($sk.Name)：已存在實體檔案或目錄，請手動確認後移除")
+            $errors.Add("$($dirs[$t])/$($sk.Name): a real file or folder is in the way; check it and remove it manually")
         }
         else { $entry.Action = 'link'; $plan.Add($entry) }
     }
@@ -169,13 +169,12 @@ foreach ($t in $Target) {
 }
 
 if ($errors.Count -gt 0) {
-    [Console]::Error.WriteLine('檢查未通過，沒有做任何變更：')
+    [Console]::Error.WriteLine('check failed, nothing was changed:')
     foreach ($e in $errors) { [Console]::Error.WriteLine("  - $e") }
     exit 1
 }
 
-# ---- 4. 套用變更 ----
-$labels = @{ link = '連結'; relink = '重新連結'; adopt = '納入管理'; unlink = '解除連結' }
+# ---- 4. Apply the changes ----
 $changes = 0
 foreach ($p in $plan) {
     if ($p.Action -eq 'manifest') {
@@ -188,11 +187,11 @@ foreach ($p in $plan) {
     }
     $changes++
     $link = Join-Path $p.Dir $p.Name
-    $suffix = if ($p.Path) { " → $($p.Path)" } else { '' }
-    if ($Check) { Write-Output "將$($labels[$p.Action]) $($p.Rel)/$($p.Name)$suffix"; continue }
+    $suffix = if ($p.Path) { " -> $($p.Path)" } else { '' }
+    if ($Check) { Write-Output "would $($p.Action) $($p.Rel)/$($p.Name)$suffix"; continue }
     if ($p.Action -in 'unlink', 'relink') { Remove-Link $link }
     if ($p.Action -in 'link', 'relink') { [void][IO.Directory]::CreateDirectory($p.Dir); New-Link $link $p.Path $p.Kind }
-    Write-Output "已$($labels[$p.Action]) $($p.Rel)/$($p.Name)$suffix"
+    Write-Output "$($p.Action)ed $($p.Rel)/$($p.Name)$suffix"
 }
-if ($changes -eq 0) { Write-Output '已是最新狀態，沒有需要變更的連結' }
+if ($changes -eq 0) { Write-Output 'already up to date; no link needs to change' }
 exit 0

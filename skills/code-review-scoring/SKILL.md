@@ -17,25 +17,46 @@ Before any other action, ask the user which mode to use (one question):
 - **Full workflow (recommended):** all five steps in order, gated by status files: 1 read specs, 2 code review with the plugin skills of `plugins.ini`, 3 analyze code (confirmed code review comments become deductions), 4 score, 5 report (code review results and score results in one report).
 - **Single step:** run only one of `code-review-scoring-spec-reading`, `code-review-scoring-code-analysis`, `code-review-scoring-score`, `code-review-scoring-report` directly, without status files.
 
-For a single step, load that skill and follow it; this skill no longer applies.
+For a single step, load that skill and follow it; this skill no longer applies, and no setup check is needed.
 
 **Once the full workflow is chosen it is binding:** complete steps 1 → 2 → 3 → 4 → 5 in order. Never skip a step, never start a step before the previous one shows `success`, never mark a step `success` without doing it through the step prompt. The only alternative to finishing is stopping when the user explicitly asks to stop.
 
-## 2. Execution style and subagent settings
+## 2. Check the setup (full workflow only)
+
+Every time the full workflow is chosen, before anything else, run the setup check from this skill's directory:
+
+| bash | zsh | PowerShell |
+| --- | --- | --- |
+| `bash scripts/setup.sh check` | `zsh scripts/setup.zsh check` | `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1 check` |
+
+Add `--platform <Claude|Copilot|Codex|Gemini|other platform name>` when the platform has a subagent tool (subagent mode, section 3); leave it out in inline mode, which needs no subagent settings.
+
+- Exit 0: the settings are complete; continue with the workflow procedure (section 6).
+- Exit 7: `plugins.ini` and/or this platform's section of `configs.ini` (both in the project root) are missing. Tell the user what is missing and ask which way to create it (one question):
+  - **Wizard in a terminal:** the user runs the `wizard` command that `check` printed; it asks step by step. You cannot run it yourself because it needs an interactive terminal. In Claude Code the user can type `! <command>` to run it in this session.
+  - **Answer your questions:** ask in one message whether code review plugins should be registered and, for each plugin, its name (the `name` in its SKILL.md), folder path, `applies` patterns (comma-separated, empty = all changed files) and mode (`mapped`, the default: confirmed comments become deductions; `advisory`: report only); in subagent mode also the subagent model and reasoning, offering only values the platform's subagent tool accepts (section 3). Then save the answers:
+    - each plugin: `setup plugin --name <name> --path <dir> [--applies "<patterns>"] [--mode mapped|advisory]`; if it is rejected, tell the user the reason and ask again;
+    - no plugins: `setup plugins --none`;
+    - subagent settings: `review-state config --platform <name> --model "<model>" --reasoning "<level>"`.
+- When plugins were added, run `scripts/link-skills` in the project root (the command is printed by `setup plugin` and by the wizard). The skill tool may not offer plugins linked during this conversation; the step 2 prompt then falls back to reading their SKILL.md, so the workflow still works.
+- Run `check` again and continue only after exit 0. `review-state init` also refuses with exit 7 while `plugins.ini` is missing.
+
+Create or change these files only through these commands, and never choose plugins, models or reasoning levels for the user.
+
+## 3. Execution style and subagent settings
 
 - **Subagent mode:** the platform has a subagent tool. Each step runs in its own subagent, dispatched by you.
 - **Inline mode:** no subagent tool. You run each step yourself, exactly as a subagent would (same prompt, same status commands, same files), one step at a time.
 
-In subagent mode, read the saved settings for the current platform before step 1:
+In subagent mode, read the saved settings for the current platform before step 1 (the setup check has made sure they exist):
 
 ```text
 review-state config --platform <Claude|Copilot|Codex|Gemini|other platform name>
 ```
 
-- Prints `model=…` and `reasoning=…`: use them for every subagent.
-- Exit 6 (not configured, the first use on this platform): ask the user which model and reasoning level the subagents should use, offering only values the platform's subagent tool accepts, then save them with `review-state config --platform <name> --model "<model>" --reasoning "<level>"`. Ask once; later reviews reuse the file.
+It prints `model=…` and `reasoning=…`: use them for every subagent.
 
-The settings are stored in `configs.ini` in this skill's directory, one section per platform:
+The settings are stored in `configs.ini` in the project root (next to `plugins.ini`), one section per platform:
 
 ```ini
 [Claude]
@@ -55,7 +76,7 @@ reasoning="xhigh"
 
 If the tool cannot apply a setting, tell the user once and continue with the platform default.
 
-## 3. State script
+## 4. State script
 
 Paths are relative to this skill's directory. All variants take the same arguments.
 
@@ -74,7 +95,7 @@ Paths are relative to this skill's directory. All variants take the same argumen
 
 Run the commands from the root of the reviewed repository; `--root` defaults to `tmp`.
 
-## 4. Layout
+## 5. Layout
 
 ```text
 tmp/
@@ -95,10 +116,11 @@ reports/
 
 Step 2 is `success` when every planned plugin is `success`; with no applicable plugin it is `success` right after `cr-plan`. Step 5 can only succeed after the final report has been published to `reports/` and matches the working copy.
 
-## 5. Workflow procedure
+## 6. Workflow procedure
 
+- [ ] 0. The setup check of section 2 passed (exit 0) in this conversation.
 - [ ] 1. Collect what step 1 needs in one message: the diff range (`<base>...<head>`), the PR title, and the documents the user can provide (PR description, SD spec, third-party core-system spec, change log, static analysis report, vulnerability scan).
-- [ ] 2. Subagent mode only: load or ask for the subagent settings (section 2).
+- [ ] 2. Subagent mode only: read the subagent settings with `review-state config --platform <name>` (section 3).
 - [ ] 3. Run `init`. Exit 4 means an earlier review exists: run `show`, ask the user whether to resume it or start over, and rerun with `--reset` only if they choose to start over.
 - [ ] 4. List the provided documents (paths, links or pasted text) in `tmp/request.md`.
 - [ ] 5. For N = 1 to 5, repeat the step loop below until step N is `success`. Step 2 is run as described in "Step 2: code review plugins".
