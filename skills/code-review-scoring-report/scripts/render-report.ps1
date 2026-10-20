@@ -143,7 +143,7 @@ $blk['FINDINGS'] = $sb.ToString()
 $sb = New-Object System.Text.StringBuilder
 foreach ($id in $nits) {
     [void]$sb.Append("- [$id] $(Format-Codes $fLoc[$id])$c$($fv["F:$id|problem"])")
-    if ($fv.ContainsKey("F:$id|suggestion")) { [void]$sb.Append('（' + (L 'field.suggestion') + $c + $fv["F:$id|suggestion"] + '）') }
+    if ($fv.ContainsKey("F:$id|suggestion")) { [void]$sb.Append((L 'paren.open') + (L 'field.suggestion') + $c + $fv["F:$id|suggestion"] + (L 'paren.close')) }
     [void]$sb.Append("`n")
 }
 foreach ($x in $lists['N']) { [void]$sb.Append("- $x`n") }

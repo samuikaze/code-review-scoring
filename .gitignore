@@ -11,8 +11,9 @@ reports/*
 .github/skills/
 .claude/skills/
 
-# 各使用者自行選擇的 Sub-Agent model 與 reasoning 設定
-skills/code-review-scoring/configs.ini
+# 各使用者自己的設定檔（範本為 configs.example.ini、plugins.example.ini）
+/configs.ini
+/plugins.ini
 
 # 作業系統產生的檔案
 .DS_Store

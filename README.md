@@ -26,6 +26,33 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 - **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。支援 Sub-Agent 的平台由主 Agent 為每一步派發一個 Sub-Agent；不支援的平台由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。
 - **單一步驟**：直接在對話中執行某一個步驟 Skill，不使用狀態檔。
 
+### 設定檢查（完整流程每次執行前）
+
+選擇完整流程後，主 Agent 的第一件事就是執行 `setup check`，確認專案根目錄的兩個設定檔。單一步驟用不到這兩個檔案，不會檢查。
+
+| 設定檔 | 何時需要 | 缺少時 |
+| --- | --- | --- |
+| `plugins.ini` | 每次執行完整流程都需要 | 要登記哪些 CR 外掛；不使用外掛時也要建立一份沒有外掛的檔案，表示已確認不用 |
+| `configs.ini` 中該平台的區段 | 只有以 Sub-Agent 執行時 | Sub-Agent 要使用的 model 與 reasoning |
+
+有缺少時，主 Agent 會告訴你缺了什麼，並詢問要用哪種方式建立：
+
+- **腳本逐步詢問**：由你自己在終端機執行 `check` 印出的 `wizard` 指令，腳本會逐一詢問外掛名稱、路徑、適用範圍、模式，以及 model 與 reasoning，並在登記時驗證外掛（SKILL.md 是否存在、名稱是否一致）。AI 無法代為執行，因為它需要互動式終端機；在 Claude Code 中可以輸入 `! <指令>` 直接在對話中執行。
+- **AI 詢問**：主 Agent 在一則訊息中問完所需資料，再以 `setup plugin`、`setup plugins --none`、`review-state config` 寫入設定檔。外掛驗證不通過時會告訴你原因並重新詢問。
+
+登記了外掛之後，主 Agent 會執行 `link-skills` 連結外掛 Skill，接著再次執行 `check`，通過後才會繼續。`review-state init` 也會在 `plugins.ini` 不存在時拒絕執行，所以不會因為忘了建立清單而靜靜略過 CR。
+
+也可以不透過 AI，直接在專案中執行：
+
+```bash
+bash skills/code-review-scoring/scripts/setup.sh check --platform Claude
+bash skills/code-review-scoring/scripts/setup.sh wizard --platform Claude
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File skills\code-review-scoring\scripts\setup.ps1 wizard --platform Claude
+```
+
 ### 狀態控管
 
 ```text
@@ -52,7 +79,7 @@ reports/
 
 ### Sub-Agent 的 Model 與 Reasoning 設定
 
-在某個平台第一次以 Sub-Agent 執行完整流程時，主 Agent 會詢問 Sub-Agent 要使用的 model 與 reasoning，並存到 `skills/code-review-scoring/configs.ini`，之後同一平台直接沿用：
+在某個平台第一次以 Sub-Agent 執行時，設定檢查會要求建立 Sub-Agent 要使用的 model 與 reasoning（見上方「設定檢查」），存到專案根目錄的 `configs.ini`（與 `plugins.ini` 同一層），之後同一平台直接沿用：
 
 ```ini
 [Claude]
@@ -64,7 +91,7 @@ model="gpt-5.6"
 reasoning="xhigh"
 ```
 
-要修改時可直接編輯此檔，或執行 `review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。
+要修改時可直接編輯此檔，或執行 `review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。也可以在第一次使用前，從範本 `configs.example.ini` 複製一份 `configs.ini`，取消註解要用的平台區段後修改。
 
 > [!WARNING]
 > **GitHub Copilot 的已知限制**
@@ -85,7 +112,7 @@ skills/
     assets/request-template.md
     assets/prompts/step1.md … step5.md   # 派給各 Sub-Agent 的指令模板（step2.md 為 CR 外掛用）
     scripts/review-state.{sh,zsh,ps1}     # init / show / cr-plan / prompt / set / config（--help 列出用法）
-    configs.ini                           # 各平台 Sub-Agent 的 model 與 reasoning（首次使用時產生）
+    scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 plugins.ini、configs.ini（check / wizard / plugins / plugin）
   code-review-scoring-spec-reading/
     SKILL.md
     assets/spec-context-template.md
@@ -109,7 +136,8 @@ skills/
     references/placeholders.md            # 模板佔位符號說明
 scripts/
   link-skills.{sh,zsh,ps1}                # 依 skills/ 與 plugins.ini 同步各工具讀取 Skill 的目錄
-plugins.ini                               # 外掛 Skill 清單
+plugins.example.ini                       # 外掛 Skill 清單範本（複製為 plugins.ini 使用）
+configs.example.ini                       # Sub-Agent 的 model 與 reasoning 範本（configs.ini 首次使用時自動產生）
 docs/
   notices.md                              # 注意事項（GitHub Copilot 適用性）
 tmp/                                      # 評分過程的暫存檔（不進版控）
@@ -124,7 +152,7 @@ reports/                                  # 最終版分數報告（不進版控
 
 - `tmp/*`、`reports/*`：評分過程與報告，含 PR 內容，不進版控。
 - `.agents/`、`.github/skills/`、`.claude/skills/`：`link-skills` 產生的連結與 `.managed` 清單，各環境自行執行腳本建立。
-- `skills/code-review-scoring/configs.ini`：各使用者自行選擇的 Sub-Agent model 與 reasoning。若團隊要共用同一份設定，請從 `.gitignore` 移除這一行。
+- `configs.ini`、`plugins.ini`：各使用者自己的 Sub-Agent 設定與外掛清單（外掛路徑依各人環境而不同）。版控中只放範本 `configs.example.ini`、`plugins.example.ini`；若團隊要共用同一份設定，請從 `.gitignore` 移除對應的那一行。
 - `.DS_Store`、`Thumbs.db`、`desktop.ini`：作業系統產生的檔案。
 
 ### 換行格式
@@ -146,6 +174,8 @@ git add --renormalize .
 - 可用的佔位符號見 `references/placeholders.md`。
 
 ## 安裝到各工具
+
+`plugins.ini` 不需要事先手動建立：第一次執行完整流程時，設定檢查會引導建立（見「設定檢查」）。也可以先執行 `setup wizard`，或從範本 `plugins.example.ini` 複製後自行編輯。
 
 `link-skills` 會依 `skills/` 與 `plugins.ini` 同步各工具讀取 Skill 的目錄：建立缺少的連結，並解除已從清單移除的外掛連結。重複執行是安全的；已是最新狀態時不會做任何變更。
 
@@ -177,7 +207,7 @@ powershell -ExecutionPolicy Bypass -File scripts\link-skills.ps1 -Check
 
 ## 外掛 Skill
 
-其他團隊或同仁已做好的 Skill（例如前端、後端的 CR Skill），不需要複製或改寫，在專案根目錄的 `plugins.ini` 登記路徑後執行 `link-skills` 即可掛進來：
+其他團隊或同仁已做好的 Skill（例如前端、後端的 CR Skill），不需要複製或改寫，在專案根目錄的 `plugins.ini`（從 `plugins.example.ini` 複製而來）登記路徑後執行 `link-skills` 即可掛進來：
 
 ```ini
 [backend-code-review]
@@ -260,11 +290,14 @@ mode="advisory"
 ## 腳本為什麼存在
 
 - `link-skills`：依 `skills/` 與 `plugins.ini` 同步各工具的 Skill 連結，並在變更前檢查名稱與設定。
+- `setup`：每次執行完整流程前檢查 `plugins.ini` 與 `configs.ini`，並以逐步詢問或指令的方式建立，登記外掛時先驗證，避免設定錯誤到 CR 步驟才發現。
 - `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生 Sub-Agent 指令，並強制依序執行。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
 - `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以規則表列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。
 - `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、同代碼只扣一次），並計算分數與等級，避免 AI 計算錯誤。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
+
+腳本的提示、訊息與註解一律使用英文，避免主控台編碼不同時出現亂碼。報告中由腳本插入的中文用語（含全形括號、冒號等符號）都放在 `skills/code-review-scoring-report/assets/labels.tsv`。
 
 PowerShell 腳本以 UTF-8 with BOM 儲存，並在執行時將主控台與 git 輸出切換為 UTF-8，Windows PowerShell 5.1 也能正確處理中文。編輯 `.ps1` 時請保留 BOM。
 
