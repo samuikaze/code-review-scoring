@@ -14,6 +14,8 @@ Usage: prepare-diff.sh [--root DIR | --input FILE | --git RANGE] [options]
   -m, --mode MODE      all (default) | summary | scan | view
       --max N          max locations listed per check (default 15)
   -o, --out FILE       write output to FILE (UTF-8) instead of stdout
+      --config FILE    configs.ini whose [deductions] merge is shown in the summary
+                       (default: configs.ini in the project root; missing = false)
   -h, --help           show this help
 
 Output: summary, heuristic candidates (clues only), compact diff with new-file line numbers.
@@ -24,7 +26,7 @@ USAGE
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Project root (two levels above the physical skill folder) holds tmp/ and reports/.
 project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
-root="" input="" git_range="" repo="." mode="all" max=15 out=""
+config="$project_root/configs.ini" root="" input="" git_range="" repo="." mode="all" max=15 out=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     -m|--mode) mode="${2:?--mode needs a value}"; shift 2 ;;
     --max) max="${2:?--max needs a value}"; shift 2 ;;
     -o|--out) out="${2:?--out needs a value}"; shift 2 ;;
+    --config) config="${2:?--config needs a value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
@@ -50,6 +53,16 @@ if [[ -n "$root" ]]; then
   [[ -z "$out" ]] && { mkdir -p "$root/step3"; out="$root/step3/prepared.txt"; }
 fi
 
+# [deductions] merge decides how findings.txt is written; the scoring step validates it the same way.
+merge="false"
+if [[ -f "$config" ]]; then
+  merge="$(LC_ALL=C awk '
+    /^[ \t]*\[/ { s = $0; gsub(/^[ \t]*\[|\][ \t\r]*$/, "", s); next }
+    s == "deductions" && /^[ \t]*merge[ \t]*=/ { v = $0; sub(/^[^=]*=[ \t]*/, "", v); sub(/[ \t\r]*$/, "", v); gsub(/^"|"$/, "", v); val = tolower(v) }
+    END { print (val == "" ? "false" : val) }' "$config")"
+  [[ "$merge" == "true" || "$merge" == "false" ]] || { echo "error: [deductions] merge in $config must be true or false, not $merge" >&2; exit 2; }
+fi
+
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 if [[ -n "$git_range" ]]; then
@@ -63,7 +76,7 @@ else
   cat -- "$input" > "$tmp"
 fi
 
-run() { LC_ALL=C awk -v rules="$script_dir/scan-rules.tsv" -v mode="$mode" -v maxper="$max" -f "$script_dir/lib/prepare.awk" "$tmp"; }
+run() { LC_ALL=C awk -v rules="$script_dir/scan-rules.tsv" -v mode="$mode" -v maxper="$max" -v merge="$merge" -f "$script_dir/lib/prepare.awk" "$tmp"; }
 if [[ -n "$out" ]]; then
   run > "$out"
   echo "wrote ${out} ($(wc -l < "$out" | tr -d ' ') lines)"

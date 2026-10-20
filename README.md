@@ -146,7 +146,7 @@ skills/
 scripts/
   link-skills.{sh,zsh,ps1}                # 依 skills/ 與 plugins.ini 同步各工具讀取 Skill 的目錄
 plugins.example.ini                       # 外掛 Skill 清單範本（複製為 plugins.ini 使用）
-configs.example.ini                       # 是否使用 Sub-Agent 及其 model 與 reasoning 的範本（configs.ini 首次使用時自動產生）
+configs.example.ini                       # 執行方式、Sub-Agent 的 model 與 reasoning、評分配分的範本（configs.ini 首次使用時自動產生）
 docs/
   notices.md                              # 注意事項（GitHub Copilot 適用性）
 tmp/                                      # 評分過程的暫存檔（所有腳本的預設 review root，不進版控）
@@ -175,6 +175,43 @@ git add --renormalize .
 ```
 
 每個 Skill 的 `scripts/lib/` 放 awk 核心（bash/zsh 共用）與 PowerShell 共用函式。為了讓每個 Skill 都能單獨安裝，`lib/common.ps1` 在各 Skill 中各有一份相同的副本，修改時請一併更新。
+
+## 調整配分
+
+各面向滿分、各嚴重度扣分與等級門檻設定在專案根目錄 `configs.ini` 的 `[points]`、`[deductions]`、`[grades]` 區段，未設定的項目使用預設值：
+
+| 面向 | 預設滿分 | | 嚴重度 | 預設扣分 | | 等級 | 預設最低總分 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A 正確性 | 25 | | Critical | 10 | | S | 95 |
+| B 安全性 | 15 | | Major | 5 | | A | 85 |
+| C 測試品質 | 15 | | Minor | 2 | | B | 70 |
+| D 架構與設計 | 15 | | Nit | 0（固定） | | C | 55 |
+| E 效能與資源 | 10 | | | | | D | 低於 C |
+| F 可讀性 | 10 | | | | | | |
+| G 可維護性 | 10 | | | | | | |
+
+```ini
+[points]
+A="30"
+B="20"
+C="10"
+D="10"
+E="10"
+F="10"
+G="10"
+
+[deductions]
+Major="6"
+merge="true"
+```
+
+- 七個面向合計必須為 100，等級門檻必須 S > A > B > C，數值為整數；不符合時打分數步驟會失敗並列出錯誤。
+- 有 Critical 扣分項時，等級上限固定為 B。
+- 是否合併扣分由 `[deductions]` 的 `merge` 決定：
+  - `merge="false"`（預設）：不合併，每一處問題各自是一筆扣分項，同一個檢查代碼出現在三處就扣三次。
+  - `merge="true"`：合併，同一個檢查代碼只寫一筆並列出所有位置，只扣一次。
+  - 分析程式碼步驟會從 `prepared.txt` 摘要的 `- deductions:` 一行得知目前的方式；面向得分最低為 0。
+- 修改後重新執行打分數（步驟 4）與產出報告（步驟 5）即可生效；範例見 `configs.example.ini`。第一次建立的 `configs.ini` 會從範本複製，配分區段預設為註解。
 
 ## 調整報告
 
@@ -269,16 +306,17 @@ mode="advisory"
    C|Major|src/web/order/OrderForm.vue:42|FE-STATE-03
    problem: 表單送出後沒有處理 API 錯誤。
    suggestion: 在 catch 中顯示錯誤訊息。
+   spec: docs/spec/order-sd.md:42,docs/spec/order-sd.md:57
    H|做得好的地方
    ```
 
-   嚴重度依意義對應到 Critical、Major、Minor、Nit；外掛原本的規則編號放在第 4 欄。標記成功時，狀態腳本會驗證 `cr.txt` 的格式。
+   嚴重度依意義對應到 Critical、Major、Minor、Nit；外掛原本的規則編號放在第 4 欄；`spec:`（選填）列出意見依據的所有規格書位置。標記成功時，狀態腳本會驗證 `cr.txt` 的格式。
 4. 所有外掛都成功後才能進入步驟 3。
 
 ### CR 結果如何影響分數（步驟 3）
 
 - `mapped` 外掛的每一則意見，分析程式碼時都會對照程式碼確認：符合 A～G 檢查項而且確認屬實的，轉為該檢查項的扣分項，並以 `source:` 註明來自哪個外掛與規則；報告的問題明細會顯示「來源」。
-- 扣分一律依評分規則的預設嚴重度與調整條件，不採用外掛自己的嚴重度；同一個檢查代碼仍只扣一次。
+- 扣分一律依評分規則的預設嚴重度與調整條件，不採用外掛自己的嚴重度。
 - 對應不到檢查項、無法確認，或不在本次異動範圍內的意見不會扣分，但仍完整列在報告的 CR 區塊。
 - `advisory` 外掛的意見只作為參考，不會轉為扣分項。
 
@@ -291,7 +329,21 @@ mode="advisory"
 
 最終報告分成兩部分：
 
-- **一、CR 結果**：各外掛的總覽表（審查檔案數、各嚴重度意見數、結論）、各外掛的意見明細（依嚴重度排序）與亮點，以及因沒有符合的異動檔案而未執行的外掛。
+- **一、CR 結果**：各外掛的總覽表（審查檔案數、各嚴重度意見數、結論）、各外掛的意見明細（依嚴重度排序）與亮點，以及因沒有符合的異動檔案而未執行的外掛。每則意見的標頭為「嚴重度 | 規則 | 檢查代碼」，檢查代碼就是第二部分對應的扣分項，沒有轉為扣分項的顯示「未扣分」；程式碼位置與規格書位置逐行全部列出：
+
+  ```text
+  1. [Critical | EXT-CODE | A8]
+     - 問題：取消訂單流程與規格不符。
+     - 建議：依規格補上狀態檢查。
+     - 程式碼位置：
+       - `src/main/java/com/ex/order/OrderService.java:14`
+       - `src/main/java/com/ex/order/OrderService.java:25`
+     - 規格書位置：
+       - `docs/spec/order-sd.md:42`
+       - `docs/spec/order-sd.md:57`
+  ```
+
+  檢查代碼依扣分項的 `source:` 對應：同一外掛、同一規則，且和扣分項位於同一個檔案的意見；同一規則的意見都不在該檔案時，對應到該規則的所有意見。
 - **二、評分結果**：原本的評分內容（各面向得分、問題明細、建議、上游因素、亮點、評分備註、結構化結果）。由 CR 意見確認而來的扣分項，會在問題明細中標示來源外掛與規則。
 
 報告開頭會同時列出評分等級與 CR 意見總數。版面與用語可在 `assets/report-template.md`、`assets/labels.tsv` 調整，可用的佔位符號見 `skills/code-review-scoring-report/references/placeholders.md`。
@@ -303,7 +355,7 @@ mode="advisory"
 - `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生 Sub-Agent 指令，並強制依序執行。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
 - `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以規則表列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。
-- `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、同代碼只扣一次），並計算分數與等級，避免 AI 計算錯誤。
+- `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs.ini` 的配分計算分數與等級，避免 AI 計算錯誤。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
 
 腳本的提示、訊息與註解一律使用英文，避免主控台編碼不同時出現亂碼。報告中由腳本插入的中文用語（含全形括號、冒號等符號）都放在 `skills/code-review-scoring-report/assets/labels.tsv`。

@@ -48,8 +48,8 @@ It writes `tmp/step3/prepared.txt`: a summary, the candidates, and the compact d
 Step 2 ran the code review plugins listed in `tmp/step2/plan.tsv` (columns: plugin, path, mode, file count). Each plugin's comments are in `tmp/step2/<plugin>/cr.txt` as `C|severity|locations|rule` with `problem:` and `suggestion:` lines. They are leads that save you from searching the whole diff again, not verdicts.
 
 - **`mapped` plugins:** for every comment, open the cited lines and decide whether it is a real problem that matches a check id of the checklist.
-  - It matches and you can confirm it in the code: record it as (part of) an `F` line of that check id, with the default severity and the checklist's rules, plus a line `source: <plugin> <rule id>`. The plugin's own severity never decides the deduction.
-  - It matches a check that already has an `F` line: add its locations to that line and append the plugin to `source:`.
+  - It matches and you can confirm it in the code: record it under that check id as the deduction rule below says, with the default severity and the checklist's rules, plus a line `source: <plugin> <rule id>`. The plugin's own severity never decides the deduction. The report shows the check id next to the comment, so write the exact plugin name and rule id from `cr.txt`.
+  - It confirms a problem that is already recorded: do not record it again; add any new location as the deduction rule allows and append the plugin to that line's `source:`.
   - It does not match any check, it is outside the scored lines, or you cannot confirm it: do not record it. It still appears in the report's code review section.
 - **`advisory` plugins:** read their comments for context only; never turn them into findings.
 - Do not copy comments into `N` lines; the report already lists every code review comment.
@@ -63,7 +63,9 @@ Step 2 ran the code review plugins listed in `tmp/step2/plan.tsv` (columns: plug
 
 ## Severity rules
 
-- **One deduction per check id.** If the same id occurs in several places, record one `F` line with all locations.
+- **Follow the deduction rule in the `- deductions:` line of the `prepared.txt` summary** (the `[deductions] merge` setting of `configs.ini`; never change it yourself):
+  - `not merged (merge=false)`: every occurrence is deducted. Record one `F` line per occurrence, with exactly one location (a line range only when it is one occurrence, such as one method or one block). When the same check id occurs in several places, write one `F` line for each place. Never list the same check id at the same location twice.
+  - `merged (merge=true)`: one deduction per check id. If the same id occurs in several places, record one `F` line with all locations.
 - **Use the default severity.** Change it only when the condition written in the check is met, and write that condition in column 5. Never raise or lower it on your own judgment, and never adopt a code review plugin's severity.
 - **Ask before downgrading.** When a check needs information the diff does not show, ask (procedure step 7). Only when the user says it cannot be provided, use the lower severity and write the assumption.
 - **Evidence required.** Every deduction must point to a file and line in the diff. "Might be a problem" that the diff cannot confirm is a `Nit` (no deduction).

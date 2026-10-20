@@ -4,7 +4,8 @@ Preprocess a PR diff: drop non-reviewable files, number new-file lines, list heu
 
 .DESCRIPTION
 Prints a summary, heuristic candidates (clues only) and a compact diff with new-file line numbers.
-With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
+The summary shows the [deductions] merge setting of -Config (default: configs.ini in the project root; missing =
+false), which decides how findings.txt is written. With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
 -InputPath and -Git, ROOT is tmp in the project root. -InputPath - reads the diff from stdin.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 2 bad arguments or input.
@@ -22,7 +23,8 @@ param(
     [Alias('r')][string]$Repo = '.',
     [Alias('m')][ValidateSet('all', 'summary', 'scan', 'view')][string]$Mode = 'all',
     [int]$Max = 15,
-    [Alias('o')][string]$Out
+    [Alias('o')][string]$Out,
+    [string]$Config
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,7 +33,19 @@ Initialize-Utf8
 
 $sources = @($Root, $InputPath, $Git | Where-Object { $_ }).Count
 if ($sources -gt 1) { Exit-WithError 'use only one of -Root, -InputPath, -Git' }
-if ($sources -eq 0) { $Root = Join-Path (Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)) 'tmp' }
+$projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
+if ($sources -eq 0) { $Root = Join-Path $projectRoot 'tmp' }
+# [deductions] merge decides how findings.txt is written; the scoring step validates it the same way.
+if (-not $Config) { $Config = Join-Path $projectRoot 'configs.ini' }
+$merge = 'false'
+if (Test-UserFile $Config) {
+    $sec = ''
+    foreach ($l in (Read-Utf8Lines $Config)) {
+        if ($l -match '^\s*\[(.*)\]\s*$') { $sec = $Matches[1]; continue }
+        if ($sec -ceq 'deductions' -and $l -cmatch '^\s*merge\s*=\s*"?(.*?)"?\s*$') { $merge = $Matches[1].ToLowerInvariant() }
+    }
+    if ($merge -cnotin 'true', 'false') { Exit-WithError "[deductions] merge in $Config must be true or false, not $merge" }
+}
 if ($Root) {
     $InputPath = Join-Path $Root 'step1/pr.diff'
     if (-not $Out) {
@@ -193,6 +207,7 @@ foreach ($f in $files) {
 $sb = New-Object System.Text.StringBuilder
 if ($Mode -in 'all', 'summary') {
     [void]$sb.Append("## Summary`n")
+    [void]$sb.Append("- deductions: $(if ($merge -eq 'true') { 'merged (merge=true): one F line per check id with all its locations; deducted once' } else { 'not merged (merge=false): one F line per location; every occurrence is deducted' })`n")
     [void]$sb.Append("- reviewable files: $nk, excluded: $nx; main code changed: $nMain, test files: $nTest, migrations: $nMig`n")
     foreach ($f in $files) {
         $tagv = if ($f.IsTest) { ' [test]' } elseif ($f.IsMig) { ' [migration]' } else { '' }

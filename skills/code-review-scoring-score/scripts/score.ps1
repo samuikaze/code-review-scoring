@@ -5,9 +5,11 @@ Validate findings.txt and compute dimension scores, total and grade.
 .DESCRIPTION
 With -Root (default: tmp in the project root): uses ROOT/step3/findings.txt and ROOT/step1/pr.diff, refuses unanswered
 questions in step1/step3, and writes ROOT/step4/score.tsv and ROOT/step4/score.json.
-With -Findings: standalone use without the root layout. Works on Windows PowerShell 5.1 and PowerShell 7+.
+With -Findings: standalone use without the root layout.
+Scoring settings come from the [points], [deductions] (incl. merge) and [grades] sections of -Config (default: configs.ini in
+the project root); settings that are not given keep the defaults. Works on Windows PowerShell 5.1 and PowerShell 7+.
 Saved as UTF-8 with BOM; keep that encoding.
-Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad arguments,
+Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad arguments or invalid scoring settings,
 3 spec-context.md still has unresolved inputs or questions.
 
 .EXAMPLE
@@ -20,14 +22,17 @@ param(
     [Alias('d')][string]$Diff,
     [Alias('g')][string]$Git,
     [Alias('r')][string]$Repo = '.',
-    [Alias('o')][string]$OutDir
+    [Alias('o')][string]$OutDir,
+    [string]$Config
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
 
-if (-not $Root -and -not $Findings) { $Root = Join-Path (Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)) 'tmp' }
+$projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
+if (-not $Root -and -not $Findings) { $Root = Join-Path $projectRoot 'tmp' }
+if (-not $Config) { $Config = Join-Path $projectRoot 'configs.ini' }
 if ($Root) {
     if (-not [IO.Directory]::Exists((Resolve-UserPath $Root))) { Exit-WithError "review root not found: $Root" }
     if (-not $Findings) { $Findings = Join-Path $Root 'step3/findings.txt' }
@@ -101,7 +106,47 @@ else {
     [Console]::Error.WriteLine('note: no diff given, location checks skipped')
 }
 
+# Defaults; configs.ini can change them
+$dimMax = [ordered]@{ A = 25; B = 15; C = 15; D = 15; E = 10; F = 10; G = 10 }
 $pts = @{ Critical = 10; Major = 5; Minor = 2; Nit = 0 }
+$gradeMin = [ordered]@{ S = 95; A = 85; B = 70; C = 55 }
+$merge = $false
+# Reads the scoring settings of configs.ini; keys that are not set keep their defaults.
+$cfgErrors = New-Object System.Collections.Generic.List[string]
+if (Test-UserFile $Config) {
+    $sec = ''
+    foreach ($l in (Read-Utf8Lines $Config)) {
+        if ($l -match '^\s*[;#]' -or $l -match '^\s*$') { continue }
+        if ($l -match '^\s*\[(.*)\]\s*$') { $sec = $Matches[1]; continue }
+        if ($sec -cnotin 'points', 'deductions', 'grades' -or $l -notmatch '^([^=]*)=(.*)$') { continue }
+        $k = $Matches[1].Trim(); $v = $Matches[2].Trim(); if ($v -match '^"(.*)"$') { $v = $Matches[1] }
+        if ($sec -eq 'deductions' -and $k -ceq 'merge') {
+            $v = $v.ToLowerInvariant()
+            if ($v -cnotin 'true', 'false') { $cfgErrors.Add("  - [deductions] merge: `"$v`" is not true or false") }
+            else { $merge = ($v -eq 'true') }
+            continue
+        }
+        $target = switch -CaseSensitive ($sec) { 'points' { $dimMax } 'deductions' { $pts } 'grades' { $gradeMin } }
+        $allowed = switch -CaseSensitive ($sec) { 'points' { 'A, B, C, D, E, F, G' } 'deductions' { 'Critical, Major, Minor, merge' } 'grades' { 'S, A, B, C' } }
+        $what = switch -CaseSensitive ($sec) { 'points' { 'dimension' } 'deductions' { 'severity' } 'grades' { 'grade' } }
+        if (-not (@($target.Keys) -ccontains $k) -or ($sec -eq 'deductions' -and $k -eq 'Nit')) { $cfgErrors.Add("  - [$sec] ${k}: unknown $what (allowed: $allowed)"); continue }
+        if ($v -notmatch '^[0-9]+$') { $cfgErrors.Add("  - [$sec] ${k}: `"$v`" is not a whole number"); continue }
+        $target[$k] = [int]$v
+    }
+}
+$sum = 0; foreach ($d in $dimMax.Keys) { $sum += $dimMax[$d] }
+if ($sum -ne 100) { $cfgErrors.Add("  - [points] the seven dimensions must add up to 100, not $sum") }
+if ($gradeMin.S -gt 100) { $cfgErrors.Add('  - [grades] S must be at most 100') }
+$g = @('S', 'A', 'B', 'C')
+for ($i = 0; $i -lt 3; $i++) {
+    if ($gradeMin[$g[$i]] -le $gradeMin[$g[$i + 1]]) { $cfgErrors.Add("  - [grades] $($g[$i]) ($($gradeMin[$g[$i]])) must be higher than $($g[$i + 1]) ($($gradeMin[$g[$i + 1]]))") }
+}
+if ($cfgErrors.Count -gt 0) {
+    [Console]::Error.WriteLine("invalid scoring settings in ${Config}:")
+    $cfgErrors | ForEach-Object { [Console]::Error.WriteLine($_) }
+    exit 2
+}
+
 $rank = @{ Critical = 1; Major = 2; Minor = 3; Nit = 4 }
 $uTypes = @{
     'spec-gap'         = @('missing', 'wrong', 'ambiguous')
@@ -110,7 +155,8 @@ $uTypes = @{
 }
 $errors = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
-$found = [ordered]@{}
+$found = New-Object System.Collections.Generic.List[object]
+$seen = @{}; $idSeen = @{}
 $upstream = New-Object System.Collections.Generic.List[object]
 $skipped = New-Object System.Collections.Generic.List[object]
 
@@ -161,8 +207,11 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
                 if (-not $reason) { Add-Error $no "${id}: non-default severity $sev needs the matching adjustment condition in column 5"; break }
             }
             if ($id -eq 'C1' -and $sev -eq 'Critical' -and $useIndex -and $hasTest) { Add-Error $no 'C1 Critical requires that the PR changes no test file, but the diff contains test files' }
-            if ($found.Contains($id)) { Add-Error $no "$id appears more than once. A check id is deducted once: merge all locations into one record"; break }
-            if (-not $locs) { Add-Error $no "${id}: missing file:line locations"; break }
+            if (-not $locs) { Add-Error $no "${id}: missing file:line location"; break }
+            # merge=true: one F record per check id with all its locations, deducted once.
+            # merge=false: one F record per occurrence with one location, each deducted.
+            if ($merge -and $idSeen.ContainsKey($id)) { Add-Error $no "$id appears more than once. Deductions are merged (merge=true): put every location of a check id into one record"; break }
+            if (-not $merge -and $locs.Contains(',')) { Add-Error $no "${id}: several locations in one record. Deductions are not merged (merge=false): write one F record per location"; break }
             $locList = New-Object System.Collections.Generic.List[string]
             foreach ($loc in ($locs -split ',' | ForEach-Object { $_.Trim() })) {
                 if ($loc -notmatch '^(.+):(\d+)(-\d+)?$') { Add-Error $no "${id}: location `"$loc`" is not file:line"; continue }
@@ -174,7 +223,10 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
                 }
                 $locList.Add($loc)
             }
-            $found[$id] = [pscustomobject]@{ Id = $id; Severity = $sev; Locations = $locList }
+            $clean = $locList -join ','
+            if (-not $merge -and $seen.ContainsKey("$id|$clean")) { Add-Error $no "$id at $clean is recorded twice; one problem at one location is deducted once"; break }
+            $idSeen[$id] = $true; $seen["$id|$clean"] = $true
+            $found.Add([pscustomobject]@{ Seq = $found.Count; Id = $id; Severity = $sev; Locations = $locList })
             $rec = 'F'
         }
         'U' {
@@ -217,8 +269,8 @@ function Join-JsonArray($items) {
     return "[`n" + ($items -join ",`n") + "`n  ]"
 }
 
-$dimMax = [ordered]@{ A = 25; B = 15; C = 15; D = 15; E = 10; F = 10; G = 10 }
-$sorted = @($found.Values | Sort-Object @{ Expression = { $rank[$_.Severity] } }, @{ Expression = { $_.Id } })
+# Sorted by severity, then id; occurrences of one id keep their order in findings.txt
+$sorted = @($found | Sort-Object @{ Expression = { $rank[$_.Severity] } }, @{ Expression = { $_.Id } }, @{ Expression = { $_.Seq } })
 $deducted = @($sorted | Where-Object { $_.Severity -ne 'Nit' })
 $scores = [ordered]@{}; $total = 0; $crit = $false
 foreach ($d in $dimMax.Keys) {
@@ -231,7 +283,7 @@ foreach ($d in $dimMax.Keys) {
     $scores[$d] = [Math]::Max(0, $dimMax[$d] - $ded)
     $total += $scores[$d]
 }
-$grade = if ($total -ge 95) { 'S' } elseif ($total -ge 85) { 'A' } elseif ($total -ge 70) { 'B' } elseif ($total -ge 55) { 'C' } else { 'D' }
+$grade = if ($total -ge $gradeMin.S) { 'S' } elseif ($total -ge $gradeMin.A) { 'A' } elseif ($total -ge $gradeMin.B) { 'B' } elseif ($total -ge $gradeMin.C) { 'C' } else { 'D' }
 $capped = $false
 if ($crit -and $grade -in 'S', 'A') { $grade = 'B'; $capped = $true }
 

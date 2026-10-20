@@ -1,5 +1,6 @@
 # Diff preprocessor shared by prepare-diff.sh and prepare-diff.zsh (POSIX awk).
 # Variables: rules=scan rule file  mode=all|summary|scan|view  maxper=max locations listed per check
+#            merge=true|false ([deductions] merge of configs.ini, shown in the summary for writing findings.txt)
 # Run with LC_ALL=C; strings are handled as bytes.
 
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
@@ -164,6 +165,7 @@ END {
 
     if (mode == "all" || mode == "summary") {
         print "## Summary"
+        print "- deductions: " (merge == "true" ? "merged (merge=true): one F line per check id with all its locations; deducted once" : "not merged (merge=false): one F line per location; every occurrence is deducted")
         printf "- reviewable files: %d, excluded: %d; main code changed: %d, test files: %d, migrations: %d\n", nk, nx, nmain, ntest, nmig
         for (f = 1; f <= nf; f++) {
             tagv = is_test[f] ? " [test]" : (is_mig[f] ? " [migration]" : "")

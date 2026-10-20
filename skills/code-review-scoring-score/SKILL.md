@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-score
-description: Step 4 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Validates tmp/step3/findings.txt (check ids, allowed severities, locations on added diff lines, one deduction per id) and computes the seven dimension scores, the total and the S–D grade into tmp/step4/score.tsv and score.json. Use when dispatched by code-review-scoring, or when the user says 「打分數」、「計算 PR 分數」、「幫 PR 計分」、「重新計分」、「分數算一下」.
+description: Step 4 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Validates tmp/step3/findings.txt (check ids, allowed severities, locations on added diff lines, merged or separate deductions per configs.ini) and computes the seven dimension scores, the total and the S–D grade into tmp/step4/score.tsv and score.json. Use when dispatched by code-review-scoring, or when the user says 「打分數」、「計算 PR 分數」、「幫 PR 計分」、「重新計分」、「分數算一下」.
 compatibility: Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "4/5"
@@ -34,10 +34,14 @@ Paths are relative to this skill's directory.
    - **0**: done. It prints the grade, the dimension scores and any warnings.
    - **1**: validation failed. Each error names the line in `findings.txt`. Standalone: fix it and run again until it passes. Workflow: follow the dispatch prompt (step 3 is redone). When an error questions a judgment (a severity that is not allowed, a location outside the diff), recheck the code and the checklist of `code-review-scoring-code-analysis` instead of only reformatting.
    - **3**: step 1 or step 3 still has unresolved inputs or unanswered questions. Standalone: ask the user in one round, record the replies, run again. Workflow: report failed.
-   - **2**: wrong arguments or missing files.
+   - **2**: wrong arguments, missing files, or invalid scoring settings in `configs.ini` (tell the user what the error says; do not edit the file yourself).
 3. Treat warnings seriously. "unchanged context line" means the location is not new code: move the finding to the added line or drop it.
 
 ## Scoring rules (implemented by the script)
+
+The points, deductions (including whether they are merged) and grade thresholds are settings: the `[points]`, `[deductions]` and `[grades]` sections of `configs.ini` in the project root (`--config` for another file). Anything not set there keeps the default below. The script refuses invalid settings with exit 2 (the seven dimensions must add up to 100, grade thresholds must be S > A > B > C). Never change them on your own; they are the user's choice.
+
+Defaults:
 
 | Dimension | Points | | Severity | Deduction |
 | --- | --- | --- | --- | --- |
@@ -49,9 +53,12 @@ Paths are relative to this skill's directory.
 | F Readability | 10 | | | |
 | G Maintainability | 10 | | | |
 
+- `[deductions] merge` decides how a check id found in several places is deducted:
+  - `false` (default): every `F` record is one occurrence with one location and is deducted on its own, so a check id found in three places is deducted three times. A record with several locations, or the same check id twice at the same location, fails validation.
+  - `true`: one `F` record per check id with all its locations, deducted once. The same check id in two records fails validation.
 - Dimension score = points − sum of its deductions, never below 0. Total = sum of the seven dimension scores.
-- Grades: S 95–100, A 85–94, B 70–84, C 55–69, D 0–54.
-- Any Critical deduction caps the grade at B (Critical only costs 10 points, so the total alone could hide a serious defect).
+- Grades: S 95–100, A 85–94, B 70–84, C 55–69, D 0–54 (lower bounds of S, A, B, C are configurable).
+- Any Critical deduction caps the grade at B, whatever the settings (a single deduction could not otherwise reflect a serious defect).
 - Suspected upstream factors (`U`) and `Nit` findings are never deducted.
 - Allowed severities per check are in `scripts/rules.tsv`: the default, the adjustments written in the checklist, or `Nit`.
 
