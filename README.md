@@ -23,7 +23,7 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 
 主 Agent 在開始前會先詢問使用者：
 
-- **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。支援 Sub-Agent 的平台由主 Agent 為每一步派發一個 Sub-Agent；不支援的平台由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。
+- **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。是否派發 Sub-Agent 由 `configs.ini` 的 `[workflow]` `subagent` 決定：`true` 時由主 Agent 為每一步派發一個 Sub-Agent；`false` 時由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。平台不支援 Sub-Agent 時，即使設為 `true` 也會由主 Agent 逐步執行。
 - **單一步驟**：直接在對話中執行某一個步驟 Skill，不使用狀態檔。
 
 ### 設定檢查（完整流程每次執行前）
@@ -33,14 +33,15 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 | 設定檔 | 何時需要 | 缺少時 |
 | --- | --- | --- |
 | `plugins.ini` | 每次執行完整流程都需要 | 要登記哪些 CR 外掛；不使用外掛時也要建立一份沒有外掛的檔案，表示已確認不用 |
-| `configs.ini` 中該平台的區段 | 只有以 Sub-Agent 執行時 | Sub-Agent 要使用的 model 與 reasoning |
+| `configs.ini` 的 `[workflow]` 區段 | 每次執行完整流程都需要 | `subagent=true`（每一步派發 Sub-Agent）或 `subagent=false`（主 Agent 逐步執行） |
+| `configs.ini` 中該平台的區段 | 只有 `subagent=true` 且平台支援 Sub-Agent 時 | Sub-Agent 要使用的 model 與 reasoning |
 
 有缺少時，主 Agent 會告訴你缺了什麼，並詢問要用哪種方式建立：
 
-- **腳本逐步詢問**：由你自己在終端機執行 `check` 印出的 `wizard` 指令，腳本會逐一詢問外掛名稱、路徑、適用範圍、模式，以及 model 與 reasoning，並在登記時驗證外掛（SKILL.md 是否存在、名稱是否一致）。AI 無法代為執行，因為它需要互動式終端機；在 Claude Code 中可以輸入 `! <指令>` 直接在對話中執行。
-- **AI 詢問**：主 Agent 在一則訊息中問完所需資料，再以 `setup plugin`、`setup plugins --none`、`review-state config` 寫入設定檔。外掛驗證不通過時會告訴你原因並重新詢問。
+- **腳本逐步詢問**：由你自己在終端機執行 `check` 印出的 `wizard` 指令，腳本會逐一詢問外掛名稱、路徑、適用範圍、模式，是否使用 Sub-Agent，以及 model 與 reasoning，並在登記時驗證外掛（SKILL.md 是否存在、名稱是否一致）。AI 無法代為執行，因為它需要互動式終端機；在 Claude Code 中可以輸入 `! <指令>` 直接在對話中執行。
+- **AI 詢問**：主 Agent 在一則訊息中問完所需資料，再以 `setup plugin`、`setup plugins --none`、`review-state config --subagent`、`review-state config --platform` 寫入設定檔。外掛驗證不通過時會告訴你原因並重新詢問。
 
-登記了外掛之後，主 Agent 會執行 `link-skills` 連結外掛 Skill，接著再次執行 `check`，通過後才會繼續。`review-state init` 也會在 `plugins.ini` 不存在時拒絕執行，所以不會因為忘了建立清單而靜靜略過 CR。
+`check` 通過時會印出 `execution:` 一行，說明這次以 Sub-Agent 或由主 Agent 逐步執行。登記了外掛之後，主 Agent 會執行 `link-skills` 連結外掛 Skill，接著再次執行 `check`，通過後才會繼續。`review-state init` 也會在 `plugins.ini` 不存在時拒絕執行，所以不會因為忘了建立清單而靜靜略過 CR。
 
 也可以不透過 AI，直接在專案中執行：
 
@@ -77,11 +78,17 @@ reports/
 - 步驟失敗時，詳細錯誤寫入該步驟目錄的 `errors.log`（例如 `tmp/step4/errors.log`），狀態腳本標記 `failed` 時也會追加一行摘要。
 - 支援的 Sub-Agent 工具：Claude Code 的 Agent 工具、GitHub Copilot（VS Code agent mode）的 `runSubagent`，或其他平台的同等工具。
 
-### Sub-Agent 的 Model 與 Reasoning 設定
+### 執行方式與 Sub-Agent 設定
 
-在某個平台第一次以 Sub-Agent 執行時，設定檢查會要求建立 Sub-Agent 要使用的 model 與 reasoning（見上方「設定檢查」），存到專案根目錄的 `configs.ini`（與 `plugins.ini` 同一層），之後同一平台直接沿用：
+設定存在專案根目錄的 `configs.ini`（與 `plugins.ini` 同一層），由設定檢查在第一次需要時要求建立（見上方「設定檢查」），之後直接沿用：
+
+- `[workflow]` 的 `subagent`：`true` 時每一步派發一個 Sub-Agent，`false` 時只由主 Agent 逐步執行。設為 `false` 時不需要平台區段。
+- 各平台一個區段（`workflow` 保留給上述設定，不能當平台名稱）：Sub-Agent 要使用的 model 與 reasoning，在某個平台第一次以 Sub-Agent 執行時建立。
 
 ```ini
+[workflow]
+subagent="true"
+
 [Claude]
 model="sonnet 5.5"
 reasoning="high"
@@ -91,7 +98,7 @@ model="gpt-5.6"
 reasoning="xhigh"
 ```
 
-要修改時可直接編輯此檔，或執行 `review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。也可以在第一次使用前，從範本 `configs.example.ini` 複製一份 `configs.ini`，取消註解要用的平台區段後修改。
+要修改時可直接編輯此檔，或執行 `review-state config --subagent true|false`、`review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。也可以在第一次使用前，從範本 `configs.example.ini` 複製一份 `configs.ini`，取消註解要用的區段後修改。
 
 > [!WARNING]
 > **GitHub Copilot 的已知限制**
@@ -137,7 +144,7 @@ skills/
 scripts/
   link-skills.{sh,zsh,ps1}                # 依 skills/ 與 plugins.ini 同步各工具讀取 Skill 的目錄
 plugins.example.ini                       # 外掛 Skill 清單範本（複製為 plugins.ini 使用）
-configs.example.ini                       # Sub-Agent 的 model 與 reasoning 範本（configs.ini 首次使用時自動產生）
+configs.example.ini                       # 是否使用 Sub-Agent 及其 model 與 reasoning 的範本（configs.ini 首次使用時自動產生）
 docs/
   notices.md                              # 注意事項（GitHub Copilot 適用性）
 tmp/                                      # 評分過程的暫存檔（不進版控）
@@ -152,7 +159,7 @@ reports/                                  # 最終版分數報告（不進版控
 
 - `tmp/*`、`reports/*`：評分過程與報告，含 PR 內容，不進版控。
 - `.agents/`、`.github/skills/`、`.claude/skills/`：`link-skills` 產生的連結與 `.managed` 清單，各環境自行執行腳本建立。
-- `configs.ini`、`plugins.ini`：各使用者自己的 Sub-Agent 設定與外掛清單（外掛路徑依各人環境而不同）。版控中只放範本 `configs.example.ini`、`plugins.example.ini`；若團隊要共用同一份設定，請從 `.gitignore` 移除對應的那一行。
+- `configs.ini`、`plugins.ini`：各使用者自己的執行方式與 Sub-Agent 設定、外掛清單（外掛路徑依各人環境而不同）。版控中只放範本 `configs.example.ini`、`plugins.example.ini`；若團隊要共用同一份設定，請從 `.gitignore` 移除對應的那一行。
 - `.DS_Store`、`Thumbs.db`、`desktop.ini`：作業系統產生的檔案。
 
 ### 換行格式

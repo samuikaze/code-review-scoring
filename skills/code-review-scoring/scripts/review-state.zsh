@@ -24,9 +24,13 @@ Commands:
            print the prompt for step N (step 2 needs --plugin); refused unless the previous step succeeded
   set      --step N [--plugin NAME] --state working|pending|success|failed [--message TEXT]
            record a state; enforces the gates below
+  config   [--subagent true|false] [--config FILE]
+           without --subagent: print subagent=true|false from the [workflow] section (exit 6 if not set);
+           with it: save it. true = each step runs in its own subagent, false = the main agent runs every step
   config   --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
            without --model/--reasoning: print the subagent settings of NAME (exit 6 if not set);
-           with both: save them in the [NAME] section (default file: configs.ini in the project root)
+           with both: save them in the [NAME] section
+           (default file of both: configs.ini in the project root)
 
 Common option: --root DIR (default: tmp)
 
@@ -37,7 +41,7 @@ Gates enforced by "set":
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 Step 2 is success when cr-plan has run and every planned plugin is success (no plugins = success).
 
-Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 platform not configured, 7 setup incomplete (no plugins.ini; see setup check).
+Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 setting not configured, 7 setup incomplete (no plugins.ini; see setup check).
 USAGE
 }
 
@@ -53,7 +57,7 @@ self_cmd="zsh \"$script_dir/review-state.zsh\""
 cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
 root="tmp" step="" plugin="" state="" message="" git_range="" repo="." title="" reset=0
-config="$project_root/configs.ini" platform="" model="" reasoning="" plugins_file="$project_root/plugins.ini"
+config="$project_root/configs.ini" subagent="" platform="" model="" reasoning="" plugins_file="$project_root/plugins.ini"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -70,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --platform) platform="${2:?--platform needs a value}"; shift 2 ;;
     --model) model="${2:?--model needs a value}"; shift 2 ;;
     --reasoning) reasoning="${2:?--reasoning needs a value}"; shift 2 ;;
+    --subagent) subagent="${2:?--subagent needs a value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
@@ -78,6 +83,41 @@ done
 refuse() { echo "refused: $1" >&2; exit 5; }
 now() { date +%Y-%m-%dT%H:%M:%S%z; }
 abs_root() { mkdir -p "$root"; abspath "$root"; }
+# configs.ini: [workflow] subagent=true|false, and one [NAME] section per platform with model and reasoning.
+ini_get() {  # $1 = section, $2 = key; prints the value without quotes (empty when not set)
+  [[ -f "$config" ]] || return 0
+  LC_ALL=C awk -v sec="$1" -v key="$2" '
+    /^[ \t]*\[/ { h = $0; gsub(/^[ \t]*\[|\][ \t\r]*$/, "", h); insec = (h == sec); next }
+    insec && /^[ \t]*[A-Za-z_]+[ \t]*=/ {
+      k = $0; sub(/^[ \t]*/, "", k); sub(/[ \t]*=.*/, "", k)
+      if (k != key) next
+      v = $0; sub(/^[^=]*=[ \t]*/, "", v); sub(/[ \t\r]*$/, "", v); gsub(/^"|"$/, "", v); val = v
+    }
+    END { print val }' "$config"
+}
+ini_set() {  # $1 = section, then KEY=VALUE pairs; replaces the section in place, or appends it
+  local tmpf body="" kv
+  for kv in "${@:2}"; do body+="${kv%%=*}=\"${kv#*=}\""$'\n'; done
+  [[ -f "$config" ]] || : > "$config"
+  tmpf="$(mktemp)"
+  sec="$1" body="$body" LC_ALL=C awk '
+    function emit(   c, k, b) { lines[++n] = "[" ENVIRON["sec"] "]"; c = split(ENVIRON["body"], b, "\n"); for (k = 1; k < c; k++) lines[++n] = b[k] }
+    /^[ \t]*\[/ {
+      h = $0; gsub(/^[ \t]*\[|\][ \t\r]*$/, "", h)
+      skip = 0
+      if (h == ENVIRON["sec"]) { emit(); done = 1; skip = 1; next }
+      if (n > 0 && lines[n] !~ /^[ \t]*$/) lines[++n] = ""
+    }
+    skip && !/^[ \t]*$/ { next }
+    skip { skip = 0 }
+    { lines[++n] = $0 }
+    END {
+      while (n > 0 && lines[n] ~ /^[ \t]*$/) n--
+      if (!done) { if (n > 0) lines[++n] = ""; emit() }
+      for (i = 1; i <= n; i++) print lines[i]
+    }' "$config" > "$tmpf"
+  mv "$tmpf" "$config"
+}
 req_field() { sed -n "s/^- $1: //p" "$root/request.md" | head -1; }
 not_older() { [[ -f "$1" && -f "$2" && ! "$2" -nt "$1" ]]; }  # $1 exists and is not older than $2
 
@@ -390,51 +430,30 @@ case "$cmd" in
     ;;
 
   config)
-    [[ -n "$platform" ]] || { echo "error: config needs --platform NAME" >&2; exit 2; }
-    [[ "$platform" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "error: --platform may only contain letters, digits, - and _" >&2; exit 2; }
-    if [[ -z "$model" && -z "$reasoning" ]]; then
-      [[ -f "$config" ]] || { echo "not configured: $config does not exist; ask the user for the model and reasoning of $platform" >&2; exit 6; }
-      out="$(LC_ALL=C awk -v sec="[$platform]" '
-        /^[ \t]*\[/ { insec = ($0 ~ "^[ \t]*\\[" substr(sec, 2, length(sec) - 2) "\\][ \t]*$"); next }
-        insec && /^[ \t]*(model|reasoning)[ \t]*=/ {
-          k = $0; sub(/^[ \t]*/, "", k); sub(/[ \t]*=.*/, "", k)
-          v = $0; sub(/^[^=]*=[ \t]*/, "", v); sub(/[ \t\r]*$/, "", v); gsub(/^"|"$/, "", v)
-          val[k] = v
-        }
-        END { if (val["model"] != "" && val["reasoning"] != "") printf "model=%s\nreasoning=%s\n", val["model"], val["reasoning"] }
-      ' "$config")"
-      [[ -n "$out" ]] || { echo "not configured: [$platform] is missing in $config; ask the user for the model and reasoning" >&2; exit 6; }
-      echo "$out"
+    if [[ -n "$subagent" ]]; then
+      [[ -z "$platform$model$reasoning" ]] || { echo "error: --subagent cannot be combined with --platform, --model or --reasoning" >&2; exit 2; }
+      [[ "$subagent" == "true" || "$subagent" == "false" ]] || { echo "error: --subagent must be true or false" >&2; exit 2; }
+      ini_set workflow "subagent=$subagent"
+      echo "saved subagent=$subagent to $config"
+    elif [[ -z "$platform" ]]; then
+      [[ -z "$model$reasoning" ]] || { echo "error: --model and --reasoning need --platform NAME" >&2; exit 2; }
+      v="$(ini_get workflow subagent | tr '[:upper:]' '[:lower:]')"
+      [[ "$v" == "true" || "$v" == "false" ]] || { echo "not configured: subagent=true|false is missing in [workflow] of $config; ask the user whether to run the steps in subagents" >&2; exit 6; }
+      echo "subagent=$v"
     else
-      [[ -n "$model" && -n "$reasoning" ]] || { echo "error: config needs both --model and --reasoning to save" >&2; exit 2; }
-      [[ "$model$reasoning" != *'"'* ]] || { echo "error: values may not contain double quotes" >&2; exit 2; }
-      tmpf="$(mktemp)"
-      [[ -f "$config" ]] || : > "$config"
-      LC_ALL=C awk -v name="$platform" -v model="$model" -v reasoning="$reasoning" '
-        # Replace the [name] section in place, or append it when it does not exist yet.
-        /^[ \t]*\[/ {
-          h = $0; gsub(/^[ \t]*\[|\][ \t\r]*$/, "", h)
-          skip = 0
-          if (h == name) {
-            lines[++n] = "[" name "]"; lines[++n] = "model=\"" model "\""; lines[++n] = "reasoning=\"" reasoning "\""
-            done = 1; skip = 1; next
-          }
-          if (skip == 0 && n > 0 && lines[n] != "" && lines[n] !~ /^[ \t]*$/) lines[++n] = ""
-        }
-        skip && !/^[ \t]*$/ { next }
-        skip { skip = 0 }
-        { lines[++n] = $0 }
-        END {
-          while (n > 0 && lines[n] ~ /^[ \t]*$/) n--
-          if (!done) {
-            if (n > 0) lines[++n] = ""
-            lines[++n] = "[" name "]"; lines[++n] = "model=\"" model "\""; lines[++n] = "reasoning=\"" reasoning "\""
-          }
-          for (i = 1; i <= n; i++) print lines[i]
-        }
-      ' "$config" > "$tmpf"
-      mv "$tmpf" "$config"
-      echo "saved [$platform] to $config"
+      [[ "$platform" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "error: --platform may only contain letters, digits, - and _" >&2; exit 2; }
+      [[ "$(printf '%s' "$platform" | tr '[:upper:]' '[:lower:]')" != "workflow" ]] || { echo "error: workflow is reserved and cannot be a platform name" >&2; exit 2; }
+      if [[ -z "$model" && -z "$reasoning" ]]; then
+        m="$(ini_get "$platform" model)"
+        r="$(ini_get "$platform" reasoning)"
+        [[ -n "$m" && -n "$r" ]] || { echo "not configured: [$platform] with model and reasoning is missing in $config; ask the user for them" >&2; exit 6; }
+        printf 'model=%s\nreasoning=%s\n' "$m" "$r"
+      else
+        [[ -n "$model" && -n "$reasoning" ]] || { echo "error: config needs both --model and --reasoning to save" >&2; exit 2; }
+        [[ "$model$reasoning" != *'"'* ]] || { echo "error: values may not contain double quotes" >&2; exit 2; }
+        ini_set "$platform" "model=$model" "reasoning=$reasoning"
+        echo "saved [$platform] to $config"
+      fi
     fi
     ;;
 

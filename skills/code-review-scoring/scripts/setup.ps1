@@ -8,8 +8,9 @@ interactive "wizard", or by the agent with "plugins --none", "plugin" and "revie
 Uses the same GNU-style arguments as setup.sh:
 
   setup.ps1 check [--platform NAME]
-      report whether plugins.ini exists and, with --platform, whether configs.ini has a [NAME] section
-      (give --platform only in subagent mode). Exit 7 when something is missing
+      report whether plugins.ini exists, whether configs.ini sets subagent=true|false and, when it is true
+      and --platform is given, whether configs.ini has a [NAME] section (give --platform only when the
+      platform has a subagent tool). Prints the execution style. Exit 7 when something is missing
   setup.ps1 wizard [--platform NAME]
       create what is missing by asking the user step by step; needs an interactive console,
       so the user runs it, not the agent
@@ -20,7 +21,8 @@ Uses the same GNU-style arguments as setup.sh:
       A relative --path is relative to the folder of plugins.ini
 
 Options: --plugins FILE (default: plugins.ini in the project root), --config FILE (default: configs.ini in the project root).
-Subagent settings are saved with: review-state config --platform NAME --model TEXT --reasoning TEXT
+Settings in configs.ini are saved with: review-state config --subagent true|false
+                                   and review-state config --platform NAME --model TEXT --reasoning TEXT
 After the plugins change, run scripts/link-skills in the project root.
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
@@ -75,16 +77,25 @@ function Get-PluginNames {
     return $names
 }
 
-function Test-Platform {
-    # Same rule as "review-state config": the [platform] section needs both model and reasoning.
-    if (-not [IO.File]::Exists($configFile)) { return $false }
-    $inSec = $false; $val = @{}
+function Get-IniSection([string]$Section) {
+    # key/value pairs of one configs.ini section, read the same way as "review-state config"
+    $val = @{}
+    if (-not [IO.File]::Exists($configFile)) { return $val }
+    $inSec = $false
     foreach ($l in (Read-Utf8Lines $configFile)) {
-        if ($l -match '^\s*\[(.*)\]\s*$') { $inSec = ($Matches[1] -eq $opt.platform); continue }
-        if ($inSec -and $l -match '^\s*(model|reasoning)\s*=\s*"?(.*?)"?\s*$') { $val[$Matches[1]] = $Matches[2] }
+        if ($l -match '^\s*\[(.*)\]\s*$') { $inSec = ($Matches[1] -ceq $Section); continue }
+        if ($inSec -and $l -match '^\s*([A-Za-z_]+)\s*=\s*"?(.*?)"?\s*$') { $val[$Matches[1]] = $Matches[2] }
     }
-    return [bool]($val['model'] -and $val['reasoning'])
+    return $val
 }
+# true, false, or an empty string when [workflow] subagent is not set
+function Get-Subagent {
+    $v = [string](Get-IniSection 'workflow')['subagent']
+    $v = $v.ToLowerInvariant()
+    if ($v -in 'true', 'false') { return $v } return ''
+}
+# The [platform] section needs both model and reasoning.
+function Test-Platform { $val = Get-IniSection $opt.platform; return [bool]($val['model'] -and $val['reasoning']) }
 
 function Get-SkillName([string]$SkillMd) {
     # name in the frontmatter of a SKILL.md
@@ -171,7 +182,10 @@ switch ($cmd) {
             [Console]::WriteLine("plugins.ini: ok ($($names.Count) plugin(s)$list) $pluginsFile")
         }
         else { [Console]::WriteLine("plugins.ini: missing $pluginsFile"); $missing = $true }
-        if ($opt.platform) {
+        $sub = Get-Subagent
+        if ($sub) { [Console]::WriteLine("configs.ini subagent: $sub $configFile") }
+        else { [Console]::WriteLine("configs.ini subagent: missing $configFile"); $missing = $true }
+        if ($sub -eq 'true' -and $opt.platform) {
             if (Test-Platform) { [Console]::WriteLine("configs.ini [$($opt.platform)]: ok $configFile") }
             else { [Console]::WriteLine("configs.ini [$($opt.platform)]: missing $configFile"); $missing = $true }
         }
@@ -181,6 +195,9 @@ switch ($cmd) {
             [Console]::WriteLine("      ($selfCmd wizard$p) or by answering your questions")
             exit 7
         }
+        if ($sub -eq 'true' -and $opt.platform) { [Console]::WriteLine("execution: subagent (each step runs in its own subagent with the [$($opt.platform)] settings)") }
+        elseif ($sub -eq 'true') { [Console]::WriteLine('execution: inline (subagent=true, but no --platform was given, so the main agent runs every step)') }
+        else { [Console]::WriteLine('execution: inline (subagent=false, so the main agent runs every step)') }
         [Console]::WriteLine('next: setup complete')
     }
     'wizard' {
@@ -207,7 +224,14 @@ switch ($cmd) {
             }
             else { New-PluginsFile; [Console]::WriteLine("Created $pluginsFile without plugins") }
         }
-        if ($opt.platform -and -not (Test-Platform)) {
+        $sub = Get-Subagent
+        if (-not $sub) {
+            [Console]::WriteLine("== Execution style (subagent in $configFile)")
+            [Console]::WriteLine('true: each step runs in its own subagent (when the platform has a subagent tool); false: the main agent runs every step itself.')
+            $sub = if (Read-YesNo 'Run the steps in subagents?' $true) { 'true' } else { 'false' }
+            & $stateScript config --subagent $sub --config $configFile
+        }
+        if ($sub -eq 'true' -and $opt.platform -and -not (Test-Platform)) {
             [Console]::WriteLine("== Subagent settings ([$($opt.platform)] in $configFile)")
             while ($true) {
                 $m = Read-Answer 'Subagent model'

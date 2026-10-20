@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring
-description: Main-agent controller for code review scoring of a PR (built-in scoring checklist: Java Spring Boot 3; other stacks are reviewed by code review plugin skills). Confirms with the user whether to run the full workflow or a single step; in workflow mode it runs read specs → code review (plugin skills listed in plugins.ini) → analyze code (turning confirmed code review comments into deductions) → score → report strictly in order, one subagent per step and per code review plugin (or step by step itself when the platform has no subagents), produces one report with both the code review and the score results, gates every step through status files in tmp/ (stepN-pending / working / success / failed) and relays questions to the user. Use when the user says 「評分 PR」、「幫我評分這個 PR」、「PR 程式碼品質評分」、「Code Review 評分」、「CR 並評分」、「PR 評分流程」、「跑完整評分流程」、「審查並評分這個 PR」.
+description: Main-agent controller for code review scoring of a PR (built-in scoring checklist: Java Spring Boot 3; other stacks are reviewed by code review plugin skills). Confirms with the user whether to run the full workflow or a single step; in workflow mode it runs read specs → code review (plugin skills listed in plugins.ini) → analyze code (turning confirmed code review comments into deductions) → score → report strictly in order, one subagent per step and per code review plugin (or step by step itself when configs.ini sets subagent=false or the platform has no subagents), produces one report with both the code review and the score results, gates every step through status files in tmp/ (stepN-pending / working / success / failed) and relays questions to the user. Use when the user says 「評分 PR」、「幫我評分這個 PR」、「PR 程式碼品質評分」、「Code Review 評分」、「CR 並評分」、「PR 評分流程」、「跑完整評分流程」、「審查並評分這個 PR」.
 compatibility: Works with or without a subagent tool (Claude Code Agent tool, GitHub Copilot runSubagent, or equivalent). Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   rules-version: "v0.5"
@@ -29,24 +29,40 @@ Every time the full workflow is chosen, before anything else, run the setup chec
 | --- | --- | --- |
 | `bash scripts/setup.sh check` | `zsh scripts/setup.zsh check` | `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1 check` |
 
-Add `--platform <Claude|Copilot|Codex|Gemini|other platform name>` when the platform has a subagent tool (subagent mode, section 3); leave it out in inline mode, which needs no subagent settings.
+Add `--platform <Claude|Copilot|Codex|Gemini|other platform name>` when the platform has a subagent tool; leave it out when it has none.
 
-- Exit 0: the settings are complete; continue with the workflow procedure (section 6).
-- Exit 7: `plugins.ini` and/or this platform's section of `configs.ini` (both in the project root) are missing. Tell the user what is missing and ask which way to create it (one question):
+The check covers, in the project root:
+
+- `plugins.ini`: the code review plugins (it may list none);
+- `configs.ini`, `[workflow]` section: `subagent=true` (each step runs in its own subagent) or `subagent=false` (you run every step yourself);
+- `configs.ini`, `[<platform>]` section: the subagent model and reasoning, needed only when `subagent=true` and `--platform` is given.
+
+- Exit 0: the settings are complete. The `execution:` line says whether to use subagent mode or inline mode (section 3); continue with the workflow procedure (section 6).
+- Exit 7: something is missing. Tell the user what is missing and ask which way to create it (one question):
   - **Wizard in a terminal:** the user runs the `wizard` command that `check` printed; it asks step by step. You cannot run it yourself because it needs an interactive terminal. In Claude Code the user can type `! <command>` to run it in this session.
-  - **Answer your questions:** ask in one message whether code review plugins should be registered and, for each plugin, its name (the `name` in its SKILL.md), folder path, `applies` patterns (comma-separated, empty = all changed files) and mode (`mapped`, the default: confirmed comments become deductions; `advisory`: report only); in subagent mode also the subagent model and reasoning, offering only values the platform's subagent tool accepts (section 3). Then save the answers:
+  - **Answer your questions:** ask in one message only what is missing:
+    - plugins: whether code review plugins should be registered and, for each plugin, its name (the `name` in its SKILL.md), folder path, `applies` patterns (comma-separated, empty = all changed files) and mode (`mapped`, the default: confirmed comments become deductions; `advisory`: report only);
+    - execution style: whether each step should run in its own subagent (`true`) or the main agent should run every step itself (`false`);
+    - when the answer is `true` (or it is already `true`) and the platform has a subagent tool: the subagent model and reasoning, offering only values the platform's subagent tool accepts (section 3).
+
+    Then save the answers:
     - each plugin: `setup plugin --name <name> --path <dir> [--applies "<patterns>"] [--mode mapped|advisory]`; if it is rejected, tell the user the reason and ask again;
     - no plugins: `setup plugins --none`;
+    - execution style: `review-state config --subagent true|false`;
     - subagent settings: `review-state config --platform <name> --model "<model>" --reasoning "<level>"`.
 - When plugins were added, run `scripts/link-skills` in the project root (the command is printed by `setup plugin` and by the wizard). The skill tool may not offer plugins linked during this conversation; the step 2 prompt then falls back to reading their SKILL.md, so the workflow still works.
 - Run `check` again and continue only after exit 0. `review-state init` also refuses with exit 7 while `plugins.ini` is missing.
 
-Create or change these files only through these commands, and never choose plugins, models or reasoning levels for the user.
+Create or change these files only through these commands, and never choose plugins, the execution style, models or reasoning levels for the user.
 
 ## 3. Execution style and subagent settings
 
-- **Subagent mode:** the platform has a subagent tool. Each step runs in its own subagent, dispatched by you.
-- **Inline mode:** no subagent tool. You run each step yourself, exactly as a subagent would (same prompt, same status commands, same files), one step at a time.
+`subagent` in the `[workflow]` section of `configs.ini` chooses the style; the `execution:` line of `setup check` reports it.
+
+- **Subagent mode:** `subagent=true` and the platform has a subagent tool. Each step runs in its own subagent, dispatched by you.
+- **Inline mode:** `subagent=false`, or the platform has no subagent tool. You run each step yourself, exactly as a subagent would (same prompt, same status commands, same files), one step at a time. When `subagent=true` but the platform has no subagent tool, tell the user once that the steps run inline.
+
+Follow the setting even when a subagent tool is available: with `subagent=false`, never dispatch a subagent.
 
 In subagent mode, read the saved settings for the current platform before step 1 (the setup check has made sure they exist):
 
@@ -56,9 +72,12 @@ review-state config --platform <Claude|Copilot|Codex|Gemini|other platform name>
 
 It prints `model=…` and `reasoning=…`: use them for every subagent.
 
-The settings are stored in `configs.ini` in the project root (next to `plugins.ini`), one section per platform:
+The settings are stored in `configs.ini` in the project root (next to `plugins.ini`): the `[workflow]` section, then one section per platform (`workflow` cannot be a platform name):
 
 ```ini
+[workflow]
+subagent="true"
+
 [Claude]
 model="sonnet 5.5"
 reasoning="high"
@@ -91,7 +110,8 @@ Paths are relative to this skill's directory. All variants take the same argumen
 | `cr-plan` | step 2 planning: picks the plugins of `plugins.ini` whose `applies` patterns match the PR's changed files and cuts a `diff.patch` with only those files for each plugin (refused before step 1 succeeds) |
 | `prompt --step N [--plugin <name>]` | the exact instructions for step N; step 2 needs `--plugin` (refused while the previous step is not `success`) |
 | `set --step N [--plugin <name>] --state <state> --message <text>` | records a state; used by whoever runs the step or plugin |
-| `config --platform <name> [--model <m> --reasoning <r>]` | read or save the subagent settings |
+| `config [--subagent true\|false]` | read or save the execution style (`[workflow]` section) |
+| `config --platform <name> [--model <m> --reasoning <r>]` | read or save the subagent settings of a platform |
 
 Run the commands from the root of the reviewed repository; `--root` defaults to `tmp`.
 

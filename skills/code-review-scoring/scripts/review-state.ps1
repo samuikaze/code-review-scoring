@@ -13,9 +13,12 @@ Uses the same GNU-style arguments as review-state.sh so subagent prompts work on
   review-state.ps1 cr-plan [--plugins FILE] [--root DIR]
   review-state.ps1 prompt --step N [--plugin NAME] [--root DIR]
   review-state.ps1 set --step N [--plugin NAME] --state working|pending|success|failed [--message TEXT] [--root DIR]
+  review-state.ps1 config [--subagent true|false] [--config FILE]
   review-state.ps1 config --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
 
-config reads and writes configs.ini in the project root unless --config is given.
+config reads and writes configs.ini in the project root unless --config is given. Without --subagent it prints
+subagent=true|false from the [workflow] section (true = each step runs in its own subagent, false = the main
+agent runs every step); with --platform it prints or saves the model and reasoning of that platform.
 
 cr-plan picks the plugins of plugins.ini whose "applies" patterns match files in the PR diff and writes
 ROOT/step2/plan.tsv, ROOT/step2/<plugin>/files.txt and ROOT/step2/<plugin>/diff.patch (only that plugin's
@@ -28,7 +31,7 @@ Gates enforced by "set":
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
-Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 platform not configured, 7 setup incomplete (no plugins.ini; see setup check).
+Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 setting not configured, 7 setup incomplete (no plugins.ini; see setup check).
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -57,12 +60,12 @@ $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
 $opt = @{ root = 'tmp'; step = ''; plugin = ''; state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
-    config = (Join-Path $projectRoot 'configs.ini'); platform = ''; model = ''; reasoning = ''
+    config = (Join-Path $projectRoot 'configs.ini'); subagent = ''; platform = ''; model = ''; reasoning = ''
     plugins = (Join-Path $projectRoot 'plugins.ini') }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -in '--root', '--step', '--plugin', '--state', '--message', '--git', '--repo', '--title', '--config', '--plugins', '--platform', '--model', '--reasoning') {
+    if ($a -in '--root', '--step', '--plugin', '--state', '--message', '--git', '--repo', '--title', '--config', '--plugins', '--platform', '--model', '--reasoning', '--subagent') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]
         $i += 2
@@ -87,6 +90,36 @@ function Test-NonEmpty([string]$Rel) { $p = P $Rel; return [IO.File]::Exists($p)
 function Get-RequestField([string]$Name) {
     $l = Read-Utf8Lines (P 'request.md') | Where-Object { $_.StartsWith("- ${Name}: ") } | Select-Object -First 1
     if ($l) { return $l.Substring($Name.Length + 4) } return ''
+}
+# configs.ini: [workflow] subagent=true|false, and one [NAME] section per platform with model and reasoning.
+function Get-IniValue([string]$File, [string]$Section, [string]$Key) {
+    if (-not [IO.File]::Exists($File)) { return '' }
+    $inSec = $false; $val = ''
+    foreach ($l in (Read-Utf8Lines $File)) {
+        if ($l -match '^\s*\[(.*)\]\s*$') { $inSec = ($Matches[1] -ceq $Section); continue }
+        if ($inSec -and $l -match '^\s*([A-Za-z_]+)\s*=\s*"?(.*?)"?\s*$' -and $Matches[1] -eq $Key) { $val = $Matches[2] }
+    }
+    return $val
+}
+# Replaces the [Section] section in place, or appends it when it does not exist yet.
+function Set-IniSection([string]$File, [string]$Section, [string[]]$Pairs) {
+    $block = @("[$Section]") + @($Pairs | ForEach-Object { $k, $v = $_ -split '=', 2; "$k=`"$v`"" })
+    $lines = New-Object System.Collections.Generic.List[string]
+    $skip = $false; $done = $false
+    $old = if ([IO.File]::Exists($File)) { Read-Utf8Lines $File } else { @() }
+    foreach ($l in $old) {
+        if ($l -match '^\s*\[(.*)\]\s*$') {
+            $skip = $false
+            if ($Matches[1] -ceq $Section) { $block | ForEach-Object { $lines.Add($_) }; $done = $true; $skip = $true; continue }
+            if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim()) { $lines.Add('') }
+        }
+        if ($skip -and $l.Trim()) { continue }
+        $skip = $false
+        $lines.Add($l)
+    }
+    while ($lines.Count -gt 0 -and -not $lines[$lines.Count - 1].Trim()) { $lines.RemoveAt($lines.Count - 1) }
+    if (-not $done) { if ($lines.Count -gt 0) { $lines.Add('') }; $block | ForEach-Object { $lines.Add($_) } }
+    Write-Utf8File $File (($lines -join "`n") + "`n")
 }
 function Assert-Review { if (-not (Test-Exists 'request.md')) { Exit-WithError "no review in $root; run init first" } }
 
@@ -404,41 +437,34 @@ switch ($cmd) {
     }
     'config' {
         $platform = $opt.platform
-        if (-not $platform) { Exit-WithError 'config needs --platform NAME' }
-        if ($platform -notmatch '^[A-Za-z0-9_-]+$') { Exit-WithError '--platform may only contain letters, digits, - and _' }
         $cfg = Resolve-UserPath $opt.config
-        if (-not $opt.model -and -not $opt.reasoning) {
-            if (-not [IO.File]::Exists($cfg)) { [Console]::Error.WriteLine("not configured: $cfg does not exist; ask the user for the model and reasoning of $platform"); exit 6 }
-            $inSec = $false; $val = @{}
-            foreach ($l in (Read-Utf8Lines $cfg)) {
-                if ($l -match '^\s*\[(.*)\]\s*$') { $inSec = ($Matches[1] -eq $platform); continue }
-                if ($inSec -and $l -match '^\s*(model|reasoning)\s*=\s*"?(.*?)"?\s*$') { $val[$Matches[1]] = $Matches[2] }
-            }
-            if (-not $val['model'] -or -not $val['reasoning']) { [Console]::Error.WriteLine("not configured: [$platform] is missing in $cfg; ask the user for the model and reasoning"); exit 6 }
-            [Console]::Out.Write("model=$($val['model'])`nreasoning=$($val['reasoning'])`n")
+        if ($opt.subagent) {
+            if ($platform -or $opt.model -or $opt.reasoning) { Exit-WithError '--subagent cannot be combined with --platform, --model or --reasoning' }
+            if ($opt.subagent -cnotin 'true', 'false') { Exit-WithError '--subagent must be true or false' }
+            Set-IniSection $cfg 'workflow' @("subagent=$($opt.subagent)")
+            Write-Output "saved subagent=$($opt.subagent) to $cfg"
+        }
+        elseif (-not $platform) {
+            if ($opt.model -or $opt.reasoning) { Exit-WithError '--model and --reasoning need --platform NAME' }
+            $v = (Get-IniValue $cfg 'workflow' 'subagent').ToLowerInvariant()
+            if ($v -notin 'true', 'false') { [Console]::Error.WriteLine("not configured: subagent=true|false is missing in [workflow] of $cfg; ask the user whether to run the steps in subagents"); exit 6 }
+            [Console]::Out.Write("subagent=$v`n")
         }
         else {
-            if (-not $opt.model -or -not $opt.reasoning) { Exit-WithError 'config needs both --model and --reasoning to save' }
-            if (($opt.model + $opt.reasoning).Contains('"')) { Exit-WithError 'values may not contain double quotes' }
-            $section = @("[$platform]", "model=`"$($opt.model)`"", "reasoning=`"$($opt.reasoning)`"")
-            $lines = New-Object System.Collections.Generic.List[string]
-            $skip = $false; $done = $false
-            $old = if ([IO.File]::Exists($cfg)) { Read-Utf8Lines $cfg } else { @() }
-            # Replace the [NAME] section in place, or append it when it does not exist yet.
-            foreach ($l in $old) {
-                if ($l -match '^\s*\[(.*)\]\s*$') {
-                    $skip = $false
-                    if ($Matches[1] -eq $platform) { $section | ForEach-Object { $lines.Add($_) }; $done = $true; $skip = $true; continue }
-                    if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim()) { $lines.Add('') }
-                }
-                if ($skip -and $l.Trim()) { continue }
-                $skip = $false
-                $lines.Add($l)
+            if ($platform -notmatch '^[A-Za-z0-9_-]+$') { Exit-WithError '--platform may only contain letters, digits, - and _' }
+            if ($platform -eq 'workflow') { Exit-WithError 'workflow is reserved and cannot be a platform name' }
+            if (-not $opt.model -and -not $opt.reasoning) {
+                $m = Get-IniValue $cfg $platform 'model'
+                $r = Get-IniValue $cfg $platform 'reasoning'
+                if (-not $m -or -not $r) { [Console]::Error.WriteLine("not configured: [$platform] with model and reasoning is missing in $cfg; ask the user for them"); exit 6 }
+                [Console]::Out.Write("model=$m`nreasoning=$r`n")
             }
-            while ($lines.Count -gt 0 -and -not $lines[$lines.Count - 1].Trim()) { $lines.RemoveAt($lines.Count - 1) }
-            if (-not $done) { if ($lines.Count -gt 0) { $lines.Add('') }; $section | ForEach-Object { $lines.Add($_) } }
-            Write-Utf8File $cfg (($lines -join "`n") + "`n")
-            Write-Output "saved [$platform] to $cfg"
+            else {
+                if (-not $opt.model -or -not $opt.reasoning) { Exit-WithError 'config needs both --model and --reasoning to save' }
+                if (($opt.model + $opt.reasoning).Contains('"')) { Exit-WithError 'values may not contain double quotes' }
+                Set-IniSection $cfg $platform @("model=$($opt.model)", "reasoning=$($opt.reasoning)")
+                Write-Output "saved [$platform] to $cfg"
+            }
         }
     }
     default { Exit-WithError "unknown command $cmd (see Get-Help)" }
