@@ -8,7 +8,7 @@ usage() {
 Usage: score.zsh [--root DIR] [options]
        score.zsh --findings FILE [--diff FILE | --git RANGE [--repo DIR]] [--out-dir DIR]
 
-      --root DIR       review root (default: tmp). Uses ROOT/step3/findings.txt and ROOT/step1/pr.diff,
+      --root DIR       review root (default: tmp in the project root). Uses ROOT/step3/findings.txt and ROOT/step1/pr.diff,
                        refuses unanswered questions in step1/step3, writes ROOT/step4/score.tsv and score.json
   -f, --findings FILE  findings file (standalone use without the root layout)
   -d, --diff FILE      diff used to verify that every location is an added line
@@ -23,6 +23,8 @@ USAGE
 }
 
 script_dir="${0:A:h}"
+# Project root (two levels above the physical skill folder) holds tmp/ and reports/.
+project_root="${script_dir:h:h:h}"
 root="" findings="" diff="" git_range="" repo="." out_dir=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,7 +38,7 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
-[[ -z "$root" && -z "$findings" ]] && root="tmp"
+[[ -z "$root" && -z "$findings" ]] && root="$project_root/tmp"
 if [[ -n "$root" ]]; then
   [[ -d "$root" ]] || { echo "error: review root not found: $root" >&2; exit 2; }
   [[ -z "$findings" ]] && findings="$root/step3/findings.txt"

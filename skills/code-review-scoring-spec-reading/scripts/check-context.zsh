@@ -7,7 +7,7 @@ usage() {
   cat <<'USAGE'
 Usage: check-context.zsh [--root DIR]
 
-      --root DIR       review root (default: tmp); checks ROOT/step1/spec-context.md
+      --root DIR       review root (default: tmp in the project root); checks ROOT/step1/spec-context.md
   -h, --help           show this help
 
 Exit codes: 0 ready, 1 waiting for the user (or malformed file), 2 bad arguments,
@@ -16,7 +16,9 @@ USAGE
 }
 
 script_dir="${0:A:h}"
-root="tmp"
+# Project root (two levels above the physical skill folder) holds tmp/ and reports/.
+project_root="${script_dir:h:h:h}"
+root="$project_root/tmp"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;

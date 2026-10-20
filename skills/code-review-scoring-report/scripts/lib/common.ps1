@@ -20,6 +20,19 @@ function Resolve-UserPath([string]$Path) {
     return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
 }
 
+function Get-ProjectRoot([string]$SkillDir) {
+    # The project root, two levels above the physical skill folder, holds tmp/, reports/, plugins.ini and configs.ini.
+    # The skill folder may be a junction or symlink (e.g. .agents/skills/...), so resolve it first.
+    $item = Get-Item -LiteralPath $SkillDir -Force
+    $path = $item.FullName
+    if ($item.LinkType -and $item.Target) {
+        $t = @($item.Target)[0]
+        if (-not [IO.Path]::IsPathRooted($t)) { $t = Join-Path (Split-Path -Parent $SkillDir) $t }
+        $path = [IO.Path]::GetFullPath($t)
+    }
+    return Split-Path -Parent (Split-Path -Parent $path)
+}
+
 function Test-UserFile([string]$Path) {
     return [IO.File]::Exists((Resolve-UserPath $Path))
 }

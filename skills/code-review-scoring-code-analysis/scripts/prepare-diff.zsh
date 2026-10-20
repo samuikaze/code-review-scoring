@@ -7,8 +7,9 @@ usage() {
   cat <<'USAGE'
 Usage: prepare-diff.zsh [--root DIR | --input FILE | --git RANGE] [options]
 
-      --root DIR       read ROOT/step1/pr.diff and write ROOT/step3/prepared.txt (unless --out is given)
-  -i, --input FILE     unified diff file; '-' or omitted = stdin
+      --root DIR       read ROOT/step1/pr.diff and write ROOT/step3/prepared.txt (unless --out is given);
+                       without --root, --input and --git, ROOT is tmp in the project root
+  -i, --input FILE     unified diff file; '-' = stdin
   -g, --git RANGE      run git diff RANGE (e.g. origin/main...HEAD)
   -r, --repo DIR       repository for --git (default: current directory)
   -m, --mode MODE      all (default) | summary | scan | view
@@ -22,6 +23,8 @@ USAGE
 }
 
 script_dir="${0:A:h}"
+# Project root (two levels above the physical skill folder) holds tmp/ and reports/.
+project_root="${script_dir:h:h:h}"
 root="" input="" git_range="" repo="." mode="all" max=15 out=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,6 +45,7 @@ sources=0
 [[ -n "$input" ]] && sources=$((sources + 1))
 [[ -n "$git_range" ]] && sources=$((sources + 1))
 [[ $sources -gt 1 ]] && { echo "error: use only one of --root, --input, --git" >&2; exit 2; }
+[[ $sources -eq 0 ]] && root="$project_root/tmp"
 if [[ -n "$root" ]]; then
   input="$root/step1/pr.diff"
   [[ -z "$out" ]] && { mkdir -p "$root/step3"; out="$root/step3/prepared.txt"; }
@@ -52,8 +56,8 @@ trap 'rm -f "$tmp"' EXIT
 if [[ -n "$git_range" ]]; then
   git -C "$repo" -c core.quotePath=false diff --no-color --no-ext-diff -M "$git_range" > "$tmp" \
     || { echo "error: git diff $git_range failed" >&2; exit 2; }
-elif [[ -z "$input" || "$input" == "-" ]]; then
-  [[ -t 0 ]] && { echo "error: give --root, --input or --git, or pipe a diff to stdin (see --help)" >&2; exit 2; }
+elif [[ "$input" == "-" ]]; then
+  [[ -t 0 ]] && { echo "error: --input - needs a diff piped to stdin (see --help)" >&2; exit 2; }
   cat > "$tmp"
 else
   [[ -f "$input" ]] || { echo "error: diff file not found: $input" >&2; exit 2; }

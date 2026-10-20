@@ -10,7 +10,7 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 
 依「閱讀規格書 → CR → 分析程式碼 → 打分數 → 產出報告」五個步驟執行，另有一個主流程 Skill 負責控管。步驟 2 的 CR 由 `plugins.ini` 登記的外掛 Skill 執行；步驟 3 分析程式碼時會確認 CR 意見，符合評分檢查項的轉為扣分項，所以分數同時反映評分規則與 CR 結果。最終報告包含 CR 結果與分數結果：
 
-| Skill | 角色 | 產出（執行目錄的 `tmp/` 下；最終報告在 `reports/`） |
+| Skill | 角色 | 產出（本專案根目錄的 `tmp/` 下；最終報告在本專案的 `reports/`） |
 | --- | --- | --- |
 | `code-review-scoring` | 主 Agent：確認執行方式、依序派發 Sub-Agent、轉達問題、以狀態檔把關 | `request.md`、`answers.md` |
 | `code-review-scoring-spec-reading` | 步驟 1：閱讀規格書 | `step1/pr.diff`、`step1/spec-context.md` |
@@ -55,6 +55,8 @@ powershell -ExecutionPolicy Bypass -File skills\code-review-scoring\scripts\setu
 ```
 
 ### 狀態控管
+
+暫存檔與報告一律寫在本專案根目錄的 `tmp/`、`reports/`，不會寫進被審查的專案。腳本以 Skill 實體資料夾往上兩層找到本專案根目錄（經由 `link-skills` 建立的連結執行也一樣），`--root` 可改用其他目錄，報告則發佈到該目錄旁的 `reports/`。git 指令仍在被審查的專案執行：主 Agent 在被審查專案的根目錄執行 `init`，或以 `--repo` 指定。
 
 ```text
 tmp/
@@ -147,8 +149,8 @@ plugins.example.ini                       # 外掛 Skill 清單範本（複製�
 configs.example.ini                       # 是否使用 Sub-Agent 及其 model 與 reasoning 的範本（configs.ini 首次使用時自動產生）
 docs/
   notices.md                              # 注意事項（GitHub Copilot 適用性）
-tmp/                                      # 評分過程的暫存檔（不進版控）
-reports/                                  # 最終版分數報告（不進版控）
+tmp/                                      # 評分過程的暫存檔（所有腳本的預設 review root，不進版控）
+reports/                                  # 最終版分數報告（tmp/ 旁的 reports/，不進版控）
 .gitattributes                            # 固定腳本與設定檔的換行格式
 .gitignore
 ```

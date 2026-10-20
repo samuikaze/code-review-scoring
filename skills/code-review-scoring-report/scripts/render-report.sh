@@ -6,13 +6,13 @@ usage() {
   cat <<'USAGE'
 Usage: render-report.sh [--root DIR] [options]
 
-      --root DIR       review root (default: tmp). Reads ROOT/step1/spec-context.md, ROOT/step3/findings.txt,
+      --root DIR       review root (default: tmp in the project root). Reads ROOT/step1/spec-context.md, ROOT/step3/findings.txt,
                        ROOT/step4/score.tsv, ROOT/step4/score.json and the code review results in ROOT/step2/
   -t, --template FILE  report template (default: assets/report-template.md of this skill)
   -l, --labels FILE    display labels (default: assets/labels.tsv of this skill)
       --title TEXT     PR title (default: "- Title:" line of spec-context.md)
   -o, --out FILE       working copy (default: ROOT/step5/report.md); '-' = stdout only, nothing is published
-      --reports DIR    where the final report is published (default: reports)
+      --reports DIR    where the final report is published (default: reports next to the review root)
       --no-publish     only write the working copy
 
 The final report is published as REPORTS/<YYYY-MM-DD>_<PR title>.md (the same name is overwritten when the
@@ -25,9 +25,11 @@ USAGE
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Project root (two levels above the physical skill folder) holds tmp/ and reports/.
+project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
 skill_dir="$(dirname "$script_dir")"
-root="tmp" template="$skill_dir/assets/report-template.md" labels="$skill_dir/assets/labels.tsv" title="" out=""
-reports="reports" publish=1
+root="$project_root/tmp" template="$skill_dir/assets/report-template.md" labels="$skill_dir/assets/labels.tsv" title="" out=""
+reports="" publish=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -76,6 +78,7 @@ name="$title"
 [[ -z "$name" && -n "$ctx" ]] && name="$(sed -n 's/^- Title:[[:space:]]*//p' "$ctx" | head -1)"
 name="$(printf '%s' "$name" | LC_ALL=C sed -E 's/[][\/:*?"<>|#%{}[:space:][:cntrl:]]+/-/g; s/^[-.]+//; s/[-.]+$//')"
 [[ -n "$name" ]] || name="pr-review"
+[[ -n "$reports" ]] || reports="$(dirname "$root")/reports"
 mkdir -p "$reports"
 final="$reports/$(date +%Y-%m-%d)_${name}.md"
 cp "$tmp" "$final"

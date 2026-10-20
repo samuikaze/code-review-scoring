@@ -4,12 +4,13 @@ Preprocess a PR diff: drop non-reviewable files, number new-file lines, list heu
 
 .DESCRIPTION
 Prints a summary, heuristic candidates (clues only) and a compact diff with new-file line numbers.
-With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given.
+With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
+-InputPath and -Git, ROOT is tmp in the project root. -InputPath - reads the diff from stdin.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 2 bad arguments or input.
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File prepare-diff.ps1 -Root tmp
+powershell -ExecutionPolicy Bypass -File prepare-diff.ps1
 .EXAMPLE
 pwsh -File prepare-diff.ps1 -Git origin/main...HEAD -Mode scan
 #>
@@ -28,7 +29,9 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
 
-if (@($Root, $InputPath, $Git | Where-Object { $_ }).Count -gt 1) { Exit-WithError 'use only one of -Root, -InputPath, -Git' }
+$sources = @($Root, $InputPath, $Git | Where-Object { $_ }).Count
+if ($sources -gt 1) { Exit-WithError 'use only one of -Root, -InputPath, -Git' }
+if ($sources -eq 0) { $Root = Join-Path (Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)) 'tmp' }
 if ($Root) {
     $InputPath = Join-Path $Root 'step1/pr.diff'
     if (-not $Out) {

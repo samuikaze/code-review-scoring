@@ -38,20 +38,8 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
 
-# The skill folder may be a junction or symlink (e.g. .agents/skills/...); resolve it to find plugins.ini.
-function Resolve-Physical([string]$Path) {
-    $item = Get-Item -LiteralPath $Path -Force
-    if ($item.LinkType -and $item.Target) {
-        $t = @($item.Target)[0]
-        if (-not [IO.Path]::IsPathRooted($t)) { $t = Join-Path (Split-Path -Parent $Path) $t }
-        return [IO.Path]::GetFullPath($t)
-    }
-    return $item.FullName
-}
 $skillDir = Split-Path -Parent $PSScriptRoot
-$skillPhysical = Resolve-Physical $skillDir
-# Project root (two levels above the physical skill folder) holds plugins.ini and configs.ini.
-$projectRoot = Split-Path -Parent (Split-Path -Parent $skillPhysical)
+$projectRoot = Get-ProjectRoot $skillDir
 $isWin = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
 $selfCmd = if ($isWin) { "powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" } else { "pwsh -NoProfile -File `"$PSCommandPath`"" }
 $states = @('pending', 'working', 'success', 'failed')
@@ -59,7 +47,7 @@ $states = @('pending', 'working', 'success', 'failed')
 $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
-$opt = @{ root = 'tmp'; step = ''; plugin = ''; state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
+$opt = @{ root = (Join-Path $projectRoot 'tmp'); step = ''; plugin = ''; state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
     config = (Join-Path $projectRoot 'configs.ini'); subagent = ''; platform = ''; model = ''; reasoning = ''
     plugins = (Join-Path $projectRoot 'plugins.ini') }
 $i = 1
@@ -257,7 +245,7 @@ switch ($cmd) {
         [void][IO.Directory]::CreateDirectory($rootAbs)
         # Keep review files out of git unless the repository already ignores the root (keep .gitkeep).
         if (-not (Test-Exists '.gitignore')) {
-            & git check-ignore -q (Join-Path $root '.review-probe') 2>$null
+            & git -C $rootAbs check-ignore -q '.review-probe' 2>$null
             if ($LASTEXITCODE -ne 0) { Write-Utf8File (P '.gitignore') "*`n!.gitkeep`n" }
         }
         $tpl = Read-Utf8Text (Join-Path $skillDir 'assets/request-template.md')

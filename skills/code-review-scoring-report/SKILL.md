@@ -11,8 +11,8 @@ metadata:
 
 Render the review report: part one holds the code review results of every plugin, part two the score results. Do not write the report by hand and do not change any number or comment in it.
 
-**Input:** `tmp/step1/spec-context.md`, the code review results `tmp/step2/plan.tsv`, `tmp/step2/skipped.tsv`, `tmp/step2/<plugin>/cr.txt`, `tmp/step3/findings.txt`, `tmp/step4/score.tsv` and `tmp/step4/score.json` (`tmp` is the review root; scripts take `--root`). Without `tmp/step2/plan.tsv` the report states that no code review was run.
-**Output:** the final report `reports/<YYYY-MM-DD>_<PR title>.md`, a working copy `tmp/step5/report.md`, and `tmp/step5/report-path.txt` with the final report's absolute path.
+**Input:** `tmp/step1/spec-context.md`, the code review results `tmp/step2/plan.tsv`, `tmp/step2/skipped.tsv`, `tmp/step2/<plugin>/cr.txt`, `tmp/step3/findings.txt`, `tmp/step4/score.tsv` and `tmp/step4/score.json` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one). Without `tmp/step2/plan.tsv` the report states that no code review was run.
+**Output:** the final report `reports/<YYYY-MM-DD>_<PR title>.md` (`reports/` next to the review root), a working copy `tmp/step5/report.md`, and `tmp/step5/report-path.txt` with the final report's absolute path.
 
 ## Modes
 
@@ -25,7 +25,7 @@ Paths are relative to this skill's directory.
 
 | bash | zsh | PowerShell |
 | --- | --- | --- |
-| `bash scripts/render-report.sh --root tmp` | `zsh scripts/render-report.zsh --root tmp` | `powershell -ExecutionPolicy Bypass -File scripts/render-report.ps1 -Root tmp` |
+| `bash scripts/render-report.sh` | `zsh scripts/render-report.zsh` | `powershell -ExecutionPolicy Bypass -File scripts/render-report.ps1` |
 
 Options: `--template <file>` and `--labels <file>` use another template or label file, `--title <text>` overrides the PR title, `--reports <dir>` changes the publish directory (default `reports`, relative to the current directory), `--no-publish` writes only the working copy, `--out -` prints to stdout without writing anything.
 
@@ -33,7 +33,7 @@ The final report name is built from the render date and the PR title, with chara
 
 ## Procedure
 
-1. Run `render-report --root tmp`.
+1. Run `render-report`.
 2. Exit 1 means the scores are missing or older than `findings.txt` (rerun `code-review-scoring-score`), or a planned code review plugin has no `cr.txt` yet (finish step 2). Then retry.
 3. A warning about an unknown placeholder means the template has a typo or a block placeholder that is not alone on its line; fix the template.
 4. Standalone mode: reply with the content of the published report (path in the `published` output line) exactly as rendered, followed by one line with its path.

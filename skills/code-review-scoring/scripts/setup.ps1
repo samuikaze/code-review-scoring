@@ -33,19 +33,8 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
 
-# The skill folder may be a junction or symlink (e.g. .agents/skills/...); resolve it to find the project root.
-function Resolve-Physical([string]$Path) {
-    $item = Get-Item -LiteralPath $Path -Force
-    if ($item.LinkType -and $item.Target) {
-        $t = @($item.Target)[0]
-        if (-not [IO.Path]::IsPathRooted($t)) { $t = Join-Path (Split-Path -Parent $Path) $t }
-        return [IO.Path]::GetFullPath($t)
-    }
-    return $item.FullName
-}
 $skillDir = Split-Path -Parent $PSScriptRoot
-# Project root (two levels above the physical skill folder) holds plugins.ini and configs.ini.
-$projectRoot = Split-Path -Parent (Split-Path -Parent (Resolve-Physical $skillDir))
+$projectRoot = Get-ProjectRoot $skillDir
 $stateScript = Join-Path $PSScriptRoot 'review-state.ps1'
 $isWin = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
 $selfCmd = if ($isWin) { "powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" } else { "pwsh -NoProfile -File `"$PSCommandPath`"" }

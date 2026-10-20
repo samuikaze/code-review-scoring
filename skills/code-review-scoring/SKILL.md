@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring
-description: Main-agent controller for code review scoring of a PR (built-in scoring checklist: Java Spring Boot 3; other stacks are reviewed by code review plugin skills). Confirms with the user whether to run the full workflow or a single step; in workflow mode it runs read specs → code review (plugin skills listed in plugins.ini) → analyze code (turning confirmed code review comments into deductions) → score → report strictly in order, one subagent per step and per code review plugin (or step by step itself when configs.ini sets subagent=false or the platform has no subagents), produces one report with both the code review and the score results, gates every step through status files in tmp/ (stepN-pending / working / success / failed) and relays questions to the user. Use when the user says 「評分 PR」、「幫我評分這個 PR」、「PR 程式碼品質評分」、「Code Review 評分」、「CR 並評分」、「PR 評分流程」、「跑完整評分流程」、「審查並評分這個 PR」.
+description: Main-agent controller for code review scoring of a PR (built-in scoring checklist: Java Spring Boot 3; other stacks are reviewed by code review plugin skills). Confirms with the user whether to run the full workflow or a single step; in workflow mode it runs read specs → code review (plugin skills listed in plugins.ini) → analyze code (turning confirmed code review comments into deductions) → score → report strictly in order, one subagent per step and per code review plugin (or step by step itself when configs.ini sets subagent=false or the platform has no subagents), produces one report with both the code review and the score results, gates every step through status files in the project's tmp/ (stepN-pending / working / success / failed) and relays questions to the user. Use when the user says 「評分 PR」、「幫我評分這個 PR」、「PR 程式碼品質評分」、「Code Review 評分」、「CR 並評分」、「PR 評分流程」、「跑完整評分流程」、「審查並評分這個 PR」.
 compatibility: Works with or without a subagent tool (Claude Code Agent tool, GitHub Copilot runSubagent, or equivalent). Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   rules-version: "v0.5"
@@ -113,7 +113,7 @@ Paths are relative to this skill's directory. All variants take the same argumen
 | `config [--subagent true\|false]` | read or save the execution style (`[workflow]` section) |
 | `config --platform <name> [--model <m> --reasoning <r>]` | read or save the subagent settings of a platform |
 
-Run the commands from the root of the reviewed repository; `--root` defaults to `tmp`.
+Run the commands from the root of the reviewed repository (or give `init` the `--repo <dir>` of the reviewed repository). Review files never go to the reviewed repository: `--root` defaults to the `tmp/` folder in the project root of these skills (two levels above this skill's physical folder), and step 5 publishes the final report to `reports/` next to it. The paths below are relative to that project root.
 
 ## 5. Layout
 

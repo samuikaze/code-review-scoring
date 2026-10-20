@@ -4,10 +4,10 @@ You are the subagent for step 5 of a code review scoring workflow. Load the `cod
 
 - Review root: `{{ROOT}}` (pass `--root "{{ROOT}}"` to the skill's scripts)
 - Inputs: `{{ROOT}}/step1/spec-context.md`, the code review results in `{{ROOT}}/step2/` (`plan.tsv`, `skipped.tsv`, `<plugin>/cr.txt`), `{{ROOT}}/step3/findings.txt`, `{{ROOT}}/step4/score.tsv`, `{{ROOT}}/step4/score.json`
-- Output: the final report in the `reports/` directory next to the review root, the working copy `{{ROOT}}/step5/report.md`, and `{{ROOT}}/step5/report-path.txt`
+- Output: the final report in the `reports/` folder next to the review root, the working copy `{{ROOT}}/step5/report.md`, and `{{ROOT}}/step5/report-path.txt`
 
 Tasks:
-1. Run `render-report --root "{{ROOT}}"` from the directory that contains the review root, without `--no-publish`, so the final report is published to `reports/`.
+1. Run `render-report --root "{{ROOT}}"` without `--no-publish`, so the final report is published to `reports/`.
 2. If it says the scores or code review results are missing or stale, report failed and name the step that must be redone. Do not edit numbers or rewrite the report by hand.
 3. Report success with the published report path in the message. Do not paste the report; the main agent presents it.
 

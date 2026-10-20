@@ -3,19 +3,22 @@
 Check that every input in spec-context.md is resolved and every open question is answered.
 
 .DESCRIPTION
+Checks ROOT/step1/spec-context.md; ROOT (-Root) defaults to tmp in the project root.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ready, 1 waiting for the user (or malformed file), 2 bad arguments,
 3 a required input was declined (stop the review).
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File check-context.ps1 -Root tmp
+powershell -ExecutionPolicy Bypass -File check-context.ps1
 #>
 [CmdletBinding()]
-param([string]$Root = 'tmp')
+param([string]$Root)
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
+
+if (-not $Root) { $Root = Join-Path (Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)) 'tmp' }
 
 $ctx = Join-Path $Root 'step1/spec-context.md'
 if (-not (Test-UserFile $ctx)) { Exit-WithError "$ctx not found; run init-workspace first" }
