@@ -25,12 +25,13 @@ S|整體結論，一句話（必填，至少一行）
 C|Major|src/web/order/OrderForm.vue:42,src/web/order/OrderForm.vue:57|FE-STATE-03
 problem: 表單送出後沒有處理 API 錯誤，使用者看不到失敗原因。
 suggestion: 在 catch 中顯示錯誤訊息，並恢復送出按鈕狀態。
+spec: docs/spec/order-sd.md:42,docs/spec/order-sd.md:57
 C|Nit|-|-
 problem: 建議為新元件補上 Storybook 範例。
 H|做得好的地方（選填）
 ```
 
-- `C|severity|locations|rule`: one review comment. Severity is `Critical`, `Major`, `Minor` or `Nit`. Locations are `path:line` from the diff (new-file line numbers), comma-separated, or `-` for a PR-wide comment. Rule is the plugin's own rule id, or `-`. `problem:` is required; `suggestion:` is recommended.
+- `C|severity|locations|rule`: one review comment. Severity is `Critical`, `Major`, `Minor` or `Nit`. Locations are `path:line` from the diff (new-file line numbers), comma-separated, or `-` for a PR-wide comment. Rule is the plugin's own rule id, or `-`. `problem:` is required; `suggestion:` is recommended. `spec:` lists every spec location the comment relies on, as `full/spec/path:line` (the paths and lines recorded in `spec-context.md`), comma-separated; omit it when the comment does not rely on a spec. List all locations; never shorten the list.
 - `S|text`: overall conclusion of this plugin's review.
 - `H|text`: strengths visible in the diff.
 - Map the plugin's own severity levels by meaning: Critical = data corruption, security incident or outage; Major = fails in specific situations or clearly lowers quality; Minor = works, but there is a better way; Nit = style preference or suggestion. Record the plugin's original level in `raw/`.

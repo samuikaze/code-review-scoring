@@ -21,6 +21,50 @@ function codes(locs,    n, a, i, out) {
     return out
 }
 
+# One sub-list item per comma-separated location, or the `none` label on the field line.
+function loclist(field, locs,    n, a, i, out) {
+    if (locs == "" || locs == "-") return "   - " field L("sep.colon") L("none") "\n"
+    n = split(locs, a, ","); out = "   - " field L("sep.colon") "\n"
+    for (i = 1; i <= n; i++) out = out "     - `" trim(a[i]) "`\n"
+    return out
+}
+
+function locfiles(locs, files,    n, a, i, f) {
+    n = split(locs, a, ",")
+    for (i = 1; i <= n; i++) { f = trim(a[i]); sub(/:[^:]*$/, "", f); files[f] = 1 }
+}
+
+function shares_file(locs, files,    n, a, i, f) {
+    n = split(locs, a, ",")
+    for (i = 1; i <= n; i++) { f = trim(a[i]); sub(/:[^:]*$/, "", f); if (f in files) return 1 }
+    return 0
+}
+
+# Links code review comments to the check ids of the F records whose `source:` names the plugin and rule.
+# A record links to the comments with that rule in one of its files; when none is in its files, to all of them.
+function link_findings(    r, s, ns, src, e, p, rule, i, j, hdr, files, k, m, hit) {
+    for (r = 1; r <= nfr; r++) {
+        if (!((frkey[r], "source") in fv)) continue
+        s = fv[frkey[r], "source"]; gsub(/,/, "、", s); ns = split(s, src, "、")
+        for (k in files) delete files[k]
+        locfiles(frloc[r], files)
+        for (e = 1; e <= ns; e++) {
+            p = trim(src[e]); rule = p; sub(/[ \t].*/, "", p); sub(/^[^ \t]*[ \t]*/, "", rule); rule = trim(rule)
+            if (p == "" || rule == "") continue
+            for (i = 1; i <= np; i++) {
+                if (pname[i] != p) continue
+                m = 0
+                for (j = 1; j <= nc[i]; j++) { hdr = i SUBSEP j; hit[j] = (crule[hdr] == rule && shares_file(cloc[hdr], files)); m += hit[j] }
+                for (j = 1; j <= nc[i]; j++) {
+                    hdr = i SUBSEP j
+                    if (crule[hdr] != rule || (m > 0 && !hit[j]) || ((hdr, frid[r]) in linked)) continue
+                    linked[hdr, frid[r]] = 1; clink[hdr] = clink[hdr] (clink[hdr] == "" ? "" : L("sep.list")) frid[r]
+                }
+            }
+        }
+    }
+}
+
 function sevrank(s) { return s == "Critical" ? 1 : (s == "Major" ? 2 : (s == "Minor" ? 3 : 4)) }
 
 # Loads ROOT/step2: the plan, skipped plugins and every plugin's normalized cr.txt.
@@ -52,7 +96,7 @@ function load_cr(    l, a, n, i, f, t, cur, key, val) {
             else if (a[1] == "H") { nh[i]++; ph[i, nh[i]] = a[2] }
             else if (a[1] == "C") {
                 nc[i]++; cur = i SUBSEP nc[i]
-                csev[cur] = a[2]; cloc[cur] = a[3]; crule[cur] = a[4]
+                csev[cur] = a[2]; cloc[cur] = a[3]; crule[cur] = (a[4] == "" ? "-" : a[4])
                 cnt[i, a[2]]++; tot[a[2]]++
             }
         }
@@ -60,7 +104,7 @@ function load_cr(    l, a, n, i, f, t, cur, key, val) {
     }
 }
 
-function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, tag, sevs, s) {
+function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, ts, sevs, s) {
     b = L("sep.bracket"); c = L("sep.colon"); split("Critical Major Minor Nit", sevs, " ")
     if (crstate == "not_run") { blk["CR_OVERVIEW"] = L("cr.not_run") "\n"; blk["CR_DETAILS"] = ""; inl["CR_TOTALS"] = L("cr.not_run"); blk["CR_SKIPPED"] = ""; return }
     out = ""
@@ -78,16 +122,16 @@ function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, tag, sevs, s) {
             if (!pok[i]) { out = out L("cr.missing") "\n"; continue }
             out = out "**" L("cr.summary") "**" c psum[i] "\n\n"
             # comments sorted by severity, keeping the plugin's order within a severity
-            m = 0
+            m = 0; ts = " " L("cr.tag_sep") " "
             for (j = 1; j <= nc[i]; j++) { m++; order[m] = j }
             for (j = 2; j <= m; j++) { tmp = order[j]; k = j - 1; while (k >= 1 && sevrank(csev[i, order[k]]) > sevrank(csev[i, tmp])) { order[k + 1] = order[k]; k-- } order[k + 1] = tmp }
             if (m == 0) out = out L("cr.no_comments") "\n"
             for (j = 1; j <= m; j++) {
                 hdr = i SUBSEP order[j]
-                tag = csev[hdr] ((crule[hdr] != "" && crule[hdr] != "-") ? b crule[hdr] : "")
-                out = out j ". **[" tag "]**" ((cloc[hdr] != "" && cloc[hdr] != "-") ? " " codes(cloc[hdr]) : "") "\n"
+                out = out j ". [" csev[hdr] ts crule[hdr] ts (clink[hdr] == "" ? L("cr.unscored") : clink[hdr]) "]\n"
                 out = out "   - " L("field.problem") c cv[hdr, "problem"] "\n"
                 if ((hdr, "suggestion") in cv) out = out "   - " L("field.suggestion") c cv[hdr, "suggestion"] "\n"
+                out = out loclist(L("cr.code"), cloc[hdr]) loclist(L("cr.spec"), cv[hdr, "spec"])
             }
             if (nh[i] > 0) {
                 out = out "\n**" L("cr.highlights") "**\n\n"
@@ -119,8 +163,10 @@ function load_findings(    l, t, a, n, key, val) {
         n = split(l, a, "|"); for (i = 1; i <= n; i++) a[i] = trim(a[i])
         t = a[1]; cur = ""
         if (t == "F") {
-            cur = "F:" a[2]; fsev[a[2]] = a[3]; floc[a[2]] = a[4]
-            if (a[3] == "Nit") { nnit++; nit[nnit] = a[2] } else fdeduct[a[2]] = 1
+            # A check id may have several records (merge=false), so the key is the id and its locations.
+            lk = a[4]; gsub(/[ \t]*,[ \t]*/, ",", lk)
+            cur = "F:" a[2] "@" lk; nfr++; frid[nfr] = a[2]; frloc[nfr] = lk; frkey[nfr] = cur
+            if (a[3] == "Nit") { nnit++; nit[nnit] = a[2]; nitloc[nnit] = lk } else fdeduct[a[2] "@" lk] = 1
         } else if (t == "U") {
             nu++; cur = "U:" nu; ut[nu] = a[2]; us[nu] = a[3]; ui[nu] = a[4]; ur[nu] = a[5]
         } else if (t == "S") {
@@ -147,12 +193,12 @@ BEGIN {
         else if (a[1] == "grade") grade = a[2]
         else if (a[1] == "capped") capped = a[2]
         else if (a[1] == "dim") { nd++; dcode[nd] = a[2]; dsc[nd] = a[3]; dmx[nd] = a[4] }
-        else if (a[1] == "finding") { nf++; sid[nf] = a[2]; ssev[nf] = a[3]; spts[nf] = a[4]; sloc[nf] = a[5]; inscore[a[2]] = 1 }
+        else if (a[1] == "finding") { nf++; sid[nf] = a[2]; ssev[nf] = a[3]; spts[nf] = a[4]; sloc[nf] = a[5]; inscore[a[2] "@" a[5]] = 1 }
     }
     close(scoretsv)
     if (nd != 7 || grade == "") fail("score.tsv is missing or incomplete; run the scoring skill first")
-    for (id in fdeduct) if (!(id in inscore)) fail("finding " id " is in findings.txt but not in score.tsv; rerun the scoring skill")
-    for (i = 1; i <= nf; i++) if (!(sid[i] in fdeduct)) fail("finding " sid[i] " is in score.tsv but not in findings.txt; rerun the scoring skill")
+    for (k in fdeduct) if (!(k in inscore)) fail("finding " k " is in findings.txt but not in score.tsv; rerun the scoring skill")
+    for (i = 1; i <= nf; i++) if (!((sid[i] "@" sloc[i]) in fdeduct)) fail("finding " sid[i] "@" sloc[i] " is in score.tsv but not in findings.txt; rerun the scoring skill")
 
     json = ""
     while ((getline l < scorejson) > 0) json = json (json == "" ? "" : "\n") l
@@ -174,19 +220,19 @@ BEGIN {
     }
     b = L("sep.bracket"); c = L("sep.colon"); out = ""
     for (i = 1; i <= nf; i++) {
-        id = sid[i]
-        out = out i ". **[" id b ssev[i] b "-" spts[i] "]** " codes(sloc[i]) "\n"
-        out = out "   - " L("field.problem") c fv["F:" id, "problem"] "\n"
-        out = out "   - " L("field.suggestion") c fv["F:" id, "suggestion"] "\n"
-        if (("F:" id, "assumption") in fv) out = out "   - " L("field.assumption") c fv["F:" id, "assumption"] "\n"
-        if (("F:" id, "source") in fv) out = out "   - " L("field.source") c fv["F:" id, "source"] "\n"
+        key = "F:" sid[i] "@" sloc[i]
+        out = out i ". **[" sid[i] b ssev[i] b "-" spts[i] "]** " codes(sloc[i]) "\n"
+        out = out "   - " L("field.problem") c fv[key, "problem"] "\n"
+        out = out "   - " L("field.suggestion") c fv[key, "suggestion"] "\n"
+        if ((key, "assumption") in fv) out = out "   - " L("field.assumption") c fv[key, "assumption"] "\n"
+        if ((key, "source") in fv) out = out "   - " L("field.source") c fv[key, "source"] "\n"
     }
     blk["FINDINGS"] = out
     out = ""
     for (i = 1; i <= nnit; i++) {
-        id = nit[i]
-        out = out "- [" id "] " codes(floc[id]) c fv["F:" id, "problem"]
-        if (("F:" id, "suggestion") in fv) out = out L("paren.open") L("field.suggestion") c fv["F:" id, "suggestion"] L("paren.close")
+        key = "F:" nit[i] "@" nitloc[i]
+        out = out "- [" nit[i] "] " codes(nitloc[i]) c fv[key, "problem"]
+        if ((key, "suggestion") in fv) out = out L("paren.open") L("field.suggestion") c fv[key, "suggestion"] L("paren.close")
         out = out "\n"
     }
     blk["SUGGESTIONS"] = out bullets("N")
@@ -205,6 +251,7 @@ BEGIN {
     blk["REMARKS"] = bullets("R")
     blk["SCORE_JSON"] = json "\n"
     load_cr()
+    link_findings()
     cr_blocks()
 
     inl["PR_TITLE"] = title; inl["REVIEW_DATE"] = today; inl["GRADE"] = grade; inl["TOTAL"] = total

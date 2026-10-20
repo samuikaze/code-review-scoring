@@ -94,7 +94,9 @@ function Set-IniSection([string]$File, [string]$Section, [string[]]$Pairs) {
     $block = @("[$Section]") + @($Pairs | ForEach-Object { $k, $v = $_ -split '=', 2; "$k=`"$v`"" })
     $lines = New-Object System.Collections.Generic.List[string]
     $skip = $false; $done = $false
-    $old = if ([IO.File]::Exists($File)) { Read-Utf8Lines $File } else { @() }
+    # A new configs.ini starts as a copy of the commented example
+    $example = Join-Path $projectRoot 'configs.example.ini'
+    $old = if ([IO.File]::Exists($File)) { Read-Utf8Lines $File } elseif ([IO.File]::Exists($example)) { Read-Utf8Lines $example } else { @() }
     foreach ($l in $old) {
         if ($l -match '^\s*\[(.*)\]\s*$') {
             $skip = $false
@@ -203,7 +205,7 @@ function Test-CrFile([string]$Path) {
         if ($line -cmatch '^\s*([a-z]+):' -and $line -cnotmatch '^[A-Z]\|') {
             $k = $Matches[1]
             if ($script:rec -ne 'C') { $problems.Add("  - line ${no}: field `"$k`" is not under a C record"); continue }
-            if ($k -cnotin 'problem', 'suggestion') { $problems.Add("  - line ${no}: unknown field `"$k`" (allowed: problem, suggestion)"); continue }
+            if ($k -cnotin 'problem', 'suggestion', 'spec') { $problems.Add("  - line ${no}: unknown field `"$k`" (allowed: problem, suggestion, spec)"); continue }
             if ($k -eq 'problem') { $script:hasProb = $true }
             continue
         }

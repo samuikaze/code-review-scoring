@@ -67,7 +67,7 @@ Example questions (written for the user, in their language):
 
 ## What to record from the specs
 
-- **Requirements:** one line per requirement with its source (document, version, section). A8 compares against these.
+- **Requirements:** one line per requirement with its source (document, version, section). When the document is a file, also write its full path and line numbers (`path:line` or `path:start-end`); code review comments cite them as spec locations. A8 compares against these.
 - **Spec observations:** places where the spec is missing something, wrong or ambiguous, with the exact section. Do not judge them here.
 - **Third-party notes:** vendor spec versions, known vendor issues and ticket numbers.
 - **Change log:** spec, interface or process changes with date, before/after version, and whether they were written or verbal only. Compliance is judged against the version **in effect when development started**.

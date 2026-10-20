@@ -15,17 +15,19 @@ Usage: score.zsh [--root DIR] [options]
   -g, --git RANGE      run git diff RANGE as the verification diff
   -r, --repo DIR       repository for --git
   -o, --out-dir DIR    where score.tsv / score.json are written (default: ROOT/step4 or the findings dir)
+      --config FILE    scoring settings: [points], [deductions] (incl. merge) and [grades] (default: configs.ini in the
+                       project root; settings that are not given keep the defaults)
   -h, --help           show this help
 
 Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun),
-            2 bad arguments, 3 spec-context.md still has unresolved inputs or questions.
+            2 bad arguments or invalid scoring settings, 3 spec-context.md still has unresolved inputs or questions.
 USAGE
 }
 
 script_dir="${0:A:h}"
-# Project root (two levels above the physical skill folder) holds tmp/ and reports/.
+# Project root (two levels above the physical skill folder) holds tmp/, reports/ and configs.ini.
 project_root="${script_dir:h:h:h}"
-root="" findings="" diff="" git_range="" repo="." out_dir=""
+root="" findings="" diff="" git_range="" repo="." out_dir="" config="$project_root/configs.ini"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     -g|--git) git_range="${2:?--git needs a value}"; shift 2 ;;
     -r|--repo) repo="${2:?--repo needs a value}"; shift 2 ;;
     -o|--out-dir) out_dir="${2:?--out-dir needs a value}"; shift 2 ;;
+    --config) config="${2:?--config needs a value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
@@ -83,7 +86,7 @@ else
 fi
 
 rm -f "$out_dir/score.tsv" "$out_dir/score.json"
-LC_ALL=C awk -v rules="$script_dir/rules.tsv" -v idxfile="$idx" \
+LC_ALL=C awk -v rules="$script_dir/rules.tsv" -v idxfile="$idx" -v config="$config" \
   -v tsvout="$out_dir/score.tsv" -v jsonout="$out_dir/score.json" \
   -f "$script_dir/lib/score.awk" "$findings"
 echo "wrote ${out_dir}/score.tsv and ${out_dir}/score.json"

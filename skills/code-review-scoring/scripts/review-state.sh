@@ -97,7 +97,10 @@ ini_get() {  # $1 = section, $2 = key; prints the value without quotes (empty wh
 ini_set() {  # $1 = section, then KEY=VALUE pairs; replaces the section in place, or appends it
   local tmpf body="" kv
   for kv in "${@:2}"; do body+="${kv%%=*}=\"${kv#*=}\""$'\n'; done
-  [[ -f "$config" ]] || : > "$config"
+  # A new configs.ini starts as a copy of the commented example
+  if [[ ! -f "$config" ]]; then
+    if [[ -f "$project_root/configs.example.ini" ]]; then cp "$project_root/configs.example.ini" "$config"; else : > "$config"; fi
+  fi
   tmpf="$(mktemp)"
   sec="$1" body="$body" LC_ALL=C awk '
     function emit(   c, k, b) { lines[++n] = "[" ENVIRON["sec"] "]"; c = split(ENVIRON["body"], b, "\n"); for (k = 1; k < c; k++) lines[++n] = b[k] }
@@ -198,7 +201,7 @@ validate_cr() {  # checks the normalized code review result
     /^[ \t]*[a-z]+:/ && !/^[A-Z]\|/ {
       k = $0; sub(/^[ \t]*/, "", k); sub(/:.*/, "", k)
       if (rec != "C") { err("field \"" k "\" is not under a C record"); next }
-      if (k !~ /^(problem|suggestion)$/) { err("unknown field \"" k "\" (allowed: problem, suggestion)"); next }
+      if (k !~ /^(problem|suggestion|spec)$/) { err("unknown field \"" k "\" (allowed: problem, suggestion, spec)"); next }
       if (k == "problem") hasprob = 1
       next
     }

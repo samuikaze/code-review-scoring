@@ -20,7 +20,7 @@
 <!-- What the PR is meant to do, from the PR title and description. -->
 
 ## Requirements
-<!-- One line per requirement: - R1 | source (document, version, section) | requirement -->
+<!-- One line per requirement: - R1 | source (document, version, section; full/path:line when the document is a file) | requirement -->
 
 ## Spec observations
 <!-- Possible gaps, errors or ambiguities: - document, version, section | missing / wrong / ambiguous | what is unclear -->

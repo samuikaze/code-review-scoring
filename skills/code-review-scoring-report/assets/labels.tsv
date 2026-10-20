@@ -46,6 +46,10 @@ cr.col.files	審查檔案數
 cr.col.summary	結論
 cr.summary	結論
 cr.highlights	亮點
+cr.tag_sep	|
+cr.unscored	未扣分
+cr.code	程式碼位置
+cr.spec	規格書位置
 cr.no_comments	無 CR 意見
 cr.skipped	沒有符合適用範圍的異動檔案（{applies}）
 cr.all_files	全部檔案
