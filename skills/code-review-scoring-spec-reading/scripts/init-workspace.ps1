@@ -3,7 +3,7 @@
 Prepare step 1 of a review: save the PR diff and a spec-context.md skeleton under ROOT/step1.
 
 .DESCRIPTION
-Writes ROOT/step1/pr.diff and ROOT/step1/spec-context.md (ROOT defaults to tmp) and prints the step1 path on the last line.
+Writes ROOT/step1/pr.diff and ROOT/step1/spec-context.md (ROOT defaults to tmp in the project root) and prints the step1 path on the last line.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 2 bad arguments or input.
 
@@ -15,7 +15,7 @@ param(
     [Alias('g')][string]$Git,
     [Alias('r')][string]$Repo = '.',
     [Alias('i', 'Input')][string]$InputPath,
-    [string]$Root = 'tmp',
+    [string]$Root,
     [Alias('t')][string]$Title = '',
     [Alias('f')][switch]$Force
 )
@@ -23,6 +23,8 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
+
+if (-not $Root) { $Root = Join-Path (Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)) 'tmp' }
 
 if ($Git -and $InputPath) { Exit-WithError 'use only one of -Git, -InputPath' }
 if (-not $Git -and -not $InputPath) { Exit-WithError '-Git or -InputPath is required (see Get-Help)' }

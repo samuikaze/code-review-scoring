@@ -11,7 +11,7 @@ metadata:
 
 Prepare everything the code analysis needs. Do not review code or assign severities in this step.
 
-**Output:** `tmp/step1/pr.diff` and a completed `tmp/step1/spec-context.md` (`tmp` is the review root in the reviewed repository; scripts take `--root`).
+**Output:** `tmp/step1/pr.diff` and a completed `tmp/step1/spec-context.md` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one).
 
 ## Modes
 
@@ -31,12 +31,12 @@ PowerShell parameters are `-Git`, `-Repo`, `-InputPath`, `-Root`, `-Title`, `-Fo
 
 ## Procedure
 
-- [ ] 1. If `tmp/step1/spec-context.md` does not exist, run `init-workspace --git <base>...<head> --repo <repo> --root tmp --title "<PR title>"` (or `--input <diff file>`). Otherwise continue with the existing file.
+- [ ] 1. If `tmp/step1/spec-context.md` does not exist, run `init-workspace --git <base>...<head> --repo <repo> --title "<PR title>"` (or `--input <diff file>`). Otherwise continue with the existing file.
 - [ ] 2. Fill **PR** and **Purpose of the change** from the PR title and description.
 - [ ] 3. Inventory the inputs in the **Inputs** section: set what you have to `provided`. Collect every missing item into **one** round of questions that says what each item is used for, and set those items to `pending`.
 - [ ] 4. Apply the replies: `provided` or `declined`. Only an explicit "cannot provide" counts as `declined`.
 - [ ] 5. Read the provided documents and fill **Requirements**, **Spec observations**, **Third-party notes**, **Change log** and **Severity facts**.
-- [ ] 6. Run `check-context --root tmp`:
+- [ ] 6. Run `check-context`:
   - exit 0 `READY`: the step is complete.
   - exit 1 `NOT READY`: ask about every listed item in one round, record the replies, run again.
   - exit 3 `STOP`: a required input (diff or PR description) is unavailable; the PR cannot be scored. Report why.

@@ -11,7 +11,7 @@ metadata:
 
 Turn the findings into scores. **Never calculate scores or grades by hand**; the script is the single source of the numbers.
 
-**Input:** `tmp/step3/findings.txt`, `tmp/step1/pr.diff`, `tmp/step1/spec-context.md` (`tmp` is the review root; scripts take `--root`).
+**Input:** `tmp/step3/findings.txt`, `tmp/step1/pr.diff`, `tmp/step1/spec-context.md` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one).
 **Output:** `tmp/step4/score.tsv` (for the report renderer) and `tmp/step4/score.json` (structured result).
 
 ## Modes
@@ -25,11 +25,11 @@ Paths are relative to this skill's directory.
 
 | bash | zsh | PowerShell |
 | --- | --- | --- |
-| `bash scripts/score.sh --root tmp` | `zsh scripts/score.zsh --root tmp` | `powershell -ExecutionPolicy Bypass -File scripts/score.ps1 -Root tmp` |
+| `bash scripts/score.sh` | `zsh scripts/score.zsh` | `powershell -ExecutionPolicy Bypass -File scripts/score.ps1` |
 
 ## Procedure
 
-1. Run `score --root tmp`.
+1. Run `score`.
 2. Act on the exit code:
    - **0**: done. It prints the grade, the dimension scores and any warnings.
    - **1**: validation failed. Each error names the line in `findings.txt`. Standalone: fix it and run again until it passes. Workflow: follow the dispatch prompt (step 3 is redone). When an error questions a judgment (a severity that is not allowed, a location outside the diff), recheck the code and the checklist of `code-review-scoring-code-analysis` instead of only reformatting.

@@ -9,7 +9,7 @@ Usage: init-workspace.sh (--git RANGE [--repo DIR] | --input FILE) [--root DIR] 
   -g, --git RANGE    save git diff RANGE (e.g. origin/main...HEAD) as pr.diff
   -r, --repo DIR     repository for --git (default: current directory)
   -i, --input FILE   copy an existing unified diff file as pr.diff
-      --root DIR     review root (default: tmp); files go to ROOT/step1/
+      --root DIR     review root (default: tmp in the project root); files go to ROOT/step1/
   -t, --title TEXT   PR title written into spec-context.md
   -f, --force        overwrite pr.diff and spec-context.md if they already exist
   -h, --help         show this help
@@ -20,8 +20,10 @@ USAGE
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Project root (two levels above the physical skill folder) holds tmp/ and reports/.
+project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
 skill_dir="$(dirname "$script_dir")"
-git_range="" repo="." input="" root="tmp" title="" force=0
+git_range="" repo="." input="" root="$project_root/tmp" title="" force=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -g|--git) git_range="${2:?--git needs a value}"; shift 2 ;;

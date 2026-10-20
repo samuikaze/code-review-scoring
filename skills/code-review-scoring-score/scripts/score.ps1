@@ -3,7 +3,7 @@
 Validate findings.txt and compute dimension scores, total and grade.
 
 .DESCRIPTION
-With -Root (default tmp): uses ROOT/step3/findings.txt and ROOT/step1/pr.diff, refuses unanswered
+With -Root (default: tmp in the project root): uses ROOT/step3/findings.txt and ROOT/step1/pr.diff, refuses unanswered
 questions in step1/step3, and writes ROOT/step4/score.tsv and ROOT/step4/score.json.
 With -Findings: standalone use without the root layout. Works on Windows PowerShell 5.1 and PowerShell 7+.
 Saved as UTF-8 with BOM; keep that encoding.
@@ -11,7 +11,7 @@ Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad a
 3 spec-context.md still has unresolved inputs or questions.
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File score.ps1 -Root tmp
+powershell -ExecutionPolicy Bypass -File score.ps1
 #>
 [CmdletBinding()]
 param(
@@ -27,7 +27,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
 
-if (-not $Root -and -not $Findings) { $Root = 'tmp' }
+if (-not $Root -and -not $Findings) { $Root = Join-Path (Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)) 'tmp' }
 if ($Root) {
     if (-not [IO.Directory]::Exists((Resolve-UserPath $Root))) { Exit-WithError "review root not found: $Root" }
     if (-not $Findings) { $Findings = Join-Path $Root 'step3/findings.txt' }

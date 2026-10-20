@@ -11,7 +11,7 @@ metadata:
 
 Find the problems in the PR and record them as findings. Do not calculate scores here.
 
-**Input:** `tmp/step1/pr.diff` and `tmp/step1/spec-context.md` from `code-review-scoring-spec-reading`, and the code review results of step 2: `tmp/step2/plan.tsv` and `tmp/step2/<plugin>/cr.txt` (`tmp` is the review root; scripts take `--root`).
+**Input:** `tmp/step1/pr.diff` and `tmp/step1/spec-context.md` from `code-review-scoring-spec-reading`, and the code review results of step 2: `tmp/step2/plan.tsv` and `tmp/step2/<plugin>/cr.txt` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one).
 **Output:** `tmp/step3/prepared.txt` and `tmp/step3/findings.txt`.
 
 ## Modes
@@ -27,14 +27,14 @@ Apply every rule literally. When no rule covers a situation, do not deduct; expl
 
 | bash | zsh | PowerShell |
 | --- | --- | --- |
-| `bash scripts/prepare-diff.sh --root tmp` | `zsh scripts/prepare-diff.zsh --root tmp` | `powershell -ExecutionPolicy Bypass -File scripts/prepare-diff.ps1 -Root tmp` |
+| `bash scripts/prepare-diff.sh` | `zsh scripts/prepare-diff.zsh` | `powershell -ExecutionPolicy Bypass -File scripts/prepare-diff.ps1` |
 
 It writes `tmp/step3/prepared.txt`: a summary, the candidates, and the compact diff. Read the file in parts when it is long. Use `--mode summary|scan|view` to print one part only.
 
 ## Procedure
 
 - [ ] 1. Read `tmp/step1/spec-context.md` (purpose, requirements, severity facts, declined inputs).
-- [ ] 2. Run `prepare-diff --root tmp` and read `tmp/step3/prepared.txt`.
+- [ ] 2. Run `prepare-diff` and read `tmp/step3/prepared.txt`.
 - [ ] 3. Use the code review results (next section).
 - [ ] 4. Read [references/checks.md](references/checks.md) and go through **every** check against the added and changed lines. Checks already settled in step 3 only need the remaining locations.
 - [ ] 5. For each problem, decide whether the root cause is upstream. When you suspect it is, read [references/upstream.md](references/upstream.md). Suspected upstream problems are recorded as `U`, never as `F`.

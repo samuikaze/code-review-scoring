@@ -32,7 +32,7 @@ Commands:
            with both: save them in the [NAME] section
            (default file of both: configs.ini in the project root)
 
-Common option: --root DIR (default: tmp)
+Common option: --root DIR (default: tmp in the project root)
 
 Gates enforced by "set":
   working  the previous step must be success; clears the status of every later step
@@ -49,14 +49,14 @@ USAGE
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd -P; }); }
 script_dir="${0:A:h}"
 skill_dir="$(dirname "$script_dir")"
-# Project root (two levels above the physical skill folder) holds plugins.ini and configs.ini.
+# Project root (two levels above the physical skill folder) holds tmp/, reports/, plugins.ini and configs.ini.
 project_root="$(dirname "$(dirname "$skill_dir")")"
 self_cmd="zsh \"$script_dir/review-state.zsh\""
 
 [[ $# -eq 0 ]] && { usage; exit 2; }
 cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
-root="tmp" step="" plugin="" state="" message="" git_range="" repo="." title="" reset=0
+root="$project_root/tmp" step="" plugin="" state="" message="" git_range="" repo="." title="" reset=0
 config="$project_root/configs.ini" subagent="" platform="" model="" reasoning="" plugins_file="$project_root/plugins.ini"
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -238,7 +238,7 @@ case "$cmd" in
     repo_abs="$(abspath "$repo")"
     root_abs="$(abs_root)"
     # Keep review files out of git unless the repository already ignores the root (keep .gitkeep).
-    if [[ ! -f "$root/.gitignore" ]] && ! git check-ignore -q "$root/.review-probe" 2>/dev/null; then
+    if [[ ! -f "$root/.gitignore" ]] && ! git -C "$root" check-ignore -q .review-probe 2>/dev/null; then
       printf '*\n!.gitkeep\n' > "$root/.gitignore"
     fi
     LC_ALL=C awk -v title="$title" -v repo="$repo_abs" -v range="$git_range" -v created="$(date +%Y-%m-%d)" '

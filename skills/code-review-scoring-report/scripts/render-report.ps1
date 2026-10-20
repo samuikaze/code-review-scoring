@@ -5,30 +5,33 @@ Render the PR score report from the review root (tmp/stepN files) and the report
 .DESCRIPTION
 Reads ROOT/step1/spec-context.md, ROOT/step3/findings.txt, ROOT/step4/score.tsv, ROOT/step4/score.json and the
 code review results in ROOT/step2/, fills the template placeholders and writes ROOT/step5/report.md (working copy).
-ROOT defaults to tmp. Without ROOT/step2/plan.tsv the code review section says that no code review was run.
-The final report is published as REPORTS/<YYYY-MM-DD>_<PR title>.md (REPORTS defaults to reports; the same
+ROOT defaults to tmp in the project root. Without ROOT/step2/plan.tsv the code review section says that no code review was run.
+The final report is published as REPORTS/<YYYY-MM-DD>_<PR title>.md (REPORTS defaults to reports next to ROOT; the same
 name is overwritten when the same PR is rendered again on the same day) and its path is recorded in
 ROOT/step5/report-path.txt. Use -NoPublish to write only the working copy; -Out - prints to stdout only.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 1 inputs missing or inconsistent (rerun the scoring skill), 2 bad arguments.
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File render-report.ps1 -Root tmp
+powershell -ExecutionPolicy Bypass -File render-report.ps1
 #>
 [CmdletBinding()]
 param(
-    [string]$Root = 'tmp',
+    [string]$Root,
     [Alias('t')][string]$Template,
     [Alias('l')][string]$Labels,
     [string]$Title,
     [Alias('o')][string]$Out,
-    [string]$Reports = 'reports',
+    [string]$Reports,
     [switch]$NoPublish
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
+
+if (-not $Root) { $Root = Join-Path (Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)) 'tmp' }
+if (-not $Reports) { $Reports = Join-Path (Split-Path -Parent (Resolve-UserPath $Root)) 'reports' }
 
 $skillDir = Split-Path -Parent $PSScriptRoot
 if (-not $Template) { $Template = Join-Path $skillDir 'assets/report-template.md' }

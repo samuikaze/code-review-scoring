@@ -6,7 +6,7 @@ usage() {
   cat <<'USAGE'
 Usage: check-context.sh [--root DIR]
 
-      --root DIR       review root (default: tmp); checks ROOT/step1/spec-context.md
+      --root DIR       review root (default: tmp in the project root); checks ROOT/step1/spec-context.md
   -h, --help           show this help
 
 Exit codes: 0 ready, 1 waiting for the user (or malformed file), 2 bad arguments,
@@ -15,7 +15,9 @@ USAGE
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-root="tmp"
+# Project root (two levels above the physical skill folder) holds tmp/ and reports/.
+project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
+root="$project_root/tmp"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
