@@ -10,8 +10,9 @@ Usage: setup.sh <command> [options]
 
 Commands:
   check    [--platform NAME]
-           report whether plugins.ini exists and, with --platform, whether configs.ini has a [NAME] section
-           (give --platform only in subagent mode). Exit 7 when something is missing
+           report whether plugins.ini exists, whether configs.ini sets subagent=true|false and, when it is true
+           and --platform is given, whether configs.ini has a [NAME] section (give --platform only when the
+           platform has a subagent tool). Prints the execution style. Exit 7 when something is missing
   wizard   [--platform NAME]
            create what is missing by asking the user step by step; needs an interactive terminal,
            so the user runs it, not the agent
@@ -23,7 +24,8 @@ Commands:
 
 Options: --plugins FILE (default: plugins.ini in the project root)
          --config FILE  (default: configs.ini in the project root)
-Subagent settings are saved with: review-state config --platform NAME --model TEXT --reasoning TEXT
+Settings in configs.ini are saved with: review-state config --subagent true|false
+                                   and review-state config --platform NAME --model TEXT --reasoning TEXT
 After the plugins change, run scripts/link-skills in the project root.
 
 Exit codes: 0 ok, 2 bad arguments or invalid plugin, 7 setup incomplete.
@@ -62,6 +64,7 @@ link_cmd="bash \"$project_root/scripts/link-skills.sh\" (PowerShell: scripts\\li
 plugin_names() {  # section names of plugins.ini, one per line
   LC_ALL=C awk '/^[ \t]*\[/ { s = $0; gsub(/^[ \t]*\[|\][ \t\r]*$/, "", s); print s }' "$plugins_file"
 }
+subagent_setting() { "${state_cmd[@]}" config --config "$config" 2>/dev/null | sed -n 's/^subagent=//p'; }
 platform_ok() { "${state_cmd[@]}" config --platform "$platform" --config "$config" >/dev/null 2>&1; }
 fm_name() {  # name in the frontmatter of a SKILL.md
   awk -v q="'" 'NR == 1 && !/^---/ { exit } NR > 1 && /^---/ { exit }
@@ -135,7 +138,10 @@ case "$cmd" in
     else
       echo "plugins.ini: missing $plugins_file"; missing=1
     fi
-    if [[ -n "$platform" ]]; then
+    sub="$(subagent_setting || true)"
+    if [[ -n "$sub" ]]; then echo "configs.ini subagent: $sub $config"
+    else echo "configs.ini subagent: missing $config"; missing=1; fi
+    if [[ "$sub" == "true" && -n "$platform" ]]; then
       if platform_ok; then echo "configs.ini [$platform]: ok $config"
       else echo "configs.ini [$platform]: missing $config"; missing=1; fi
     fi
@@ -144,6 +150,9 @@ case "$cmd" in
       echo "      (bash \"$script_dir/setup.sh\" wizard${platform:+ --platform $platform}) or by answering your questions"
       exit 7
     fi
+    if [[ "$sub" == "true" && -n "$platform" ]]; then echo "execution: subagent (each step runs in its own subagent with the [$platform] settings)"
+    elif [[ "$sub" == "true" ]]; then echo "execution: inline (subagent=true, but no --platform was given, so the main agent runs every step)"
+    else echo "execution: inline (subagent=false, so the main agent runs every step)"; fi
     echo "next: setup complete"
     ;;
 
@@ -174,7 +183,14 @@ case "$cmd" in
         new_plugins_file; echo "Created ${plugins_file} without plugins"
       fi
     fi
-    if [[ -n "$platform" ]] && ! platform_ok; then
+    sub="$(subagent_setting || true)"
+    if [[ -z "$sub" ]]; then
+      echo "== Execution style (subagent in ${config})"
+      echo "true: each step runs in its own subagent (when the platform has a subagent tool); false: the main agent runs every step itself."
+      if yes_no "Run the steps in subagents?" "y"; then sub="true"; else sub="false"; fi
+      "${state_cmd[@]}" config --subagent "$sub" --config "$config"
+    fi
+    if [[ "$sub" == "true" && -n "$platform" ]] && ! platform_ok; then
       echo "== Subagent settings ([${platform}] in ${config})"
       while true; do
         ask "Subagent model" ""; m="${REPLY}"
