@@ -61,7 +61,7 @@ The same regex runs in POSIX ERE (awk) and .NET, so use only what both share; li
 - Not allowed: `\b`, `\s`, `\d`, `\w` (use `[ \t]`, `[0-9]`, `[A-Za-z0-9_]`), lookaround, lazy quantifiers (`*?`), non-capturing or named groups (`(?`), POSIX classes (`[[:space:]]`), back-references.
 - A literal TAB cannot appear in a field (it separates the fields); write `\t` inside brackets, as in `[ \t]`.
 - Word boundaries: `(^|[^A-Za-z0-9_])name([^A-Za-z0-9_]|$)`.
-- Case: prefer the `i` flag to `[Aa]` pairs.
+- Case: prefer the `i` flag to `[Aa]` pairs. With `i`, awk lowercases the line before matching while .NET ignores case, so write the regex, the prev-regex and the exclude-regex of such a rule in lowercase (`[a-z]`, not `[A-Z]`), or the shells disagree.
 
 ## What makes a good rule
 
