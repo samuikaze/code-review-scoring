@@ -41,7 +41,7 @@ The check covers, in the project root:
 - Exit 7: something is missing. Tell the user what is missing and ask which way to create it (one question):
   - **Wizard in a terminal:** the user runs the `wizard` command that `check` printed; it asks step by step. You cannot run it yourself because it needs an interactive terminal. In Claude Code the user can type `! <command>` to run it in this session.
   - **Answer your questions:** ask in one message only what is missing:
-    - plugins: whether code review plugins should be registered and, for each plugin, its name (the `name` in its SKILL.md), folder path, `applies` patterns (comma-separated, empty = all changed files) and mode (`mapped`, the default: confirmed comments become deductions; `advisory`: report only);
+    - plugins: whether code review plugins should be registered and, for each plugin, its name (the `name` in its SKILL.md), folder path, `applies` patterns (comma-separated, empty = all changed files) and mode (`mapped`, the default: every confirmed comment is deducted; `advisory`: report only);
     - execution style: whether each step should run in its own subagent (`true`) or the main agent should run every step itself (`false`);
     - when the answer is `true` (or it is already `true`) and the platform has a subagent tool: the subagent model and reasoning, offering only values the platform's subagent tool accepts (section 3).
 
@@ -169,7 +169,7 @@ Redoing an earlier step clears the status of every later step; those steps must 
 2. For each planned plugin, one at a time, run the step loop above with `prompt --step 2 --plugin <name>` and the plugin's state from `show` (questions in `tmp/step2/<plugin>/questions.md`, answers in `tmp/step2/<plugin>/answers.md`, failures in `tmp/step2/<plugin>/errors.log`).
 3. Continue with step 3 only when `show` reports step 2 as `success`.
 
-Each plugin reads only its own `diff.patch`, and step 3 confirms its comments instead of searching the whole diff again; both keep token use down. Comments of `mapped` plugins that match the scoring checklist become deductions in step 3; comments of `advisory` plugins only appear in the report.
+Each plugin reads only its own `diff.patch`, and step 3 confirms its comments instead of searching the whole diff again; both keep token use down. Every confirmed comment of a `mapped` plugin becomes a deduction in step 3, and every rejected one gets a reason; comments of `advisory` plugins only appear in the report.
 
 Rerunning `cr-plan` discards all step 2 results and clears steps 3 to 5, so use it only when `plugins.ini` or the diff changed.
 

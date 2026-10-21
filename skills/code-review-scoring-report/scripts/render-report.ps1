@@ -69,11 +69,11 @@ function Format-LocList([string]$Field, [string]$Locs) {
     if (-not $Locs -or $Locs -eq '-') { return "   - $Field$(L 'sep.colon')$(L 'none')`n" }
     return "   - $Field$(L 'sep.colon')`n" + (@($Locs -split ',' | ForEach-Object { "     - ``$($_.Trim())```n" }) -join '')
 }
-function Get-LocFiles([string]$Locs) { return @($Locs -split ',' | ForEach-Object { $_.Trim() -replace ':[^:]*$', '' }) }
+function Format-Where([string]$Locs) { if ($Locs -eq '-') { return L 'loc.pr_wide' } return Format-Codes $Locs }
 
 # findings.txt (already validated by the scoring skill)
-$fv = @{}; $nits = New-Object System.Collections.Generic.List[object]; $deductKeys = @{}
-$fRecords = New-Object System.Collections.Generic.List[object]
+$fv = @{}; $fIds = New-Object System.Collections.Generic.List[string]
+$rejects = New-Object System.Collections.Generic.List[object]
 $ups = New-Object System.Collections.Generic.List[object]
 $lists = @{ S = @(); H = @(); N = @(); I = @(); R = @() }
 $cur = ''
@@ -84,23 +84,20 @@ foreach ($raw in (Read-Utf8Lines $findingsPath)) {
         if ($cur) { $fv["$cur|$($Matches[1])"] = $Matches[2].Trim() }
         continue
     }
-    $a = @($line -split '\|' | ForEach-Object { $_.Trim() }); while ($a.Count -lt 5) { $a += '' }
+    $a = @($line -split '\|' | ForEach-Object { $_.Trim() }); while ($a.Count -lt 6) { $a += '' }
     $cur = ''
     switch -CaseSensitive ($a[0]) {
-        'F' {
-            # A check id may have several records (merge=false), so the key is the id and its locations.
-            $lk = $a[3] -replace '\s*,\s*', ','
-            $cur = "F:$($a[1])@$lk"; $fRecords.Add([pscustomobject]@{ Id = $a[1]; Loc = $lk; Key = $cur })
-            if ($a[2] -eq 'Nit') { $nits.Add([pscustomobject]@{ Id = $a[1]; Loc = $lk }) } else { $deductKeys["$($a[1])@$lk"] = $true }
-        }
-        'U' { $ups.Add([pscustomobject]@{ Type = $a[1]; Sub = $a[2]; Impact = $a[3]; Ref = $a[4] }); $cur = "U:$($ups.Count)" }
+        # Records are keyed by their order in findings.txt; score.tsv refers to them by that number.
+        'F' { $fIds.Add($a[1]); $cur = "F:$($fIds.Count)" }
+        'U' { $ups.Add([pscustomobject]@{ Type = $a[1]; Sub = $a[2]; Impact = $a[3]; Sev = $a[4]; Ref = $a[5]; Pts = '' }); $cur = "U:$($ups.Count)" }
+        'X' { $rejects.Add([pscustomobject]@{ Id = $a[1]; Reason = $a[2] }) }
         'S' { $lists['S'] += ($a[1] + (L 'sep.colon') + $a[2]) }
         { $_ -cin 'H', 'N', 'I', 'R' } { $lists[$a[0]] += $a[1] }
     }
 }
 
 # score.tsv / score.json
-$total = ''; $grade = ''; $capped = '0'
+$total = ''; $grade = ''; $capped = '0'; $upCount = 0
 $dims = New-Object System.Collections.Generic.List[object]
 $scored = New-Object System.Collections.Generic.List[object]
 foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step4/score.tsv'))) {
@@ -110,13 +107,13 @@ foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step4/score.tsv'))) {
         'grade' { $grade = $a[1] }
         'capped' { $capped = $a[1] }
         'dim' { $dims.Add([pscustomobject]@{ Code = $a[1]; Score = $a[2]; Max = $a[3] }) }
-        'finding' { $scored.Add([pscustomobject]@{ Id = $a[1]; Sev = $a[2]; Pts = $a[3]; Locs = $a[4] }) }
+        'finding' { $scored.Add([pscustomobject]@{ Id = $a[1]; Sev = $a[2]; Pts = $a[3]; Locs = $a[4]; Seq = [int]$a[5] }) }
+        'upstream' { $upCount++; if ([int]$a[1] -le $ups.Count) { $ups[[int]$a[1] - 1].Pts = $a[3] } }
     }
 }
 if ($dims.Count -ne 7 -or -not $grade) { Exit-WithError 'score.tsv is missing or incomplete; run the scoring skill first' 1 }
-$scoredKeys = @{}; foreach ($s in $scored) { $scoredKeys["$($s.Id)@$($s.Locs)"] = $true }
-foreach ($k in $deductKeys.Keys) { if (-not $scoredKeys.ContainsKey($k)) { Exit-WithError "finding $k is in findings.txt but not in score.tsv; rerun the scoring skill" 1 } }
-foreach ($k in $scoredKeys.Keys) { if (-not $deductKeys.ContainsKey($k)) { Exit-WithError "finding $k is in score.tsv but not in findings.txt; rerun the scoring skill" 1 } }
+if ($scored.Count -ne $fIds.Count -or $upCount -ne $ups.Count) { Exit-WithError 'findings.txt and score.tsv list different records; rerun the scoring skill' 1 }
+foreach ($s in $scored) { if ($s.Seq -lt 1 -or $s.Seq -gt $fIds.Count -or $fIds[$s.Seq - 1] -cne $s.Id) { Exit-WithError "finding $($s.Id) of score.tsv does not match findings.txt; rerun the scoring skill" 1 } }
 $json = (Read-Utf8Text (Join-Path $Root 'step4/score.json')).TrimEnd("`r", "`n")
 if (-not $json) { Exit-WithError 'score.json is missing or empty; run the scoring skill first' 1 }
 
@@ -139,13 +136,22 @@ foreach ($d in $dims) {
     if (-not $items) { $items = L 'none' }
     [void]$sb.Append("| $($d.Code) $(L "dim.$($d.Code)") | $($d.Score)/$($d.Max) | $items |`n")
 }
+# Records without a check id and upstream factors are deducted from the total.
+$other = @($scored | Where-Object { $_.Id -eq '-' })
+$sum = 0; foreach ($x in $other) { $sum += [int]$x.Pts }
+$items = @($other | ForEach-Object { "$($_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
+[void]$sb.Append("| $(L 'row.other') | $(if ($sum) { "-$sum" } else { 0 }) | $items |`n")
+$sum = 0; foreach ($u in $ups) { $sum += [int]$u.Pts }
+$items = @($ups | ForEach-Object { "$($_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
+[void]$sb.Append("| $(L 'row.upstream') | $(if ($sum) { "-$sum" } else { 0 }) | $items |`n")
 $blk['SCORE_ROWS'] = $sb.ToString()
 
 $sb = New-Object System.Text.StringBuilder; $i = 0
 foreach ($s in $scored) {
     $i++
-    [void]$sb.Append("$i. **[$($s.Id)$b$($s.Sev)$b-$($s.Pts)]** $(Format-Codes $s.Locs)`n")
-    $key = "F:$($s.Id)@$($s.Locs)"
+    $idText = if ($s.Id -eq '-') { L 'check.none' } else { $s.Id }
+    [void]$sb.Append("$i. **[$idText$b$($s.Sev)$b-$($s.Pts)]** $(Format-Where $s.Locs)`n")
+    $key = "F:$($s.Seq)"
     [void]$sb.Append("   - $(L 'field.problem')$c$($fv["$key|problem"])`n")
     [void]$sb.Append("   - $(L 'field.suggestion')$c$($fv["$key|suggestion"])`n")
     if ($fv.ContainsKey("$key|assumption")) { [void]$sb.Append("   - $(L 'field.assumption')$c$($fv["$key|assumption"])`n") }
@@ -154,12 +160,6 @@ foreach ($s in $scored) {
 $blk['FINDINGS'] = $sb.ToString()
 
 $sb = New-Object System.Text.StringBuilder
-foreach ($n in $nits) {
-    $key = "F:$($n.Id)@$($n.Loc)"
-    [void]$sb.Append("- [$($n.Id)] $(Format-Codes $n.Loc)$c$($fv["$key|problem"])")
-    if ($fv.ContainsKey("$key|suggestion")) { [void]$sb.Append((L 'paren.open') + (L 'field.suggestion') + $c + $fv["$key|suggestion"] + (L 'paren.close')) }
-    [void]$sb.Append("`n")
-}
 foreach ($x in $lists['N']) { [void]$sb.Append("- $x`n") }
 $blk['SUGGESTIONS'] = $sb.ToString()
 
@@ -168,6 +168,7 @@ foreach ($u in $ups) {
     $i++
     $tag = (L "upstream.$($u.Type)") + $b + (L "sub.$($u.Sub)")
     if ($u.Impact -and $u.Impact -ne '-') { $tag += $b + (L "impact.$($u.Impact)") }
+    $tag += "$b$($u.Sev)$b-$($u.Pts)"
     [void]$sb.Append("$i. **[$tag]** $($u.Ref)`n")
     [void]$sb.Append("   - $(L 'field.content')$c$($fv["U:$i|content"])`n")
     if ($fv.ContainsKey("U:$i|code")) { [void]$sb.Append("   - $(L 'field.code')$c$(Format-Codes $fv["U:$i|code"])`n") }
@@ -187,7 +188,7 @@ if (-not (Test-UserFile (Join-Path $crDir 'plan.tsv'))) {
     $blk['CR_OVERVIEW'] = (L 'cr.not_run') + "`n"; $blk['CR_DETAILS'] = ''; $blk['CR_SKIPPED'] = ''; $crTotalsText = L 'cr.not_run'
 }
 else {
-    $plugins = @(Read-Utf8Lines (Join-Path $crDir 'plan.tsv') | Where-Object { $_ } | ForEach-Object { $f = $_ -split "`t"; [pscustomobject]@{ Name = $f[0]; Files = $f[3] } })
+    $plugins = @(Read-Utf8Lines (Join-Path $crDir 'plan.tsv') | Where-Object { $_ } | ForEach-Object { $f = $_ -split "`t"; [pscustomobject]@{ Name = $f[0]; Mode = $f[2]; Files = $f[3] } })
     $results = @()
     foreach ($pl in $plugins) {
         $crFile = Join-Path $crDir "$($pl.Name)/cr.txt"
@@ -204,7 +205,7 @@ else {
                     'S' { $r.Summary = (@($r.Summary, $a[1]) | Where-Object { $_ }) -join ' ' }
                     'H' { $r.Highlights += $a[1] }
                     'C' {
-                        $curC = [pscustomobject]@{ Sev = $a[1]; Locs = $a[2]; Rule = $(if ($a[3]) { $a[3] } else { '-' }); Fields = @{}; Index = $r.Comments.Count; Links = New-Object System.Collections.Generic.List[string] }
+                        $curC = [pscustomobject]@{ Sev = $a[1]; Locs = $a[2]; Rule = $(if ($a[3]) { $a[3] } else { '-' }); Fields = @{}; Index = $r.Comments.Count; Links = New-Object System.Collections.Generic.List[string]; Reject = $null }
                         $r.Comments.Add($curC); $r.Count[$a[1]]++; $crTotals[$a[1]]++
                     }
                 }
@@ -212,22 +213,26 @@ else {
         }
         $results += $r
     }
-    # Link comments to the check ids of the F records whose `source:` names the plugin and rule. A record links to the
-    # comments with that rule in one of its files; when none is in its files, to all of them.
-    foreach ($fr in $fRecords) {
-        if (-not $fv.ContainsKey("$($fr.Key)|source")) { continue }
-        $files = Get-LocFiles $fr.Loc
-        foreach ($src in ($fv["$($fr.Key)|source"] -split '、|,')) {
-            $parts = @($src.Trim() -split '\s+', 2)
-            if ($parts.Count -lt 2 -or -not $parts[0] -or -not $parts[1].Trim()) { continue }
-            $rule = $parts[1].Trim()
-            foreach ($r in @($results | Where-Object { $_.Plugin.Name -ceq $parts[0] })) {
-                $same = @($r.Comments | Where-Object { $_.Rule -ceq $rule })
-                $hits = @($same | Where-Object { @(Get-LocFiles $_.Locs | Where-Object { $files -ccontains $_ }).Count -gt 0 })
-                foreach ($cm in $(if ($hits.Count -gt 0) { $hits } else { $same })) { if (-not $cm.Links.Contains($fr.Id)) { $cm.Links.Add($fr.Id) } }
-            }
+    # Link comments (<plugin>#<n>, the n-th C record of cr.txt) to the F and U records whose `source:` names them,
+    # and to the X records that reject them.
+    function Get-Comment([string]$Id) {
+        if ($Id -notmatch '^(.+)#(\d+)$') { return $null }
+        $r = @($results | Where-Object { $_.Plugin.Name -ceq $Matches[1] })
+        $n = [int]$Matches[2]
+        if ($r.Count -eq 0 -or $n -lt 1 -or $n -gt $r[0].Comments.Count) { return $null }
+        return $r[0].Comments[$n - 1]
+    }
+    $sources = @()
+    for ($k = 1; $k -le $fIds.Count; $k++) { $sources += , @("F:$k", $(if ($fIds[$k - 1] -eq '-') { L 'check.none' } else { $fIds[$k - 1] })) }
+    for ($k = 1; $k -le $ups.Count; $k++) { $sources += , @("U:$k", (L 'cr.upstream')) }
+    foreach ($src in $sources) {
+        if (-not $fv.ContainsKey("$($src[0])|source")) { continue }
+        foreach ($e in ($fv["$($src[0])|source"] -split '、|,')) {
+            $cm = Get-Comment $e.Trim()
+            if ($cm -and -not $cm.Links.Contains($src[1])) { $cm.Links.Add($src[1]) }
         }
     }
+    foreach ($x in $rejects) { $cm = Get-Comment $x.Id; if ($cm) { $cm.Reject = $x.Reason } }
     $crTotalsText = if ($plugins.Count -eq 0) { L 'cr.no_plugins' } else { (@($sevOrder | ForEach-Object { "$_ $($crTotals[$_])" }) -join (L 'sep.list')) }
     if ($plugins.Count -eq 0) { $blk['CR_OVERVIEW'] = (L 'cr.no_plugins') + "`n"; $blk['CR_DETAILS'] = '' }
     else {
@@ -252,10 +257,12 @@ else {
             foreach ($cm in $sorted) {
                 $j++
                 $ts = " $(L 'cr.tag_sep') "
-                $ids = if ($cm.Links.Count -gt 0) { $cm.Links -join (L 'sep.list') } else { L 'cr.unscored' }
-                [void]$sb.Append("$j. [$($cm.Sev)$ts$($cm.Rule)$ts$ids]`n")
+                # Deducted: the linked check ids; otherwise rejected, advisory (never deducted) or not judged yet.
+                $status = if ($cm.Links.Count -gt 0) { $cm.Links -join (L 'sep.list') } elseif ($null -ne $cm.Reject) { L 'cr.rejected' } elseif ($r.Plugin.Mode -eq 'advisory') { L 'cr.advisory' } else { L 'cr.unjudged' }
+                [void]$sb.Append("$j. [$($cm.Sev)$ts$($cm.Rule)$ts$status]`n")
                 [void]$sb.Append("   - $(L 'field.problem')$c$($cm.Fields['problem'])`n")
                 if ($cm.Fields.ContainsKey('suggestion')) { [void]$sb.Append("   - $(L 'field.suggestion')$c$($cm.Fields['suggestion'])`n") }
+                if ($null -ne $cm.Reject) { [void]$sb.Append("   - $(L 'cr.reason')$c$($cm.Reject)`n") }
                 [void]$sb.Append((Format-LocList (L 'cr.code') $cm.Locs) + (Format-LocList (L 'cr.spec') $cm.Fields['spec']))
             }
             if ($r.Highlights.Count -gt 0) {

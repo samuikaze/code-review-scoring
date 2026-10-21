@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-score
-description: Step 4 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Validates tmp/step3/findings.txt (check ids, allowed severities, locations on added diff lines, merged or separate deductions per configs.ini) and computes the seven dimension scores, the total and the S–D grade into tmp/step4/score.tsv and score.json. Use when dispatched by code-review-scoring, or when the user says 「打分數」、「計算 PR 分數」、「幫 PR 計分」、「重新計分」、「分數算一下」.
+description: Step 4 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Validates tmp/step3/findings.txt (check ids, allowed severities, locations on added diff lines, merged or separate deductions per configs.ini, every code review comment deducted or rejected) and computes the seven dimension scores, the total and the S–D grade into tmp/step4/score.tsv and score.json. Use when dispatched by code-review-scoring, or when the user says 「打分數」、「計算 PR 分數」、「幫 PR 計分」、「重新計分」、「分數算一下」.
 compatibility: Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "4/5"
@@ -48,7 +48,7 @@ Defaults:
 | A Correctness | 25 | | Critical | 10 |
 | B Security | 15 | | Major | 5 |
 | C Test quality | 15 | | Minor | 2 |
-| D Architecture and design | 15 | | Nit | 0 |
+| D Architecture and design | 15 | | Nit | 1 |
 | E Performance and resource use | 10 | | | |
 | F Readability | 10 | | | |
 | G Maintainability | 10 | | | |
@@ -56,11 +56,12 @@ Defaults:
 - `[deductions] merge` decides how a check id found in several places is deducted:
   - `false` (default): every `F` record is one occurrence with one location and is deducted on its own, so a check id found in three places is deducted three times. A record with several locations, or the same check id twice at the same location, fails validation.
   - `true`: one `F` record per check id with all its locations, deducted once. The same check id in two records fails validation.
-- Dimension score = points − sum of its deductions, never below 0. Total = sum of the seven dimension scores.
+- Every `F` and `U` record is deducted, `Nit` included.
+- Dimension score = points − sum of its deductions, never below 0. Total = sum of the seven dimension scores − deductions of `F` records without a check id (`-`) − deductions of suspected upstream factors (`U`), never below 0.
 - Grades: S 95–100, A 85–94, B 70–84, C 55–69, D 0–54 (lower bounds of S, A, B, C are configurable).
 - Any Critical deduction caps the grade at B, whatever the settings (a single deduction could not otherwise reflect a serious defect).
-- Suspected upstream factors (`U`) and `Nit` findings are never deducted.
-- Allowed severities per check are in `scripts/rules.tsv`: the default, the adjustments written in the checklist, or `Nit`.
+- Allowed severities per check are in `scripts/rules.tsv`: the default, the adjustments written in the checklist, or `Nit`. Records without a check id and `U` records take any severity.
+- With the review root, every comment of a `mapped` plugin in `tmp/step2` must be cited in `source:` (as `<plugin>#<n>`) or rejected in an `X` line, never both; comments of `advisory` plugins may be neither.
 
 ## Gotchas
 
