@@ -23,6 +23,13 @@ Uses the same GNU-style arguments as standard.sh:
       sha256, path), "applies" (the regex of the files of NAME), "scan" (path, sha256 of the scan rules),
       "points" (the overrides of NAME) and the "check" records of each document.
       Stops when standards.ini or a document has a format error (exit 3)
+  standard.ps1 plan --diff PR.diff --out DIR [--standards FILE] [--settings FILE]
+      for the review workflow: the standards that score the PR. Each file goes to the framework standard whose
+      applies covers it; the other files are common files, scored with the common standard in the report of
+      their project (the framework of the nearest folder above them; every report when that is unclear), or on
+      their own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
+      report and kind framework|common|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
+      each report, and DIR/confirm.tsv (standard, check codes, what to confirm before scoring)
 
 Options: --standards FILE  (default: configs/standards.ini in the project root)
          --settings FILE   (default: configs/settings.ini in the project root; its [points] are checked with the overrides)
@@ -47,12 +54,12 @@ if ($argv.Count -eq 0) { Get-Help $PSCommandPath -Detailed; exit 2 }
 if ($argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 0 }
 $cmd = [string]$argv[0]
 $opt = @{ standards = (Join-Path $projectRoot 'configs/standards.ini'); settings = (Join-Path $projectRoot 'configs/settings.ini')
-    file = ''; scan = ''; role = '' }
+    file = ''; scan = ''; role = ''; diff = ''; out = '' }
 $names = @()
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -in '--standards', '--settings', '--file', '--scan') {
+    if ($a -in '--standards', '--settings', '--file', '--scan', '--diff', '--out') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]; $i += 2
     }
@@ -263,6 +270,75 @@ switch ($cmd) {
             foreach ($l in $out) { if ($l.StartsWith("check`t", [StringComparison]::Ordinal)) { [void]$sb.Append("$l`n") } }
         }
         [Console]::Out.Write($sb.ToString())
+    }
+    'plan' {
+        if (-not $opt.diff -or -not $opt.out -or $names.Count -gt 0) { Exit-WithError 'plan needs --diff PR.diff --out DIR' }
+        if (-not (Test-UserFile $opt.diff)) { Exit-WithError "diff file not found: $($opt.diff)" }
+        $standards = Get-Full $opt.standards
+        if (-not [IO.File]::Exists($standards)) {
+            [Console]::Error.WriteLine("error: ${standards}: file not found; copy configs/standards.example.ini to configs/standards.ini"); exit 3
+        }
+        $ini = Invoke-StdIni $standards (Resolve-UserPath $opt.settings)
+        foreach ($l in $ini) {
+            $a = $l.Split("`t")
+            if ($a[0] -ceq '!error') {
+                $at = if ($a[1] -ne '') { ":$($a[1])" } else { '' }
+                [Console]::Error.WriteLine("error: $standards${at}: $($a[2]); run standard lint first"); exit 3
+            }
+        }
+        $outDir = Get-Full $opt.out
+        [void][IO.Directory]::CreateDirectory($outDir)
+        foreach ($f in [IO.Directory]::GetFiles($outDir)) { if ($f -match '(\\|/)(plan\.tsv|confirm\.tsv|[^\\/]*\.diff|[^\\/]*\.resolve)$') { [IO.File]::Delete($f) } }
+        $plan = Invoke-StdPlan (Resolve-UserPath $opt.diff) $ini $outDir
+        foreach ($l in $plan) { if ($l.StartsWith("!error`t", [StringComparison]::Ordinal)) { Exit-WithError "$($opt.diff): $($l.Split("`t")[2])" } }
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        $exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        $confirm = New-Object System.Text.StringBuilder; $done = New-StdMap
+        $ver = New-StdMap; $reports = New-Object System.Collections.Generic.List[string]
+        foreach ($l in $plan) {
+            $a = $l.Split("`t")
+            if ($a[0] -cne 'report') { continue }
+            $name = $a[1]; $reports.Add($name)
+            $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { $res = @(& $exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath resolve --standards $standards --settings $opt.settings $name) }
+            finally { $ErrorActionPreference = $prev }
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            [IO.File]::WriteAllText((Join-Path $outDir "$name.resolve"), (($res -join "`n") + "`n"), $utf8)
+            # The confirmations of the standard, and those of the common standard when the report has common files.
+            $hasCommon = $false
+            foreach ($x in $plan) { $f = $x.Split("`t"); if ($f[0] -ceq 'file' -and $f[2] -ceq $name -and $f[3] -ceq 'common') { $hasCommon = $true } }
+            foreach ($r in $res) {
+                $f = $r.Split("`t")
+                if ($f[0] -cne 'standard' -and $f[0] -cne 'common') { continue }
+                $ver[$f[1]] = $f[2]
+                if (($f[0] -ceq 'common' -and -not $hasCommon) -or $done.ContainsKey($f[1])) { continue }
+                $done[$f[1]] = 1
+                $role = ''
+                foreach ($x in $ini) { $g = $x.Split("`t"); if ($g[0] -ceq 'std' -and $g[1] -ceq $f[1] -and $g[5] -ceq 'common') { $role = 'common' } }
+                foreach ($c in (Invoke-StdDoc $f[4] $role)) {
+                    $g = $c.Split("`t")
+                    if ($g[0] -ceq 'confirm') { [void]$confirm.Append("$($f[1])`t$($g[1])`t$($g[2])`n") }
+                }
+            }
+        }
+        [IO.File]::WriteAllText((Join-Path $outDir 'confirm.tsv'), $confirm.ToString(), $utf8)
+        [IO.File]::WriteAllText((Join-Path $outDir 'plan.tsv'), (($plan -join "`n") + "`n"), $utf8)
+        # Summary: one line per report with its files, then the files no standard scores.
+        Write-Line "$($reports.Count) report(s):"
+        foreach ($r in $reports) {
+            $tot = 0; $c = 0; $x = 0
+            foreach ($l in $plan) {
+                $a = $l.Split("`t")
+                if ($a[0] -ceq 'report' -and $a[1] -ceq $r) { $tot = [int]$a[2] }
+                if ($a[0] -ceq 'file' -and $a[2] -ceq $r -and $a[3] -ceq 'common') { $c++ }
+                if ($a[0] -ceq 'file' -and $a[2] -ceq $r -and $a[3] -ceq 'none') { $x++ }
+            }
+            $line = "  - $r $($ver[$r]): $tot file(s)"
+            if ($c -gt 0 -and $c -ne $tot) { $line += " ($c scored with the common standard)" }
+            if ($x -gt 0) { $line += " ($x not covered by any standard)" }
+            Write-Line $line
+        }
+        Write-Line "wrote $(Join-Path $outDir 'plan.tsv')"
     }
     default { Exit-WithError "unknown command $cmd (see Get-Help)" }
 }

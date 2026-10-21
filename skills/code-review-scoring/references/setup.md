@@ -11,7 +11,7 @@ It covers, in the project root:
 - `configs/plugins.ini`: the code review plugins (it may list none);
 - `configs/settings.ini`, `[workflow]` section: `subagent=true` (each step runs in its own subagent) or `subagent=false` (you run every step yourself);
 - `configs/settings.ini`, `[<platform>]` section: the subagent model and reasoning, needed only when `subagent=true` and `--platform` is given;
-- `configs/standards.ini`: the scoring standards; step 4 cannot score without at least one registered standard.
+- `configs/standards.ini`: the scoring standards; step 1 plans the review with it (one report per framework standard whose `applies` matches a changed file, the common standard for the other files), so the workflow cannot run without it.
 
 When exit 7 comes with `legacy:` lines, the old `configs.ini` / `plugins.ini` is still in the project root (these files moved into `configs/`). Show the user the `legacy:` and `note:` lines and the move commands that `check` printed, ask them to move the files themselves, and run `check` again afterwards. Never move, merge or delete them yourself.
 
@@ -69,14 +69,18 @@ tmp/
   inputs/                documents the user pasted into the conversation, saved as files (written by the main agent)
   stepN-<state>          status file: pending | working | success | failed (no file = not started)
   step2-<plugin>-<state> status file of one code review plugin
+  stepN-<standard>-<state>  status file of steps 3 to 5 for one scoring standard
   step1/ … step5/        outputs of each step
     questions.md         questions for the user (written by the step)
     answers.md           the user's replies (written by the main agent)
     errors.log           failure details
   step2/plan.tsv         plugins chosen by cr-plan (name, path, mode, file count); step2/skipped.tsv: plugins with no matching file
+  step1/standards/       review plan: plan.tsv (reports and the files of each), <standard>.diff, <standard>.resolve
+                         (the standard as planned; steps 3 to 5 refuse to go on when it has changed), confirm.tsv
   step2/<plugin>/        files.txt and diff.patch (what to review), raw/ (plugin output), cr.txt (normalized result)
-  step3/findings.draft.txt  findings saved before a pending stop
-  step5/report-path.txt  absolute path of the final report
+  step3/<standard>/ … step5/<standard>/  outputs of steps 3 to 5, one folder per scoring standard
+  step3/<standard>/findings.draft.txt  findings saved before a pending stop
+  step5/<standard>/report-path.txt  absolute path of the final report
 reports/
-  <YYYY-MM-DD>_<PR title>.md   final report (code review results + score results)
+  <YYYY-MM-DD>_<PR title>_<standard>.md   final report of one standard (code review results + score results)
 ```

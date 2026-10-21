@@ -3,6 +3,7 @@
 #            standard record is a scan rule file given on its own)  mode=all|summary|scan|view  maxper=max locations listed per check
 #            merge=true|false ([deductions] merge of configs/settings.ini, shown in the summary for writing findings.txt)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = no code review comments section)
+#            cplan=the review plan (ROOT/step1/standards/plan.tsv) and cstd=the standard: list only its comments
 # Run with LC_ALL=C; strings are handled as bytes.
 
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
@@ -79,8 +80,27 @@ function classify(f,    p, o, k, w, m, oi) {
     else if (p ~ /\.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$/) excl[f] = "binary file"
 }
 
+# Whether a code review comment with these locations belongs to the standard cstd of the review plan cplan: one of its
+# files is a file of cstd, or none of its files is in the plan (a comment on the whole PR, location -) and cstd is the
+# first report. Without cstd every comment belongs to it.
+function cm_mine(loc,    l, a, n, p, i, f, any) {
+    if (cstd == "") return 1
+    if (!plload) {
+        plload = 1
+        while ((getline l < cplan) > 0) {
+            split(l, a, "\t")
+            if (a[1] == "report" && plfirst == "") plfirst = a[2]
+            else if (a[1] == "file") { plany[a[2]] = 1; if (a[3] == cstd) plmine[a[2]] = 1 }
+        }
+        close(cplan)
+    }
+    n = split(loc, p, ","); any = 0
+    for (i = 1; i <= n; i++) { f = trim(p[i]); sub(/:[0-9][-0-9]*$/, "", f); if (f in plmine) return 1; if (f in plany) any = 1 }
+    return !any && cstd == plfirst
+}
+
 # Lists every code review comment with its id <plugin>#<n> (the n-th C record of the plugin's cr.txt).
-function list_comments(    l, x, a, f, c, n, t, j, out) {
+function list_comments(    l, x, a, f, c, n, t, j, out, show) {
     if (crdir == "" || (getline l < (crdir "/plan.tsv")) <= 0) return
     print "## Code review comments (cite the ids in source: of F/U lines or in X lines; see the skill)"
     out = ""
@@ -91,8 +111,8 @@ function list_comments(    l, x, a, f, c, n, t, j, out) {
             sub(/\r$/, "", x)
             if (x ~ /^[ \t]*C[ \t]*\|/) {
                 c++; n = split(x, t, "|"); for (j = 1; j <= n; j++) t[j] = trim(t[j])
-                out = out sprintf("- %s#%d [%s] %s %s | %s\n", a[1], c, a[3], t[2], (t[4] == "" ? "-" : t[4]), t[3])
-            } else if (c > 0 && x ~ /^[ \t]*problem:/) out = out "  " trim(x) "\n"
+                if ((show = cm_mine(t[3]))) out = out sprintf("- %s#%d [%s] %s %s | %s\n", a[1], c, a[3], t[2], (t[4] == "" ? "-" : t[4]), t[3])
+            } else if (c > 0 && show && x ~ /^[ \t]*problem:/) out = out "  " trim(x) "\n"
         }
         close(f)
     } while ((getline l < (crdir "/plan.tsv")) > 0)

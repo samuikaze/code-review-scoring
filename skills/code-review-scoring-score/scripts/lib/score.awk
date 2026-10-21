@@ -3,6 +3,7 @@
 #            idxfile=output of diff-index.awk ("" = skip location checks)
 #            config=configs/settings.ini with the [points], [deductions] (incl. merge) and [grades] sections ("" or missing file = defaults)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = skip the code review comment checks)
+#            cplan=the review plan (ROOT/step1/standards/plan.tsv) and cstd=the standard: check only its comments
 #            tsvout / jsonout = output files  checkonly=1: validate only, write nothing
 # Input: findings.txt (format: see references/findings-format.md of code-review-scoring-code-analysis).
 # On validation errors: errors go to stderr, nothing is written, exit 1.
@@ -27,13 +28,35 @@ function err2(ln, msg) { nerr++; errs = errs "  - line " ln ": " msg "\n" }
 function err0(msg) { nerr++; errs = errs "  - " msg "\n" }
 
 # Comment ids are <plugin>#<n>: the n-th C record of the plugin's cr.txt (prepare-diff lists them in prepared.txt).
-function load_comments(    l, x, a, f, c) {
+# Whether a code review comment with these locations belongs to the standard cstd of the review plan cplan: one of its
+# files is a file of cstd, or none of its files is in the plan (a comment on the whole PR, location -) and cstd is the
+# first report. Without cstd every comment belongs to it.
+function cm_mine(loc,    l, a, n, p, i, f, any) {
+    if (cstd == "") return 1
+    if (!plload) {
+        plload = 1
+        while ((getline l < cplan) > 0) {
+            split(l, a, "\t")
+            if (a[1] == "report" && plfirst == "") plfirst = a[2]
+            else if (a[1] == "file") { plany[a[2]] = 1; if (a[3] == cstd) plmine[a[2]] = 1 }
+        }
+        close(cplan)
+    }
+    n = split(loc, p, ","); any = 0
+    for (i = 1; i <= n; i++) { f = trim(p[i]); sub(/:[0-9][-0-9]*$/, "", f); if (f in plmine) return 1; if (f in plany) any = 1 }
+    return !any && cstd == plfirst
+}
+
+function load_comments(    l, x, a, f, c, t) {
     if (crdir == "" || (getline l < (crdir "/plan.tsv")) <= 0) return
     hascr = 1
     do {
         if (l == "") continue
         split(l, a, "\t"); f = crdir "/" a[1] "/cr.txt"; c = 0
-        while ((getline x < f) > 0) if (x ~ /^[ \t]*C[ \t]*\|/) { c++; ncm++; cmid[ncm] = a[1] "#" c; cmode[a[1] "#" c] = a[3] }
+        while ((getline x < f) > 0) if (x ~ /^[ \t]*C[ \t]*\|/) {
+            c++; split(x, t, "|")
+            if (cm_mine(trim(t[3]))) { ncm++; cmid[ncm] = a[1] "#" c; cmode[a[1] "#" c] = a[3] }
+        }
         close(f)
     } while ((getline l < (crdir "/plan.tsv")) > 0)
     close(crdir "/plan.tsv")

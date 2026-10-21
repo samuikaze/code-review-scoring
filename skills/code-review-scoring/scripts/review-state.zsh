@@ -2,7 +2,9 @@
 # State control for the code review scoring workflow.
 # Steps: 1 read specs, 2 code review plugins, 3 analyze code (uses the code review results), 4 score, 5 report.
 # Status files ROOT/stepN-{pending,working,success,failed} gate the steps; step 2 has one status file per
-# plugin (ROOT/step2-<plugin>-<state>). Outputs live in ROOT/stepN/ (step 2: ROOT/step2/<plugin>/).
+# plugin (ROOT/step2-<plugin>-<state>), steps 3 to 5 one per scoring standard of the review plan that step 1 writes
+# to ROOT/step1/standards/ (ROOT/step3-<standard>-<state>). Outputs live in ROOT/step1/, ROOT/step2/<plugin>/ and
+# ROOT/stepN/<standard>/.
 emulate -L zsh
 setopt err_exit no_unset pipe_fail
 
@@ -21,17 +23,18 @@ Commands:
            when step 2 has no plan yet), the questions to relay, a failure to report, "finish", or the result.
            --inline renders prompts for the main agent (default: from subagent= in configs/settings.ini);
            --retry prints the prompt again for a failed step or plugin
-  finish   run step 4 (score) and step 5 (report) with their scripts, record both states and print the result
-           summary; refused before step 3 succeeds. Exit 1 when one of them failed (see "next")
+  finish   run step 4 (score) and step 5 (report) with their scripts for every standard of the review plan, record
+           the states and print the results; refused before step 3 succeeds. Exit 1 when one of them failed (see "next")
   show     print the state of every step (and every step 2 plugin)
   cr-plan  [--plugins FILE]
            step 2 planning: pick the plugins of configs/plugins.ini whose "applies" patterns match files in the
            PR diff; writes ROOT/step2/plan.tsv, ROOT/step2/<plugin>/files.txt and ROOT/step2/<plugin>/diff.patch
            (only that plugin's files, to save tokens). Refused before step 1 succeeds; "next" runs it
-  prompt   --step 1|2|3 [--plugin NAME] [--inline]
-           print the prompt for step N (step 2 needs --plugin); refused unless the previous step succeeded
-  set      --step N [--plugin NAME] --state working|pending|success|failed [--message TEXT]
-           record a state; enforces the gates below
+  prompt   --step 1|2|3 [--plugin NAME] [--standard NAME] [--inline]
+           print the prompt for step N (step 2 needs --plugin, step 3 --standard when several standards score the
+           PR); refused unless the previous step succeeded
+  set      --step N [--plugin NAME] [--standard NAME] --state working|pending|success|failed [--message TEXT]
+           record a state (steps 3 to 5 per standard); enforces the gates below
   config   [--subagent true|false] [--config FILE]
            without --subagent: print subagent=true|false from the [workflow] section (exit 6 if not set);
            with it: save it. true = each step runs in its own subagent, false = the main agent runs every step
@@ -40,13 +43,17 @@ Commands:
            with both: save them in the [NAME] section
            (default file of both: configs/settings.ini in the project root)
 
-Common option: --root DIR (default: tmp in the project root)
+Common options: --root DIR (default: tmp in the project root)
+                --standards FILE (default: configs/standards.ini in the project root)
 
 Gates enforced by "set":
   working  the previous step must be success; clears the status of every later step
   pending  the unit must be working; its questions.md must be newer than answers.md; needs --message
   success  the unit must be working; its outputs must exist, be valid and be current
-           (step 3: findings.txt must pass the scoring checks of score --check)
+           (step 1: the review plan ROOT/step1/standards/plan.tsv; step 3: findings.txt must pass the scoring
+           checks of score --check)
+Steps 3 to 5 also refuse to go on when a scoring standard changed after step 1 planned the review (its document,
+scan rules or settings in standards.ini).
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 Step 2 is success when cr-plan has run and every planned plugin is success (no plugins = success).
 
@@ -71,12 +78,14 @@ cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
 root="$project_root/tmp" step="" plugin="" state="" message="" git_range="" repo="." title="" reset=0
 config="$project_root/configs/settings.ini" subagent="" platform="" model="" reasoning="" plugins_file="$project_root/configs/plugins.ini"
-inline="" retry=0
+inline="" retry=0 standard="" standards="$project_root/configs/standards.ini"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
     --step) step="${2:?--step needs a value}"; shift 2 ;;
     --plugin) plugin="${2:?--plugin needs a value}"; shift 2 ;;
+    --standard) standard="${2:?--standard needs a value}"; shift 2 ;;
+    --standards) standards="${2:?--standards needs a value}"; shift 2 ;;
     --state) state="${2:?--state needs a value}"; shift 2 ;;
     --message) message="${2:?--message needs a value}"; shift 2 ;;
     --git) git_range="${2:?--git needs a value}"; shift 2 ;;
@@ -141,41 +150,48 @@ ini_set() {  # $1 = section, then KEY=VALUE pairs; replaces the section in place
 req_field() { sed -n "s/^- $1: //p" "$root/request.md" | head -1; }
 not_older() { [[ -f "$1" && -f "$2" && ! "$2" -nt "$1" ]]; }  # $1 exists and is not older than $2
 
-# Step 2 runs the code review plugins; each plugin is its own unit with its own status file.
+# Step 2 runs the code review plugins; each plugin is its own unit with its own status file. Steps 3 to 5 run once
+# per scoring standard of the review plan.
 CR=2
-# A "unit" is a step (1, 3, 4, 5) or a step 2 plugin ("2-<plugin>").
+# A "unit" is step 1, a step 2 plugin ("2-<plugin>") or a step 3 to 5 standard ("3-<standard>").
 unit_state() {
   local s
   for s in working pending success failed; do [[ -f "$root/step$1-$s" ]] && { echo "$s"; return; }; done
   echo "not-started"
 }
-unit_dir() { if [[ "$1" == $CR-* ]]; then echo "$root/step$CR/${1#$CR-}"; else echo "$root/step$1"; fi; }
+unit_dir() { if [[ "$1" == *-* ]]; then echo "$root/step${1%%-*}/${1#*-}"; else echo "$root/step$1"; fi; }
 unit_field() { [[ -f "$root/step$1-$2" ]] && sed -n "s/^$3: //p" "$root/step$1-$2" | head -1 || true; }
 clear_unit() { local s; for s in pending working success failed; do rm -f "$root/step$1-$s"; done; }
 unanswered() { local d; d="$(unit_dir "$1")"; [[ -f "$d/questions.md" ]] && ! not_older "$d/answers.md" "$d/questions.md"; }
 plan_names() { [[ -f "$root/step$CR/plan.tsv" ]] && cut -f1 "$root/step$CR/plan.tsv" || true; }
-clear_step() {  # clears the status of step $1 (step 2: every plugin status and the plan)
-  if [[ "$1" == "$CR" ]]; then
-    find "$root" -maxdepth 1 -type f -name "step$CR-*" -exec rm -f {} + 2>/dev/null || true
-    rm -f "$root/step$CR/plan.tsv"
+# The scoring standards of the review plan (one report each), in plan order.
+std_plan="$root/step1/standards/plan.tsv"
+std_names() { [[ -f "$std_plan" ]] && awk -F'\t' '$1 == "report" { print $2 }' "$std_plan" || true; }
+sub_names() { if [[ "$1" == "$CR" ]]; then plan_names; else std_names; fi; }  # the units of step 2 to 5
+clear_step() {  # clears the status of step $1 (step 2: every plugin status and the plan; steps 3 to 5: every standard)
+  if [[ "$1" -ge "$CR" ]]; then
+    find "$root" -maxdepth 1 -type f -name "step$1-*" -exec rm -f {} + 2>/dev/null || true
+    [[ "$1" == "$CR" ]] && rm -f "$root/step$CR/plan.tsv"
   else
     clear_unit "$1"
   fi
+  return 0
 }
-step_state() {  # aggregate state of a step; step 2 combines its plugins
-  if [[ "$1" != "$CR" ]]; then unit_state "$1"; return; fi
-  [[ -f "$root/step$CR/plan.tsv" ]] || { echo "not-started"; return; }
+step_state() {  # aggregate state of a step; steps 2 to 5 combine their plugins or standards
+  if [[ "$1" == 1 ]]; then unit_state "$1"; return; fi
+  if [[ "$1" == "$CR" ]]; then [[ -f "$root/step$CR/plan.tsv" ]] || { echo "not-started"; return; }
+  else [[ -n "$(std_names)" ]] || { echo "not-started"; return; }; fi
   local n s any_ws=0 all_ok=1 res=""
   while IFS= read -r n; do
     [[ -n "$n" ]] || continue
-    s="$(unit_state "$CR-$n")"
+    s="$(unit_state "$1-$n")"
     case "$s" in
       failed) res="failed" ;;
       pending) [[ "$res" == "failed" ]] || res="pending" ;;
       working) [[ -z "$res" ]] && any_ws=1 ;;
     esac
     [[ "$s" == "success" ]] || all_ok=0
-  done < <(plan_names)
+  done < <(sub_names "$1")
   if [[ -n "$res" ]]; then echo "$res"; elif [[ $any_ws -eq 1 ]]; then echo "working"
   elif [[ $all_ok -eq 1 ]]; then echo "success"; else echo "not-started"; fi
 }
@@ -187,8 +203,47 @@ check_step() {
   elif [[ -n "$plugin" ]]; then
     echo "error: --plugin is only used with --step $CR" >&2; exit 2
   fi
+  if [[ "$step" -gt "$CR" ]]; then
+    [[ -f "$std_plan" ]] || refuse "step 1 has not planned the review (missing $std_plan)"
+    # Without --standard: the only standard of the plan.
+    [[ -n "$standard" ]] || standard="$(std_names | awk '{ n++; s = $0 } END { if (n == 1) print s }')"
+    [[ -n "$standard" ]] || { echo "error: step $step needs --standard NAME: $(std_names | paste -sd, - | sed 's/,/, /g')" >&2; exit 2; }
+    std_names | grep -qxF -- "$standard" || refuse "the standard $standard does not score this review (see $std_plan)"
+  elif [[ -n "$standard" ]]; then
+    echo "error: --standard is only used with steps 3 to 5" >&2; exit 2
+  fi
 }
-require_prev() { [[ $1 -gt 1 && "$(step_state $(($1 - 1)))" != "success" ]] && refuse "step $(($1 - 1)) has not succeeded; steps cannot be skipped" || true; }
+# Step 3 needs step 2; steps 4 and 5 need the previous step of the same standard ($2).
+require_prev() {
+  if [[ $1 -gt 3 ]]; then
+    [[ "$(unit_state "$(($1 - 1))-$2")" == "success" ]] || refuse "step $(($1 - 1)) ($2) has not succeeded; steps cannot be skipped"
+  elif [[ $1 -gt 1 && "$(step_state $(($1 - 1)))" != "success" ]]; then
+    refuse "step $(($1 - 1)) has not succeeded; steps cannot be skipped"
+  fi
+  return 0
+}
+# The scoring standard $1 must be the one step 1 planned with: its document, scan rules and settings in standards.ini
+# (the resolve output without the paths, which differ between shells) must not have changed.
+res_key() { tr -d '\r' | awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "standard" || $1 == "common" { $5 = "" } $1 == "scan" { $2 = "" } { print }'; }
+std_gate() {
+  local saved="$root/step1/standards/$1.resolve" now
+  [[ -f "$saved" ]] || refuse "missing $saved; step 1 has not planned the review"
+  now="$(zsh "$script_dir/standard.zsh" resolve --standards "$standards" --settings "$config" "$1" 2>&1)" \
+    || refuse "the scoring standard $1 cannot be read: $(printf '%s\n' "$now" | head -1)"
+  [[ "$(res_key < "$saved")" == "$(printf '%s\n' "$now" | res_key)" ]] \
+    || refuse "the scoring standard $1 changed after step 1 planned the review (its document, scan rules or settings in standards.ini); restore it, or start the review again (init --reset)"
+}
+# request.md records the scoring standards of the review: name, version, sha256 and path of each document.
+record_standards() {
+  local f tmpf
+  tmpf="$(mktemp)"
+  awk '/^## Scoring standards/ { skip = 1; next } skip && /^## / { skip = 0 } !skip' "$root/request.md" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > "$tmpf"
+  { echo; echo "## Scoring standards"
+    for f in $(std_names); do
+      awk -F'\t' -v r="$f" '$1 == "standard" { print "- " r ": " $2 " " $3 " " $4 " " $5 } $1 == "common" { print "  - common standard: " $2 " " $3 " " $4 " " $5 }' "$root/step1/standards/$f.resolve"
+    done; } >> "$tmpf"
+  mv "$tmpf" "$root/request.md"
+}
 has_previous() {
   local n s
   [[ -e "$root/request.md" ]] && return 0
@@ -244,24 +299,30 @@ validate_cr() {  # checks the normalized code review result
 # Prompt of step $step (plugin $plugin): the step template plus the shared status protocol. Lines marked
 # "[sub] " are only for subagents, lines marked "[inline] " only for the main agent ($1 = 1 for inline).
 render_prompt() {
-  local root_abs p_path="" p_mode="" unit_args="--step $step" dir
+  local root_abs p_path="" p_mode="" unit_args="--step $step" dir s_doc="" c_doc="none"
   root_abs="$(abs_root)"
   dir="$root_abs/step$step"
   if [[ "$step" == "$CR" ]]; then
     p_path="$(awk -F'\t' -v n="$plugin" '$1 == n { print $2 }' "$root/step$CR/plan.tsv")"
     p_mode="$(awk -F'\t' -v n="$plugin" '$1 == n { print $3 }' "$root/step$CR/plan.tsv")"
     unit_args+=" --plugin $plugin"; dir="$root_abs/step$CR/$plugin"
+  elif [[ "$step" -gt "$CR" ]]; then
+    s_doc="$(awk -F'\t' '$1 == "standard" { print $5 }' "$root/step1/standards/$standard.resolve")"
+    c_doc="$(awk -F'\t' '$1 == "common" { print $5 }' "$root/step1/standards/$standard.resolve")"
+    unit_args+=" --standard $standard"; dir="$root_abs/step$step/$standard"
   fi
   cat "$skill_dir/assets/prompts/step$step.md" "$skill_dir/assets/prompts/protocol.md" |
     LC_ALL=C awk -v inline="$1" -v root="$root_abs" -v sc="$self_cmd set --root \"$root_abs\"" -v repo="$(req_field Repository)" \
       -v range="$(req_field 'Diff range')" -v title="$(req_field Title)" -v skills="$skills_dir" -v plugin="$plugin" \
-      -v ppath="$p_path" -v pmode="$p_mode" -v unit="$unit_args" -v dir="$dir" -v step="$step" '
+      -v ppath="$p_path" -v pmode="$p_mode" -v unit="$unit_args" -v dir="$dir" -v step="$step" \
+      -v std="$standard" -v sdoc="$s_doc" -v cdoc="${c_doc:-none}" '
       function rep(s, a, b,    i, o) { o = ""; while ((i = index(s, a)) > 0) { o = o substr(s, 1, i - 1) b; s = substr(s, i + length(a)) } return o s }
       /^\[sub\] / { if (inline) next; sub(/^\[sub\] /, "") }
       /^\[inline\] / { if (!inline) next; sub(/^\[inline\] /, "") }
       { l = rep($0, "{{ROOT}}", root); l = rep(l, "{{STATE_CMD}}", sc); l = rep(l, "{{REPO}}", repo); l = rep(l, "{{RANGE}}", range)
         l = rep(l, "{{SKILLS_DIR}}", skills); l = rep(l, "{{PLUGIN_PATH}}", ppath); l = rep(l, "{{PLUGIN}}", plugin); l = rep(l, "{{MODE}}", pmode)
         l = rep(l, "{{UNIT}}", unit); l = rep(l, "{{DIR}}", dir); l = rep(l, "{{STEP}}", step)
+        l = rep(l, "{{STANDARD}}", std); l = rep(l, "{{STANDARD_DOC}}", sdoc); l = rep(l, "{{COMMON_DOC}}", cdoc)
         print rep(l, "{{TITLE}}", title) }'
 }
 # The action "next" prints for unit $1 (label $2) in state $3; returns 1 when the unit needs nothing.
@@ -269,9 +330,12 @@ next_action() {
   local u="$1" label="$2" s="$3" d args
   [[ "$s" == "success" ]] && return 1
   if [[ "$u" == $CR-* ]]; then
-    step="$CR" plugin="${u#$CR-}" d="$(abs_root)/step$CR/${u#$CR-}" args="--step $CR --plugin ${u#$CR-}"
+    step="$CR" plugin="${u#$CR-}" standard="" d="$(abs_root)/step$CR/${u#$CR-}" args="--step $CR --plugin ${u#$CR-}"
+  elif [[ "$u" == *-* ]]; then
+    step="${u%%-*}" plugin="" standard="${u#*-}" d="$(abs_root)/step${u%%-*}/${u#*-}" args="--step ${u%%-*} --standard ${u#*-}"
+    std_gate "$standard"
   else
-    step="$u" plugin="" d="$(abs_root)/step$u" args="--step $u"
+    step="$u" plugin="" standard="" d="$(abs_root)/step$u" args="--step $u"
   fi
   case "$s" in
     pending)
@@ -340,11 +404,15 @@ case "$cmd" in
       s="$(step_state $n)"
       if [[ $n == "$CR" ]]; then
         printf "step %d  %-11s %s\n" "$CR" "$s" "$([[ -f "$root/step$CR/plan.tsv" ]] && echo "$(plan_names | grep -c . || true) plugin(s) planned" || echo "cr-plan not run")"
+      elif [[ $n -gt $CR ]]; then
+        printf "step %d  %-11s %s\n" "$n" "$s" "$([[ -f "$std_plan" ]] && echo "$(std_names | grep -c . || true) standard(s)" || echo "not planned")"
+      fi
+      if [[ $n -ge $CR ]]; then
         while IFS= read -r p; do
           [[ -n "$p" ]] || continue
-          ps="$(unit_state "$CR-$p")"
-          printf "  - %-28s %-11s %s  %s\n" "$p" "$ps" "$(unit_field "$CR-$p" "$ps" time)" "$(unit_field "$CR-$p" "$ps" message)"
-        done < <(plan_names)
+          ps="$(unit_state "$n-$p")"
+          printf "  - %-28s %-11s %s  %s\n" "$p" "$ps" "$(unit_field "$n-$p" "$ps" time)" "$(unit_field "$n-$p" "$ps" message)"
+        done < <(sub_names "$n")
         continue
       fi
       printf "step %d  %-11s %s  %s\n" "$n" "$s" "$(unit_field $n "$s" time)" "$(unit_field $n "$s" message)"
@@ -364,67 +432,78 @@ case "$cmd" in
       [[ -n "$p" ]] || continue
       next_action "$CR-$p" "step $CR plugin $p" "$(unit_state "$CR-$p")" && exit 0
     done < <(plan_names)
-    next_action 3 "step 3" "$(unit_state 3)" && exit 0
-    s4="$(unit_state 4)" s5="$(unit_state 5)"
-    if [[ "$s4" == "failed" && "$(unit_field 4 failed message)" == "findings.txt failed validation"* ]]; then
-      echo "note: scoring rejected findings.txt (details: $(abs_root)/step4/errors.log); step 3 runs again"
-      retry=1; step=3; next_action 3 "step 3" "failed"; exit 0
-    fi
-    for n in 4 5; do
-      s="$(unit_state $n)"
-      if [[ "$s" == "failed" && $retry -eq 0 ]]; then
-        echo "action: failed"
-        echo "step $n failed: $(unit_field $n failed message)"
-        echo "details: $(abs_root)/step$n/errors.log"
-        echo "Tell the user the reason and ask whether to retry; to retry, run finish."
-        exit 0
+    [[ -n "$(std_names)" ]] || { echo "error: step 1 has not planned the review (missing $std_plan); redo step 1" >&2; exit 2; }
+    for n in $(std_names); do next_action "3-$n" "step 3 ($n)" "$(unit_state "3-$n")" && exit 0; done
+    for n in $(std_names); do
+      if [[ "$(unit_state "4-$n")" == "failed" && "$(unit_field "4-$n" failed message)" == "findings.txt failed validation"* ]]; then
+        echo "note: scoring rejected findings.txt of $n (details: $(abs_root)/step4/$n/errors.log); step 3 ($n) runs again"
+        retry=1; next_action "3-$n" "step 3 ($n)" "failed"; exit 0
       fi
     done
-    if [[ "$s5" != "success" ]]; then
+    for n in $(std_names); do
+      for k in 4 5; do
+        s="$(unit_state "$k-$n")"
+        if [[ "$s" == "failed" && $retry -eq 0 ]]; then
+          echo "action: failed"
+          echo "step $k ($n) failed: $(unit_field "$k-$n" failed message)"
+          echo "details: $(abs_root)/step$k/$n/errors.log"
+          echo "Tell the user the reason and ask whether to retry; to retry, run finish."
+          exit 0
+        fi
+      done
+    done
+    if [[ "$(step_state 5)" != "success" ]]; then
       echo "action: finish"
-      echo "Run finish: it runs step 4 (score) and step 5 (report) with their scripts."
+      echo "Run finish: it runs step 4 (score) and step 5 (report) with their scripts for every standard."
       exit 0
     fi
     echo "action: done"
-    awk -F'\t' '$1 == "grade" { g = $2 } $1 == "total" { t = $2 } $1 == "capped" && $2 == 1 { c = " (capped at B because of a Critical finding)" }
-      $1 == "dim" { d = d $2 " " $3 "/" $4 "  " } END { print "result: grade " g ", total " t "/100" c; print "dimensions: " d }' "$root/step4/score.tsv"
-    echo "report: $(head -1 "$root/step5/report-path.txt")"
+    for n in $(std_names); do
+      awk -F'\t' -v n="$n" '$1 == "grade" { g = $2 } $1 == "total" { t = $2 } $1 == "capped" && $2 == 1 { c = " (capped at B because of a Critical finding)" }
+        $1 == "dim" { d = d $2 " " $3 "/" $4 "  " } END { print "result (" n "): grade " g ", total " t "/100" c; print "dimensions: " d }' "$root/step4/$n/score.tsv"
+      echo "report: $(head -1 "$root/step5/$n/report-path.txt")"
+    done
     ;;
 
   finish)
     [[ -f "$root/request.md" ]] || { echo "error: no review in $root; run init first" >&2; exit 2; }
     [[ "$(step_state 3)" == "success" ]] || refuse "step 3 has not succeeded; steps cannot be skipped"
     root_abs="$(abs_root)"
-    # $1 = step, $2 = message; records the failure and stops
+    for n in $(std_names); do std_gate "$n"; done
+    # $1 = step, $2 = standard, $3 = message; records the failure and stops
     finish_failed() {
-      "${self[@]}" set --root "$root_abs" --step "$1" --state failed --message "$2" > /dev/null
-      echo "step $1 failed: $2"
-      echo "details: $root_abs/step$1/errors.log"
+      "${self[@]}" set --root "$root_abs" --standards "$standards" --step "$1" --standard "$2" --state failed --message "$3" > /dev/null
+      echo "step $1 ($2) failed: $3"
+      echo "details: $root_abs/step$1/$2/errors.log"
       echo "next: run next"
       exit 1
     }
-    "${self[@]}" set --root "$root_abs" --step 4 --state working > /dev/null
-    rc=0; out="$(run_tool code-review-scoring-score score --root "$root_abs" 2>&1)" || rc=$?
-    if [[ $rc -ne 0 ]]; then
-      printf '[%s] score exited %d:\n%s\n' "$(now)" "$rc" "$out" >> "$root/step4/errors.log"
-      [[ $rc -eq 1 ]] && finish_failed 4 "findings.txt failed validation; redo step 3"
-      finish_failed 4 "scoring exited $rc: $(printf '%s\n' "$out" | head -1)"
-    fi
-    grade="$(printf '%s\n' "$out" | grep '^grade ' | head -1)"
-    "${self[@]}" set --root "$root_abs" --step 4 --state success --message "$grade" > /dev/null
-    "${self[@]}" set --root "$root_abs" --step 5 --state working > /dev/null
-    rc=0; rout="$(run_tool code-review-scoring-report render-report --root "$root_abs" 2>&1)" || rc=$?
-    if [[ $rc -ne 0 ]]; then
-      printf '[%s] render-report exited %d:\n%s\n' "$(now)" "$rc" "$rout" >> "$root/step5/errors.log"
-      finish_failed 5 "render-report exited $rc: $(printf '%s\n' "$rout" | head -1)"
-    fi
-    if ! sout="$("${self[@]}" set --root "$root_abs" --step 5 --state success --message "report published" 2>&1)"; then
-      printf '[%s] %s\n' "$(now)" "$sout" >> "$root/step5/errors.log"
-      finish_failed 5 "$(printf '%s\n' "$sout" | head -1)"
-    fi
-    echo "steps 4 and 5: success"
-    printf '%s\n' "$out" | grep -v '^wrote '
-    echo "report: $(head -1 "$root/step5/report-path.txt")"
+    # Each standard in turn; the standards whose report is already published are kept.
+    for n in $(std_names); do
+      [[ "$(unit_state "5-$n")" != "success" ]] || continue
+      "${self[@]}" set --root "$root_abs" --standards "$standards" --step 4 --standard "$n" --state working > /dev/null
+      rc=0; out="$(run_tool code-review-scoring-score score --root "$root_abs" --standards "$standards" --standard "$n" 2>&1)" || rc=$?
+      if [[ $rc -ne 0 ]]; then
+        printf '[%s] score exited %d:\n%s\n' "$(now)" "$rc" "$out" >> "$root/step4/$n/errors.log"
+        [[ $rc -eq 1 ]] && finish_failed 4 "$n" "findings.txt failed validation; redo step 3"
+        finish_failed 4 "$n" "scoring exited $rc: $(printf '%s\n' "$out" | head -1)"
+      fi
+      grade="$(printf '%s\n' "$out" | grep '^grade ' | head -1)"
+      "${self[@]}" set --root "$root_abs" --standards "$standards" --step 4 --standard "$n" --state success --message "$grade" > /dev/null
+      "${self[@]}" set --root "$root_abs" --standards "$standards" --step 5 --standard "$n" --state working > /dev/null
+      rc=0; rout="$(run_tool code-review-scoring-report render-report --root "$root_abs" --standard "$n" 2>&1)" || rc=$?
+      if [[ $rc -ne 0 ]]; then
+        printf '[%s] render-report exited %d:\n%s\n' "$(now)" "$rc" "$rout" >> "$root/step5/$n/errors.log"
+        finish_failed 5 "$n" "render-report exited $rc: $(printf '%s\n' "$rout" | head -1)"
+      fi
+      if ! sout="$("${self[@]}" set --root "$root_abs" --standards "$standards" --step 5 --standard "$n" --state success --message "report published" 2>&1)"; then
+        printf '[%s] %s\n' "$(now)" "$sout" >> "$root/step5/$n/errors.log"
+        finish_failed 5 "$n" "$(printf '%s\n' "$sout" | head -1)"
+      fi
+      echo "steps 4 and 5 ($n): success"
+      printf '%s\n' "$out" | grep -v '^wrote '
+      echo "report: $(head -1 "$root/step5/$n/report-path.txt")"
+    done
     ;;
 
   cr-plan)
@@ -488,14 +567,19 @@ case "$cmd" in
     check_step
     case "$state" in working|pending|success|failed) ;; *) echo "error: --state must be working, pending, success or failed" >&2; exit 2 ;; esac
     [[ -f "$root/request.md" ]] || { echo "error: no review in $root; run init first" >&2; exit 2; }
-    unit="$step"; [[ "$step" == "$CR" ]] && unit="$CR-$plugin"
-    label="step $step"; [[ "$step" == "$CR" ]] && label="step $CR plugin $plugin"
+    unit="$step" label="step $step"
+    [[ "$step" == "$CR" ]] && { unit="$CR-$plugin" label="step $CR plugin $plugin"; }
+    if [[ "$step" -gt "$CR" ]]; then
+      unit="$step-$standard" label="step $step ($standard)"
+      [[ "$state" == "working" || "$state" == "success" ]] && std_gate "$standard"
+    fi
     cur="$(unit_state "$unit")"
     d="$(unit_dir "$unit")"
     case "$state" in
       working)
-        require_prev "$step"
-        for ((k = step + 1; k <= 5; k++)); do clear_step "$k"; done
+        require_prev "$step" "$standard"
+        # Later steps start over: every unit of them, or only the same standard's after steps 3 and 4.
+        for ((k = step + 1; k <= 5; k++)); do if [[ "$step" -gt "$CR" ]]; then clear_unit "$k-$standard"; else clear_step "$k"; fi; done
         mkdir -p "$d"
         ;;
       pending)
@@ -518,6 +602,8 @@ case "$cmd" in
               refuse "spec-context.md still has unresolved inputs or open questions"
             fi
             unanswered 1 && refuse "$d/questions.md has not been answered"
+            [[ -s "$std_plan" ]] || refuse "missing $std_plan: the review was not planned; check configs/standards.ini (setup check), then run standard plan --diff \"$d/pr.diff\" --out \"$d/standards\" of code-review-scoring and add its confirm.tsv to the Severity facts of spec-context.md"
+            record_standards
             ;;
           2)
             [[ -s "$d/cr.txt" ]] || refuse "missing $d/cr.txt"
@@ -526,20 +612,20 @@ case "$cmd" in
             ;;
           3)
             for f in prepared.txt findings.txt; do [[ -s "$d/$f" ]] || refuse "missing $d/$f"; done
-            unanswered 3 && refuse "$d/questions.md has not been answered"
-            if ! out="$(run_tool code-review-scoring-score score --root "$root" --check 2>&1)"; then
+            unanswered "$unit" && refuse "$d/questions.md has not been answered"
+            if ! out="$(run_tool code-review-scoring-score score --root "$root" --standards "$standards" --standard "$standard" --check 2>&1)"; then
               refuse "findings.txt does not pass the scoring checks; fix it, then set success again:"$'\n'"$out"
             fi
             ;;
           4)
             for f in score.tsv score.json; do
               [[ -s "$d/$f" ]] || refuse "missing $d/$f"
-              not_older "$d/$f" "$root/step3/findings.txt" || refuse "$d/$f is older than step3/findings.txt; rerun scoring"
+              not_older "$d/$f" "$root/step3/$standard/findings.txt" || refuse "$d/$f is older than step3/$standard/findings.txt; rerun scoring"
             done
             ;;
           5)
             [[ -s "$d/report.md" ]] || refuse "missing $d/report.md"
-            not_older "$d/report.md" "$root/step4/score.tsv" || refuse "report.md is older than step4/score.tsv; render again"
+            not_older "$d/report.md" "$root/step4/$standard/score.tsv" || refuse "report.md is older than step4/$standard/score.tsv; render again"
             while IFS= read -r p; do
               [[ -n "$p" ]] || continue
               not_older "$d/report.md" "$root/step$CR/$p/cr.txt" || refuse "report.md is older than step$CR/$p/cr.txt; render again"

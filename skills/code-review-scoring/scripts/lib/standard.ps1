@@ -475,3 +475,77 @@ function Invoke-StdDiff([string[]]$Old, [string[]]$New) {
     $out.Add("$add added, $del removed, $chg changed")
     return , $out.ToArray()
 }
+
+# ---------------------------------------------------------------- plan of a review
+
+# Each file goes to the first framework standard whose applies matches it. The others are common files: with one
+# report they go to it; with several, to the framework of the nearest folder above them that holds files of
+# frameworks, or to every report when that folder holds files of several frameworks (the repository root, for
+# example). With no framework file at all the common standard makes the only report. Writes OutDir/<name>.diff
+# with the blocks of the diff unchanged (read and written byte for byte, like awk).
+function Invoke-StdPlan([string]$DiffPath, [string[]]$Ini, [string]$OutDir) {
+    $out = New-Object System.Collections.Generic.List[string]
+    $bytes = New-Object System.Text.UTF8Encoding($false)
+    $latin = [Text.Encoding]::GetEncoding(28591)
+    $fw = New-Object System.Collections.Generic.List[string]; $app = New-StdMap; $cm = ''
+    foreach ($l in $Ini) {
+        $a = $l.Split("`t")
+        if ($a[0] -ceq 'std' -and $a[5] -ceq 'common') { $cm = $a[1] }
+        elseif ($a[0] -ceq 'std') { $fw.Add($a[1]) }
+        elseif ($a[0] -ceq 'applies') { $app[$a[1]] = [regex]::new($a[2]) }
+    }
+    $paths = New-Object System.Collections.Generic.List[string]; $blocks = New-Object System.Collections.Generic.List[object]
+    $lines = $latin.GetString([IO.File]::ReadAllBytes($DiffPath)).Split("`n")
+    $n = $lines.Count; if ($n -gt 0 -and $lines[$n - 1] -eq '') { $n-- }
+    for ($i = 0; $i -lt $n; $i++) {
+        $l = $lines[$i]
+        if ($l.StartsWith('diff --git ', [StringComparison]::Ordinal)) {
+            $p = $l.TrimEnd("`r")
+            if ($p -cmatch ' "?b/.*$') { $p = $Matches[0].Substring(1).Trim('"'); if ($p.StartsWith('b/')) { $p = $p.Substring(2) } }
+            $paths.Add($p); $sb = New-Object System.Text.StringBuilder; [void]$sb.Append($l); $blocks.Add($sb)
+        }
+        elseif ($blocks.Count -gt 0) { [void]$blocks[$blocks.Count - 1].Append("`n").Append($l) }
+    }
+    if ($paths.Count -eq 0) { $out.Add("!error`t`tthe diff lists no file"); return , $out.ToArray() }
+    $own = @(); $cnt = New-StdMap
+    foreach ($p in $paths) {
+        $o = ''
+        foreach ($f in $fw) { if ($app.ContainsKey($f) -and $app[$f].IsMatch($p)) { $o = $f; $cnt[$f] = 1 + [int]$cnt[$f]; break } }
+        $own += $o
+    }
+    $rep = New-Object System.Collections.Generic.List[string]
+    foreach ($f in $fw) { if ($cnt.ContainsKey($f)) { $rep.Add($f) } }
+    $to = New-StdMap; $kind = @()
+    if ($rep.Count -eq 0) {
+        if ($cm -eq '') { $out.Add("!error`t`tno framework standard covers the files of this PR and no common standard is registered"); return , $out.ToArray() }
+        $rep.Add($cm)
+        for ($i = 0; $i -lt $paths.Count; $i++) { $to["$i`t$cm"] = 1; $kind += 'common' }
+    }
+    else {
+        for ($i = 0; $i -lt $paths.Count; $i++) {
+            if ($own[$i] -ne '') { $to["$i`t$($own[$i])"] = 1; $kind += 'framework'; continue }
+            $kind += $(if ($cm -ne '') { 'common' } else { 'none' })
+            if ($rep.Count -eq 1) { $to["$i`t$($rep[0])"] = 1; continue }
+            $d = $paths[$i]
+            do {
+                $d = if ($d.Contains('/')) { $d.Substring(0, $d.LastIndexOf('/')) } else { '' }
+                $hit = New-StdMap
+                for ($j = 0; $j -lt $paths.Count; $j++) {
+                    if ($own[$j] -ne '' -and ($d -eq '' -or $paths[$j].StartsWith("$d/", [StringComparison]::Ordinal))) { $hit[$own[$j]] = 1 }
+                }
+            } while ($hit.Count -eq 0 -and $d -ne '')
+            foreach ($r in $rep) { if ($hit.Count -ne 1 -or $hit.ContainsKey($r)) { $to["$i`t$r"] = 1 } }
+        }
+    }
+    foreach ($r in $rep) {
+        $sb = New-Object System.Text.StringBuilder; $c = 0
+        for ($i = 0; $i -lt $paths.Count; $i++) { if ($to.ContainsKey("$i`t$r")) { $c++; [void]$sb.Append($blocks[$i].ToString()).Append("`n") } }
+        [IO.File]::WriteAllBytes((Join-Path $OutDir "$r.diff"), $latin.GetBytes($sb.ToString()))
+        $out.Add("report`t$r`t$c")
+    }
+    for ($i = 0; $i -lt $paths.Count; $i++) {
+        $p = $bytes.GetString($latin.GetBytes($paths[$i]))
+        foreach ($r in $rep) { if ($to.ContainsKey("$i`t$r")) { $out.Add("file`t$p`t$r`t$($kind[$i])") } }
+    }
+    return , $out.ToArray()
+}

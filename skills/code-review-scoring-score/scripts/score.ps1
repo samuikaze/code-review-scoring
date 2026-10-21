@@ -43,12 +43,17 @@ $projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
 if (-not $Root -and -not $Findings) { $Root = Join-Path $projectRoot 'tmp' }
 if (-not $Config) { $Config = Join-Path $projectRoot 'configs/settings.ini' }
 if (-not $Standards) { $Standards = Join-Path $projectRoot 'configs/standards.ini' }
+$cplan = ''; $cstd = ''; $sub = ''
 if ($Root) {
     if (-not [IO.Directory]::Exists((Resolve-UserPath $Root))) { Exit-WithError "review root not found: $Root" }
-    if (-not $Findings) { $Findings = Join-Path $Root 'step3/findings.txt' }
+    # With a review plan (step 1 of the workflow), each standard has its own diff and step folders.
+    $cstd = Get-PlanStandard $Root $Standard
+    if ($cstd) { $Standard = $cstd; $cplan = Join-Path $Root 'step1/standards/plan.tsv'; $sub = "/$cstd" }
+    if (-not $Findings) { $Findings = Join-Path $Root "step3$sub/findings.txt" }
+    if (-not $Diff -and -not $Git -and $cstd) { $Diff = Join-Path $Root "step1/standards/$cstd.diff" }
     if (-not $Diff -and -not $Git -and (Test-UserFile (Join-Path $Root 'step1/pr.diff'))) { $Diff = Join-Path $Root 'step1/pr.diff' }
     if (-not $OutDir -and -not $Check) {
-        $OutDir = Join-Path $Root 'step4'
+        $OutDir = Join-Path $Root "step4$sub"
         [void][IO.Directory]::CreateDirectory((Resolve-UserPath $OutDir))
     }
     # Scoring must wait until every input is resolved and every question is answered.
@@ -62,7 +67,7 @@ if ($Root) {
             exit 3
         }
     }
-    foreach ($s in 'step1', 'step3') {
+    foreach ($s in 'step1', "step3$sub") {
         if ((Test-UserFile (Join-Path $Root "$s/questions.md")) -and -not (Test-UserFile (Join-Path $Root "$s/answers.md"))) {
             [Console]::Error.WriteLine("error: $(Join-Path $Root "$s/questions.md") has no answers.md yet; ask the user first")
             exit 3
@@ -76,13 +81,17 @@ if (-not $OutDir) { $OutDir = Split-Path -Parent (Resolve-UserPath $Findings) }
 # Check items of the standard and of the common standard, and the points overrides of the standard
 # (code-review-scoring/scripts/standard.ps1 resolve, run with the same PowerShell; it prints its own errors).
 $def = @{}; $adj = @{}; $override = @{}; $std = $null; $common = $null
-$resolveArgs = @('resolve', '--standards', $Standards, '--settings', $Config)
-if ($Standard) { $resolveArgs += $Standard }
-$exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-$prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-try { $resolved = @(& $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'skills/code-review-scoring/scripts/standard.ps1') @resolveArgs) }
-finally { $ErrorActionPreference = $prev }
-if ($LASTEXITCODE -ne 0) { exit 2 }
+# With the review plan: the standard as step 1 planned it (the workflow refuses to go on when it has changed since).
+if ($cstd) { $resolved = @(Read-Utf8Lines (Join-Path $Root "step1/standards/$cstd.resolve") | Where-Object { $_ }) }
+else {
+    $resolveArgs = @('resolve', '--standards', $Standards, '--settings', $Config)
+    if ($Standard) { $resolveArgs += $Standard }
+    $exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $resolved = @(& $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'skills/code-review-scoring/scripts/standard.ps1') @resolveArgs) }
+    finally { $ErrorActionPreference = $prev }
+    if ($LASTEXITCODE -ne 0) { exit 2 }
+}
 foreach ($l in $resolved) {
     $a = $l -split "`t"
     switch -CaseSensitive ($a[0]) {
@@ -192,7 +201,11 @@ if ($Root -and (Test-UserFile (Join-Path $Root 'step2/plan.tsv'))) {
     $hasCr = $true
     foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step2/plan.tsv') | Where-Object { $_ })) {
         $p = $l -split "`t"; $crFile = Join-Path $Root "step2/$($p[0])/cr.txt"; $n = 0
-        if (Test-UserFile $crFile) { foreach ($x in (Read-Utf8Lines $crFile)) { if ($x -match '^\s*C\s*\|') { $n++; $commentMode["$($p[0])#$n"] = $p[2] } } }
+        if (Test-UserFile $crFile) {
+            foreach ($x in (Read-Utf8Lines $crFile)) {
+                if ($x -match '^\s*C\s*\|') { $n++; if (Test-CommentOwner $cplan $cstd (@($x -split '\|') + '')[2].Trim()) { $commentMode["$($p[0])#$n"] = $p[2] } }
+            }
+        }
     }
 }
 $used = @{}; $rejected = New-Object System.Collections.Generic.List[object]; $rejectedIds = @{}

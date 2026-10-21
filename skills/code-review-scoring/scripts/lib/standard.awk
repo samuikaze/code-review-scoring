@@ -6,6 +6,8 @@
 #            mode=scan       input: a scan rule file; codes=FILE with the "mode=doc" output of its document
 #            mode=standards  input: configs/standards.ini; settings=FILE with [points] (may be missing)
 #            mode=diff       input: the "mode=doc" outputs of the old and the new document
+#            mode=plan       input: the PR diff; ini=FILE with the "mode=standards" output, out=DIR where the diff of
+#                            each report is written (DIR/<name>.diff)
 #            mode=re         input: "!re" records; prints the line of the first regex awk cannot compile
 #                            (awk itself stops with an error; only=N tests record N only)
 # Output: TAB-separated records, and diagnostics "!error<TAB>line<TAB>message" / "!warn<TAB>line<TAB>message"
@@ -42,6 +44,7 @@ BEGIN {
     }
 }
 
+mode == "plan" { plan_line($0); next }
 { sub(/\r$/, ""); if (FNR == 1 && substr($0, 1, 3) == BOM) $0 = substr($0, 4); gsub(NBSP, " ") }
 mode == "doc" { doc_line($0); next }
 mode == "scan" { scan_line($0); next }
@@ -54,6 +57,7 @@ END {
     else if (mode == "scan") scan_end()
     else if (mode == "standards") std_end()
     else if (mode == "diff") diff_end()
+    else if (mode == "plan") plan_end()
 }
 
 # ---------------------------------------------------------------- Markdown document
@@ -426,4 +430,62 @@ function diff_end(   i, j, c, x, f, nf, add, del, chg, d) {
     for (i = 1; i <= ncf["n"]; i++) if (!hascf["o", cf["n", i]]) { print "+ confirm " cf["n", i]; add++ }
     for (i = 1; i <= ncf["o"]; i++) if (!hascf["n", cf["o", i]]) { print "- confirm " cf["o", i]; del++ }
     print (add + 0) " added, " (del + 0) " removed, " (chg + 0) " changed"
+}
+
+# ---------------------------------------------------------------- plan of a review
+
+# Keeps the PR diff as one block per file (lines unchanged, so the diff of each report is a valid diff).
+function plan_line(l,   p) {
+    if (l ~ /^diff --git /) {
+        p = l; sub(/\r$/, "", p)
+        if (match(p, / "?b\/.*$/)) { p = substr(p, RSTART + 1); gsub(/^"|"$/, "", p); sub(/^b\//, "", p) }
+        nb++; bpath[nb] = p; blk[nb] = l
+    }
+    else if (nb > 0) blk[nb] = blk[nb] "\n" l
+}
+
+# Each file goes to the first framework standard whose applies matches it. The others are common files: with one
+# report they go to it; with several, to the framework of the nearest folder above them that holds files of
+# frameworks, or to every report when that folder holds files of several frameworks (the repository root, for
+# example). With no framework file at all the common standard makes the only report.
+function plan_end(   l, a, i, j, k, p, d, n, hit, cm, f) {
+    while ((getline l < ini) > 0) {
+        split(l, a, "\t")
+        if (a[1] == "std" && a[6] == "common") cm = a[2]
+        else if (a[1] == "std") fw[++nfw] = a[2]
+        else if (a[1] == "applies") app[a[2]] = a[3]
+    }
+    close(ini)
+    if (!nb) { diag("error", "", "the diff lists no file"); return }
+    for (i = 1; i <= nb; i++) {
+        own[i] = ""
+        for (k = 1; k <= nfw; k++) if (bpath[i] ~ app[fw[k]]) { own[i] = fw[k]; cnt[fw[k]]++; break }
+    }
+    for (k = 1; k <= nfw; k++) if (cnt[fw[k]]) rep[++nrep] = fw[k]
+    if (!nrep) {
+        if (cm == "") { diag("error", "", "no framework standard covers the files of this PR and no common standard is registered"); return }
+        rep[++nrep] = cm
+        for (i = 1; i <= nb; i++) { to[i, cm] = 1; kind[i] = "common" }
+    }
+    else for (i = 1; i <= nb; i++) {
+        if (own[i] != "") { to[i, own[i]] = 1; kind[i] = "framework"; continue }
+        kind[i] = (cm != "") ? "common" : "none"
+        if (nrep == 1) { to[i, rep[1]] = 1; continue }
+        d = bpath[i]
+        do {
+            d = (index(d, "/") ? substr(d, 1, match(d, /\/[^\/]*$/) - 1) : "")
+            n = 0; split("", hit)
+            for (j = 1; j <= nb; j++)
+                if (own[j] != "" && !(own[j] in hit) && (d == "" || index(bpath[j], d "/") == 1)) { hit[own[j]] = 1; n++ }
+        } while (n == 0 && d != "")
+        for (k = 1; k <= nrep; k++) if (n != 1 || (rep[k] in hit)) to[i, rep[k]] = 1
+    }
+    for (k = 1; k <= nrep; k++) {
+        n = 0; f = out "/" rep[k] ".diff"
+        printf "" > f
+        for (i = 1; i <= nb; i++) if ((i SUBSEP rep[k]) in to) { n++; print blk[i] > f }
+        close(f)
+        print "report\t" rep[k] "\t" n
+    }
+    for (i = 1; i <= nb; i++) for (k = 1; k <= nrep; k++) if ((i SUBSEP rep[k]) in to) print "file\t" bpath[i] "\t" rep[k] "\t" kind[i]
 }

@@ -14,6 +14,8 @@ Render the review report: part one holds the code review results of every plugin
 **Input:** `tmp/step1/spec-context.md`, the code review results `tmp/step2/plan.tsv`, `tmp/step2/skipped.tsv`, `tmp/step2/<plugin>/cr.txt`, `tmp/step3/findings.txt`, `tmp/step4/score.tsv` and `tmp/step4/score.json` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one). Without `tmp/step2/plan.tsv` the report states that no code review was run.
 **Output:** the final report `reports/<YYYY-MM-DD>_<PR title>.md` (`reports/` next to the review root), a working copy `tmp/step5/report.md`, and `tmp/step5/report-path.txt` with the final report's absolute path.
 
+With the review plan of the workflow (`tmp/step1/standards/plan.tsv`, written in step 1), each scoring standard has its own folders: `tmp/step3/<standard>/`, `tmp/step4/<standard>/` and `tmp/step5/<standard>/`; pass `--standard <standard>` (PowerShell `-Standard`) to the scripts (it may be left out when only one standard scores the PR). They then read only that standard's part of the diff (`tmp/step1/standards/<standard>.diff`), its snapshot `tmp/step1/standards/<standard>.resolve` and the code review comments on its files. The final report is then named `<YYYY-MM-DD>_<PR title>_<standard>.md`.
+
 ## Modes
 
 - **Workflow mode:** `code-review-scoring` runs this step's script itself with `review-state finish`; no agent is dispatched.

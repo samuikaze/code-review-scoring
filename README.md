@@ -13,11 +13,22 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 | Skill | 角色 | 產出（本專案根目錄的 `tmp/` 下；最終報告在本專案的 `reports/`） |
 | --- | --- | --- |
 | `code-review-scoring` | 主 Agent：確認執行方式、依序派發 Sub-Agent、轉達問題、以狀態檔把關 | `request.md`、`inputs/`、`answers.md` |
-| `code-review-scoring-spec-reading` | 步驟 1：閱讀規格書 | `step1/pr.diff`、`step1/spec-context.md` |
+| `code-review-scoring-spec-reading` | 步驟 1：閱讀規格書，並規劃這個 PR 要用哪些評分標準 | `step1/pr.diff`、`step1/spec-context.md`、`step1/standards/` |
 | 外掛 CR Skill（`configs/plugins.ini`） | 步驟 2：CR，依異動檔案決定要跑哪些外掛 | `step2/plan.tsv`、`step2/<外掛>/cr.txt` |
-| `code-review-scoring-code-analysis` | 步驟 3：分析程式碼（確認 CR 意見並轉為扣分項） | `step3/prepared.txt`、`step3/findings.txt` |
-| `code-review-scoring-score` | 步驟 4：打分數（完整流程中由 `review-state finish` 直接執行腳本） | `step4/score.tsv`、`step4/score.json` |
-| `code-review-scoring-report` | 步驟 5：產出報告（CR 結果＋分數結果；完整流程中由 `review-state finish` 直接執行腳本） | 最終報告 `reports/<日期>_<PR 標題>.md`，工作副本 `step5/report.md` |
+| `code-review-scoring-code-analysis` | 步驟 3：分析程式碼（確認 CR 意見並轉為扣分項），每個評分標準各做一次 | `step3/<標準>/prepared.txt`、`step3/<標準>/findings.txt` |
+| `code-review-scoring-score` | 步驟 4：打分數（完整流程中由 `review-state finish` 直接執行腳本） | `step4/<標準>/score.tsv`、`step4/<標準>/score.json` |
+| `code-review-scoring-report` | 步驟 5：產出報告（CR 結果＋分數結果；完整流程中由 `review-state finish` 直接執行腳本） | 最終報告 `reports/<日期>_<PR 標題>_<標準>.md`，工作副本 `step5/<標準>/report.md` |
+
+### 依評分標準拆分報告
+
+一個 PR 可能同時改到後端與前端。步驟 1 會依 `configs/standards.ini` 規劃這次的評分（`standard plan`）：
+
+- 每個框架評分標準（例如 `springboot-3`、`angular`）只要有檔案符合它的 `applies`，就各自產出一份報告；步驟 3～5 依標準分開執行，狀態也分開記錄。
+- 不屬於任何框架標準的檔案（README、CI 設定、Dockerfile 等）用通用標準評分，歸入同一個專案的報告：以檔案所在目錄往上找，最近的目錄中有哪個框架標準的檔案，就歸入那份報告；判斷不出來時（例如根目錄的 README）每份報告都會列入。
+- PR 完全沒有框架標準的檔案時，只用通用標準產出一份報告，所以每個 PR 至少有一份報告。
+- 每份報告只列出落在自己檔案上的 CR 意見；意見編號維持外掛原本的編號，方便對照。
+- 各標準的「事先確認事項」會列在 `spec-context.md` 的嚴重度事實中，於步驟 1 與缺少的文件一起詢問。
+- 步驟 1 會把每個標準解析後的內容存成快照（`step1/standards/<標準>.resolve`），並把標準名稱、版本與 sha256 記在 `request.md`。之後步驟 3～5 都以這份快照評分；若評分途中標準文件、掃描規則或 `standards.ini` 的設定被修改，狀態腳本會拒絕繼續，請還原修改，或以 `init --reset` 重新開始評分。
 
 ### 執行方式
 
@@ -75,18 +86,22 @@ tmp/
   stepN-success        步驟完成
   stepN-failed         步驟失敗，原因寫在狀態檔內
   step2-<外掛>-<狀態>   步驟 2 中每個 CR 外掛各自的狀態檔
+  stepN-<標準>-<狀態>   步驟 3～5 中每個評分標準各自的狀態檔
   step1/ … step5/      各步驟產出；questions.md（步驟提出的問題）、answers.md（使用者回覆）、errors.log（失敗紀錄）
+  step1/standards/     評分規劃：plan.tsv（報告與檔案的歸屬）、<標準>.diff（該報告的 diff）、<標準>.resolve（標準快照）、confirm.tsv（事先確認事項）
   step2/<外掛>/        files.txt 與 diff.patch（要審查的範圍）、raw/（外掛原始輸出）、cr.txt（整理後的 CR 結果）
-  step3/findings.draft.txt  步驟 3 提問前先存下的扣分項草稿，回覆後從這裡接續
+  step3/<標準>/ … step5/<標準>/  步驟 3～5 依評分標準分開的產出
+  step3/<標準>/findings.draft.txt  步驟 3 提問前先存下的扣分項草稿，回覆後從這裡接續
 reports/
-  <日期>_<PR 標題>.md   最終報告（CR 結果＋分數結果），步驟 5 成功前必須已發佈到這裡
+  <日期>_<PR 標題>_<標準>.md   最終報告（CR 結果＋分數結果），每個評分標準一份，步驟 5 成功前必須已發佈到這裡
 ```
 
 - 狀態檔由 Sub-Agent 透過 `review-state` 腳本產生；檔案不存在代表該步驟尚未開始。
 - 腳本會強制把關：前一步不是 `success` 時不能開始下一步；必要產出不存在或已過期時不能標記 `success`；重跑某一步時，後續步驟的狀態會被清除。步驟 3 標記 `success` 時會以 `score --check` 驗證 `findings.txt`，格式或位置有誤會當場退回，不必等到步驟 4 才失敗、再整步重做步驟 3。
 - Sub-Agent 無法直接和使用者對話。需要詢問時先把目前成果存檔，再寫入 `stepN/questions.md` 並標記 `pending`；主 Agent 詢問使用者、把回覆寫入 `stepN/answers.md` 後，再重新執行同一步，該步驟會從存檔接續。
-- 常見的嚴重度相關問題（是否跨時區、資料表是否持續成長、是否使用 springdoc）會在步驟 1 與缺少的文件一起詢問，減少步驟 3 再停下來提問的機會。
-- 步驟失敗時，詳細錯誤寫入該步驟目錄的 `errors.log`（例如 `tmp/step4/errors.log`），狀態腳本標記 `failed` 時也會追加一行摘要。
+- 評分標準的「事先確認事項」（例如是否跨時區、資料表是否持續成長）會在步驟 1 與缺少的文件一起詢問，減少步驟 3 再停下來提問的機會。
+- 步驟失敗時，詳細錯誤寫入該步驟目錄的 `errors.log`（例如 `tmp/step4/springboot-3/errors.log`），狀態腳本標記 `failed` 時也會追加一行摘要。
+- 評分標準在步驟 1 規劃之後被修改時，步驟 3～5 的狀態變更與 `finish` 都會被拒絕（結束碼 5），避免同一份報告混用新舊規則。
 - 支援的 Sub-Agent 工具：Claude Code 的 Agent 工具、GitHub Copilot（VS Code agent mode）的 `runSubagent`，或其他平台的同等工具。
 
 ### 執行方式與 Sub-Agent 設定

@@ -8,6 +8,8 @@ Prints a summary, the code review comments of ROOT/step2 with their ids (with -R
 The summary shows the [deductions] merge setting of -Config (default: configs/settings.ini in the project root; missing =
 false), which decides how findings.txt is written. With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
 -InputPath and -Git, ROOT is tmp in the project root. -InputPath - reads the diff from stdin.
+With the review plan ROOT/step1/standards/plan.tsv, -Root reads the diff of the standard -Standard (default: the only
+one; ROOT/step1/standards/NAME.diff), lists only its code review comments and writes ROOT/step3/NAME/prepared.txt.
 The scan rules come from -Standard (a section of -Standards, default: configs/standards.ini in the project root;
 default: the only framework standard, or the common standard when no framework standard is registered); files its
 applies does not cover are scanned with the rules of the common standard. -Scan FILE uses one scan rule file for
@@ -55,11 +57,15 @@ if (Test-UserFile $Config) {
     }
     if ($merge -cnotin 'true', 'false') { Exit-WithError "[deductions] merge in $Config must be true or false, not $merge" }
 }
+$cplan = ''; $cstd = ''
 if ($Root) {
-    $InputPath = Join-Path $Root 'step1/pr.diff'
+    $InputPath = Join-Path $Root 'step1/pr.diff'; $sub = ''
+    # With a review plan (step 1 of the workflow), each standard has its own diff and step folders.
+    $cstd = Get-PlanStandard $Root $Standard
+    if ($cstd) { $Standard = $cstd; $cplan = Join-Path $Root 'step1/standards/plan.tsv'; $InputPath = Join-Path $Root "step1/standards/$cstd.diff"; $sub = "/$cstd" }
     if (-not $Out) {
-        [void][IO.Directory]::CreateDirectory((Resolve-UserPath (Join-Path $Root 'step3')))
-        $Out = Join-Path $Root 'step3/prepared.txt'
+        [void][IO.Directory]::CreateDirectory((Resolve-UserPath (Join-Path $Root "step3$sub")))
+        $Out = Join-Path $Root "step3$sub/prepared.txt"
     }
 }
 $diffText = Get-DiffText -InputPath $InputPath -Git $Git -Repo $Repo
@@ -70,6 +76,10 @@ if ($Scan) {
     if ($Standard) { Exit-WithError 'use only one of -Standard, -Scan' }
     if (-not (Test-UserFile $Scan)) { Exit-WithError "scan rule file not found: $Scan" }
     $resolved = @("scan`t$(Resolve-UserPath $Scan)")
+}
+elseif ($cstd) {
+    # The standard as step 1 planned it (the workflow refuses to go on when it has changed since).
+    $resolved = @(Read-Utf8Lines (Join-Path $Root "step1/standards/$cstd.resolve") | Where-Object { $_ })
 }
 else {
     $resolveArgs = @('resolve', '--standards', $Standards, '--settings', $Config)
@@ -308,11 +318,13 @@ if ($Mode -in 'all', 'summary') {
             foreach ($x in (Read-Utf8Lines $crFile)) {
                 $x = $x.TrimEnd("`r")
                 if ($x -match '^\s*C\s*\|') {
-                    $n++; $listed++; $t = @($x -split '\|' | ForEach-Object { $_.Trim() }); while ($t.Count -lt 4) { $t += '' }
-                    $rule = if ($t[3]) { $t[3] } else { '-' }
+                    $n++; $t = @($x -split '\|' | ForEach-Object { $_.Trim() }); while ($t.Count -lt 4) { $t += '' }
+                    $show = Test-CommentOwner $cplan $cstd $t[2]
+                    if (-not $show) { continue }
+                    $listed++; $rule = if ($t[3]) { $t[3] } else { '-' }
                     [void]$sb.Append("- $($p[0])#$n [$($p[2])] $($t[1]) $rule | $($t[2])`n")
                 }
-                elseif ($n -gt 0 -and $x -match '^\s*problem:') { [void]$sb.Append("  $($x.Trim())`n") }
+                elseif ($n -gt 0 -and $show -and $x -match '^\s*problem:') { [void]$sb.Append("  $($x.Trim())`n") }
             }
         }
         if ($listed -eq 0) { [void]$sb.Append("- none`n") }

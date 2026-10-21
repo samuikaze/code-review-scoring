@@ -14,6 +14,8 @@ Turn the findings into scores. **Never calculate scores or grades by hand**; the
 **Input:** `tmp/step3/findings.txt`, `tmp/step1/pr.diff`, `tmp/step1/spec-context.md` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one).
 **Output:** `tmp/step4/score.tsv` (for the report renderer) and `tmp/step4/score.json` (structured result).
 
+With the review plan of the workflow (`tmp/step1/standards/plan.tsv`, written in step 1), each scoring standard has its own folders: `tmp/step3/<standard>/`, `tmp/step4/<standard>/` and `tmp/step5/<standard>/`; pass `--standard <standard>` (PowerShell `-Standard`) to the scripts (it may be left out when only one standard scores the PR). They then read only that standard's part of the diff (`tmp/step1/standards/<standard>.diff`), its snapshot `tmp/step1/standards/<standard>.resolve` and the code review comments on its files.
+
 ## Modes
 
 - **Workflow mode:** `code-review-scoring` runs this step's script itself with `review-state finish`; no agent is dispatched. Validation errors make the step fail and send the workflow back to step 3, which owns `findings.txt`.

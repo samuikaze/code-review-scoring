@@ -8,7 +8,9 @@ usage() {
 Usage: prepare-diff.zsh [--root DIR | --input FILE | --git RANGE] [options]
 
       --root DIR       read ROOT/step1/pr.diff and write ROOT/step3/prepared.txt (unless --out is given);
-                       without --root, --input and --git, ROOT is tmp in the project root
+                       without --root, --input and --git, ROOT is tmp in the project root. With the review plan
+                       ROOT/step1/standards/plan.tsv: read the diff of the standard (ROOT/step1/standards/NAME.diff),
+                       list only its code review comments and write ROOT/step3/NAME/prepared.txt
   -i, --input FILE     unified diff file; '-' = stdin
   -g, --git RANGE      run git diff RANGE (e.g. origin/main...HEAD)
   -r, --repo DIR       repository for --git (default: current directory)
@@ -34,7 +36,7 @@ script_dir="${0:A:h}"
 # Project root (two levels above the physical skill folder) holds tmp/ and reports/.
 project_root="${script_dir:h:h:h}"
 skills_dir="${script_dir:h:h}"
-config="$project_root/configs/settings.ini" standards="$project_root/configs/standards.ini" standard="" scan="" crdir="" root="" input="" git_range="" repo="." mode="all" max=15 out=""
+config="$project_root/configs/settings.ini" standards="$project_root/configs/standards.ini" standard="" scan="" crdir="" cplan="" cstd="" sub="" root="" input="" git_range="" repo="." mode="all" max=15 out=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -62,7 +64,17 @@ sources=0
 if [[ -n "$root" ]]; then
   input="$root/step1/pr.diff"
   crdir="$root/step2"
-  [[ -z "$out" ]] && { mkdir -p "$root/step3"; out="$root/step3/prepared.txt"; }
+  # With a review plan (step 1 of the workflow), each standard has its own diff and step folders.
+  if [[ -f "$root/step1/standards/plan.tsv" ]]; then
+    cplan="$root/step1/standards/plan.tsv"
+    [[ -n "$standard" ]] || standard="$(awk -F'\t' '$1 == "report" { n++; s = $2 } END { if (n == 1) print s }' "$cplan")"
+    [[ -n "$standard" ]] || { echo "error: several standards score this review (see $cplan); pass --standard NAME" >&2; exit 2; }
+    awk -F'\t' -v s="$standard" '$1 == "report" && $2 == s { f = 1 } END { exit !f }' "$cplan" \
+      || { echo "error: the standard $standard does not score this review (see $cplan)" >&2; exit 2; }
+    cstd="$standard" sub="/$standard"
+  fi
+  [[ -n "$cstd" ]] && input="$root/step1/standards/$cstd.diff"
+  [[ -z "$out" ]] && { mkdir -p "$root/step3$sub"; out="$root/step3$sub/prepared.txt"; }
 fi
 
 # [deductions] merge decides how findings.txt is written; the scoring step validates it the same way.
@@ -82,6 +94,9 @@ if [[ -n "$scan" ]]; then
   [[ -z "$standard" ]] || { echo "error: use only one of --standard, --scan" >&2; exit 2; }
   [[ -f "$scan" ]] || { echo "error: scan rule file not found: $scan" >&2; exit 2; }
   printf 'scan\t%s\n' "$scan" > "$std"
+elif [[ -n "$cstd" ]]; then
+  # The standard as step 1 planned it (the workflow refuses to go on when it has changed since).
+  tr -d '\r' < "$root/step1/standards/$cstd.resolve" > "$std"
 else
   zsh "$skills_dir/code-review-scoring/scripts/standard.zsh" resolve --standards "$standards" --settings "$config" ${standard:+"$standard"} \
     > "$std" || exit 2  # resolve has printed the error
@@ -97,7 +112,7 @@ else
   cat -- "$input" > "$tmp"
 fi
 
-run() { LC_ALL=C awk -v std="$std" -v mode="$mode" -v maxper="$max" -v merge="$merge" -v crdir="$crdir" -f "$script_dir/lib/prepare.awk" "$tmp"; }
+run() { LC_ALL=C awk -v std="$std" -v mode="$mode" -v maxper="$max" -v merge="$merge" -v crdir="$crdir" -v cplan="$cplan" -v cstd="$cstd" -f "$script_dir/lib/prepare.awk" "$tmp"; }
 if [[ -n "$out" ]]; then
   run > "$out"
   echo "wrote ${out} ($(wc -l < "$out" | tr -d ' ') lines)"

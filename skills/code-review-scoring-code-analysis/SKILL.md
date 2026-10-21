@@ -14,6 +14,8 @@ Find the problems in the PR and record them as findings. Do not calculate scores
 **Input:** `tmp/step1/pr.diff` (read through `prepare-diff`) and `tmp/step1/spec-context.md` from `code-review-scoring-spec-reading`, and the code review results of step 2: `tmp/step2/plan.tsv` and `tmp/step2/<plugin>/cr.txt` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one).
 **Output:** `tmp/step3/prepared.txt` and `tmp/step3/findings.txt`.
 
+With the review plan of the workflow (`tmp/step1/standards/plan.tsv`, written in step 1), each scoring standard has its own folders: `tmp/step3/<standard>/`, `tmp/step4/<standard>/` and `tmp/step5/<standard>/`; pass `--standard <standard>` (PowerShell `-Standard`) to the scripts (it may be left out when only one standard scores the PR). They then read only that standard's part of the diff (`tmp/step1/standards/<standard>.diff`), its snapshot `tmp/step1/standards/<standard>.resolve` and the code review comments on its files.
+
 ## Modes
 
 - **Workflow mode:** you were dispatched by `code-review-scoring` with a prompt that contains a status command. Follow that prompt's status protocol. You cannot talk to the user: questions go to `tmp/step3/questions.md`, replies arrive in `tmp/step3/answers.md`. The success gate runs `score --check`.

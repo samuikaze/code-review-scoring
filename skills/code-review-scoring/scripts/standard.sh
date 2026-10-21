@@ -11,6 +11,7 @@ Usage: standard.sh lint [--standards FILE] [--settings FILE] [NAME ...]
        standard.sh parse --file DOC.md [--common]
        standard.sh diff OLD.md NEW.md
        standard.sh resolve [--standards FILE] [--settings FILE] [NAME]
+       standard.sh plan --diff PR.diff --out DIR [--standards FILE] [--settings FILE]
 
 Commands:
   lint     check configs/standards.ini and the documents and scan rule files it lists (only the NAMEs given),
@@ -24,6 +25,12 @@ Commands:
            sha256, path), "applies" (the regex of the files of NAME), "scan" (path, sha256 of the scan rules),
            "points" (the overrides of NAME) and the "check" records of each document.
            Stops when standards.ini or a document has a format error (exit 3)
+  plan     for the review workflow: the standards that score the PR. Each file goes to the framework standard whose
+           applies covers it; the other files are common files, scored with the common standard in the report of
+           their project (the framework of the nearest folder above them; every report when that is unclear), or on
+           their own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
+           report and kind framework|common|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
+           each report, and DIR/confirm.tsv (standard, check codes, what to confirm before scoring)
 
 Options: --standards FILE  (default: configs/standards.ini in the project root)
          --settings FILE   (default: configs/settings.ini in the project root; its [points] are checked with the overrides)
@@ -46,7 +53,7 @@ project_root="$(dirname "$(dirname "$(dirname "$script_dir")")")"
 cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
 standards="$project_root/configs/standards.ini" settings="$project_root/configs/settings.ini"
-file="" scan="" role="" names=()
+file="" scan="" role="" names=() pdiff="" pout=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --standards) standards="${2:?--standards needs a value}"; shift 2 ;;
@@ -54,6 +61,8 @@ while [[ $# -gt 0 ]]; do
     --file) file="${2:?--file needs a value}"; shift 2 ;;
     --scan) scan="${2:?--scan needs a value}"; shift 2 ;;
     --common) role="common"; shift ;;
+    --diff) pdiff="${2:?--diff needs a value}"; shift 2 ;;
+    --out) pout="${2:?--out needs a value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "error: unknown option $1 (see --help)" >&2; exit 2 ;;
     *) names+=("$1"); shift ;;
@@ -218,6 +227,47 @@ case "$cmd" in
       if [[ "$name" == "$want" ]]; then awk -F'\t' -v n="$name" '$1 == "points" && $2 == n { print "points\t" $3 "\t" $4 }' "$tmpd/ini"; fi
       awk -F'\t' '$1 == "check"' "$tmpd/doc"
     done 3< <(awk -F'\t' -v n="$want" '$1 == "std" && $2 == n { print } $1 == "std" && $6 == "common" && $2 != n { c = $0 } END { if (c != "") print c }' "$tmpd/ini")
+    ;;
+
+  plan)
+    [[ -n "$pdiff" && -n "$pout" && ${#names[@]} -eq 0 ]] || { echo "error: plan needs --diff PR.diff --out DIR" >&2; exit 2; }
+    [[ -f "$pdiff" ]] || { echo "error: diff file not found: $pdiff" >&2; exit 2; }
+    standards="$(full "$standards")"
+    [[ -f "$standards" ]] || { echo "error: $standards: file not found; copy configs/standards.example.ini to configs/standards.ini" >&2; exit 3; }
+    run_awk -v mode=standards -v settings="$settings" "$standards" > "$tmpd/ini"
+    e="$(awk -F'\t' '$1 == "!error" { print ($2 != "" ? ":" $2 : "") ": " $3; exit }' "$tmpd/ini")"
+    [[ -z "$e" ]] || { echo "error: $standards$e; run standard lint first" >&2; exit 3; }
+    mkdir -p "$pout"
+    rm -f "$pout"/plan.tsv "$pout"/confirm.tsv "$pout"/*.diff "$pout"/*.resolve
+    run_awk -v mode=plan -v ini="$tmpd/ini" -v out="$pout" "$pdiff" > "$tmpd/plan"
+    e="$(awk -F'\t' '$1 == "!error" { print $3; exit }' "$tmpd/plan")"
+    [[ -z "$e" ]] || { echo "error: $pdiff: $e" >&2; exit 2; }
+    : > "$pout/confirm.tsv"
+    while IFS=$'\t' read -r -u 3 k1 name n; do
+      bash "$script_dir/standard.sh" resolve --standards "$standards" --settings "$settings" "$name" > "$pout/$name.resolve" || exit $?
+      # The confirmations of the standard, and those of the common standard when the report has common files.
+      while IFS=$'\t' read -r -u 4 kind sname k2 k3 dpath; do
+        [[ "$kind" == "standard" ]] || awk -F'\t' -v n="$name" '$1 == "file" && $3 == n && $4 == "common" { f = 1 } END { exit !f }' "$tmpd/plan" || continue
+        grep -q "^$sname"$'\t' "$pout/confirm.tsv" && continue
+        role="$(awk -F'\t' -v n="$sname" '$1 == "std" && $2 == n && $6 == "common" { print "common" }' "$tmpd/ini")"
+        run_awk -v mode=doc -v role="$role" "$dpath" | awk -F'\t' -v n="$sname" '$1 == "confirm" { print n "\t" $2 "\t" $3 }' >> "$pout/confirm.tsv"
+      done 4< <(awk -F'\t' '$1 == "standard" || $1 == "common"' "$pout/$name.resolve")
+    done 3< <(awk -F'\t' '$1 == "report"' "$tmpd/plan")
+    cp "$tmpd/plan" "$pout/plan.tsv"
+    # Summary: one line per report with its files, then the files no standard scores.
+    awk -F'\t' 'FNR == NR { if ($1 == "standard" || $1 == "common") ver[$2] = $3; next }
+      $1 == "report" { r[++n] = $2; tot[$2] = $3 }
+      $1 == "file" && $4 == "common" { c[$3]++ } $1 == "file" && $4 == "none" { x[$3]++ }
+      END {
+        print n " report(s):"
+        for (i = 1; i <= n; i++) {
+          s = r[i]; printf "  - %s %s: %d file(s)", s, ver[s], tot[s]
+          if (c[s] && c[s] != tot[s]) printf " (%d scored with the common standard)", c[s]
+          if (x[s]) printf " (%d not covered by any standard)", x[s]
+          print ""
+        }
+      }' <(cat "$pout"/*.resolve) "$pout/plan.tsv"
+    echo "wrote $(full "$pout")/plan.tsv"
     ;;
 
   *) echo "error: unknown command $cmd (see --help)" >&2; exit 2 ;;

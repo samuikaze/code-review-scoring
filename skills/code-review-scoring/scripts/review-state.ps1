@@ -5,7 +5,9 @@ State control for the code review scoring workflow.
 .DESCRIPTION
 Steps: 1 read specs, 2 code review plugins, 3 analyze code (uses the code review results), 4 score, 5 report.
 Status files ROOT/stepN-{pending,working,success,failed} gate the steps; step 2 has one status file per
-plugin (ROOT/step2-<plugin>-<state>). Outputs live in ROOT/stepN/ (step 2: ROOT/step2/<plugin>/).
+plugin (ROOT/step2-<plugin>-<state>), steps 3 to 5 one per scoring standard of the review plan that step 1 writes
+to ROOT/step1/standards/ (ROOT/step3-<standard>-<state>). Outputs live in ROOT/step1/, ROOT/step2/<plugin>/ and
+ROOT/stepN/<standard>/.
 Uses the same GNU-style arguments as review-state.sh so subagent prompts work on every platform:
 
   review-state.ps1 init --git RANGE [--repo DIR] [--title TEXT] [--reset] [--root DIR]
@@ -13,16 +15,18 @@ Uses the same GNU-style arguments as review-state.sh so subagent prompts work on
   review-state.ps1 finish [--root DIR]
   review-state.ps1 show [--root DIR]
   review-state.ps1 cr-plan [--plugins FILE] [--root DIR]
-  review-state.ps1 prompt --step 1|2|3 [--plugin NAME] [--inline] [--root DIR]
-  review-state.ps1 set --step N [--plugin NAME] --state working|pending|success|failed [--message TEXT] [--root DIR]
+  review-state.ps1 prompt --step 1|2|3 [--plugin NAME] [--standard NAME] [--inline] [--root DIR]
+  review-state.ps1 set --step N [--plugin NAME] [--standard NAME] --state working|pending|success|failed [--message TEXT] [--root DIR]
+Every command also takes --standards FILE (default: configs/standards.ini in the project root).
   review-state.ps1 config [--subagent true|false] [--config FILE]
   review-state.ps1 config --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
 
 next prints the next action of the workflow: the prompt of the next step or plugin to run (it runs cr-plan first
 when step 2 has no plan yet), the questions to relay, a failure to report, "finish", or the result. --inline renders
 prompts for the main agent (default: from subagent= in configs/settings.ini); --retry prints the prompt again for a failed
-step or plugin. finish runs step 4 (score) and step 5 (report) with their scripts, records both states and prints
-the result summary (exit 1 when one of them failed). prompt prints the prompt of step 1, 2 or 3.
+step or plugin. finish runs step 4 (score) and step 5 (report) with their scripts for every standard of the review
+plan, records the states and prints the results (exit 1 when one of them failed). prompt prints the prompt of step
+1, 2 or 3 (step 2 needs --plugin, step 3 --standard when several standards score the PR).
 
 config reads and writes configs/settings.ini in the project root unless --config is given. Without --subagent it prints
 subagent=true|false from the [workflow] section (true = each step runs in its own subagent, false = the main
@@ -36,7 +40,10 @@ Gates enforced by "set":
   working  the previous step must be success; clears the status of every later step
   pending  the unit must be working; its questions.md must be newer than answers.md; needs --message
   success  the unit must be working; its outputs must exist, be valid and be current
-           (step 3: findings.txt must pass the scoring checks of score -Check)
+           (step 1: the review plan ROOT/step1/standards/plan.tsv; step 3: findings.txt must pass the scoring
+           checks of score -Check)
+Steps 3 to 5 also refuse to go on when a scoring standard changed after step 1 planned the review (its document,
+scan rules or settings in standards.ini).
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
@@ -57,13 +64,13 @@ $skillsDir = Split-Path -Parent $skillDir
 $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
-$opt = @{ root = (Join-Path $projectRoot 'tmp'); step = ''; plugin = ''; state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
+$opt = @{ root = (Join-Path $projectRoot 'tmp'); step = ''; plugin = ''; standard = ''; standards = (Join-Path $projectRoot 'configs/standards.ini'); state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
     config = (Join-Path $projectRoot 'configs/settings.ini'); subagent = ''; platform = ''; model = ''; reasoning = ''
     plugins = (Join-Path $projectRoot 'configs/plugins.ini'); inline = $null; retry = $false }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -in '--root', '--step', '--plugin', '--state', '--message', '--git', '--repo', '--title', '--config', '--plugins', '--platform', '--model', '--reasoning', '--subagent') {
+    if ($a -in '--root', '--step', '--plugin', '--standard', '--standards', '--state', '--message', '--git', '--repo', '--title', '--config', '--plugins', '--platform', '--model', '--reasoning', '--subagent') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]
         $i += 2
@@ -126,14 +133,15 @@ function Set-IniSection([string]$File, [string]$Section, [string[]]$Pairs) {
 }
 function Assert-Review { if (-not (Test-Exists 'request.md')) { Exit-WithError "no review in $root; run init first" } }
 
-# Step 2 runs the code review plugins; each plugin is its own unit with its own status file.
+# Step 2 runs the code review plugins; each plugin is its own unit with its own status file. Steps 3 to 5 run once
+# per scoring standard of the review plan.
 $CR = 2
-# A "unit" is a step ("1", "3", "4", "5") or a step 2 plugin ("2-<plugin>").
+# A "unit" is step 1, a step 2 plugin ("2-<plugin>") or a step 3 to 5 standard ("3-<standard>").
 function Get-UnitState([string]$U) {
     foreach ($s in 'working', 'pending', 'success', 'failed') { if ([IO.File]::Exists((P "step$U-$s"))) { return $s } }
     return 'not-started'
 }
-function Get-UnitDir([string]$U) { if ($U.StartsWith("$CR-")) { return "step$CR/$($U.Substring(2))" } return "step$U" }
+function Get-UnitDir([string]$U) { if ($U.Contains('-')) { return "step$($U.Substring(0, 1))/$($U.Substring(2))" } return "step$U" }
 function Get-UnitField([string]$U, [string]$S, [string]$Key) {
     $p = P "step$U-$S"
     if (-not [IO.File]::Exists($p)) { return '' }
@@ -150,21 +158,30 @@ function Get-PlanField([string]$Name, [int]$Index) {
     $l = Read-Utf8Lines (P "step$CR/plan.tsv") | Where-Object { ($_ -split "`t")[0] -eq $Name } | Select-Object -First 1
     if ($l) { return ($l -split "`t")[$Index] } return ''
 }
-# Clears the status of step N (step 2: every plugin status and the plan)
+# The scoring standards of the review plan (one report each), in plan order.
+$stdPlan = P 'step1/standards/plan.tsv'
+function Get-StdNames {
+    if (-not [IO.File]::Exists($stdPlan)) { return @() }
+    return @(Read-Utf8Lines $stdPlan | ForEach-Object { $a = $_.Split("`t"); if ($a[0] -ceq 'report') { $a[1] } })
+}
+# The units of step 2 to 5
+function Get-SubNames([int]$N) { if ($N -eq $CR) { return @(Get-PlanNames) } return @(Get-StdNames) }
+# Clears the status of step N (step 2: every plugin status and the plan; steps 3 to 5: every standard)
 function Clear-Step([int]$N) {
-    if ($N -eq $CR) {
+    if ($N -ge $CR) {
         if ([IO.Directory]::Exists($rootAbs)) {
-            Get-ChildItem -LiteralPath $rootAbs -File -Filter "step$CR-*" -Force | ForEach-Object { [IO.File]::Delete($_.FullName) }
+            Get-ChildItem -LiteralPath $rootAbs -File -Filter "step$N-*" -Force | ForEach-Object { [IO.File]::Delete($_.FullName) }
         }
-        if (Test-Exists "step$CR/plan.tsv") { [IO.File]::Delete((P "step$CR/plan.tsv")) }
+        if ($N -eq $CR -and (Test-Exists "step$CR/plan.tsv")) { [IO.File]::Delete((P "step$CR/plan.tsv")) }
     }
     else { Clear-Unit "$N" }
 }
-# Aggregate state of a step; step 2 combines its plugins
+# Aggregate state of a step; steps 2 to 5 combine their plugins or standards
 function Get-StepState([int]$N) {
-    if ($N -ne $CR) { return Get-UnitState "$N" }
-    if (-not (Test-Exists "step$CR/plan.tsv")) { return 'not-started' }
-    $all = @(Get-PlanNames | ForEach-Object { Get-UnitState "$CR-$_" })
+    if ($N -eq 1) { return Get-UnitState "$N" }
+    if ($N -eq $CR) { if (-not (Test-Exists "step$CR/plan.tsv")) { return 'not-started' } }
+    elseif (@(Get-StdNames).Count -eq 0) { return 'not-started' }
+    $all = @(Get-SubNames $N | ForEach-Object { Get-UnitState "$N-$_" })
     if ($all -contains 'failed') { return 'failed' }
     if ($all -contains 'pending') { return 'pending' }
     if ($all -contains 'working') { return 'working' }
@@ -179,10 +196,23 @@ function Test-Step {
         if ((Get-PlanNames) -notcontains $opt.plugin) { Stop-Refused "plugin $($opt.plugin) is not in step $CR's plan; run cr-plan first" }
     }
     elseif ($opt.plugin) { Exit-WithError "--plugin is only used with --step $CR" }
+    if ($n -gt $CR) {
+        if (-not [IO.File]::Exists($stdPlan)) { Stop-Refused "step 1 has not planned the review (missing $stdPlan)" }
+        # Without --standard: the only standard of the plan.
+        $names = @(Get-StdNames)
+        if (-not $opt.standard -and $names.Count -eq 1) { $opt.standard = $names[0] }
+        if (-not $opt.standard) { Exit-WithError "step $n needs --standard NAME: $($names -join ', ')" }
+        if ($names -cnotcontains $opt.standard) { Stop-Refused "the standard $($opt.standard) does not score this review (see $stdPlan)" }
+    }
+    elseif ($opt.standard) { Exit-WithError '--standard is only used with steps 3 to 5' }
     return $n
 }
-function Assert-Previous([int]$N) {
-    if ($N -gt 1 -and (Get-StepState ($N - 1)) -ne 'success') { Stop-Refused "step $($N - 1) has not succeeded; steps cannot be skipped" }
+# Step 3 needs step 2; steps 4 and 5 need the previous step of the same standard.
+function Assert-Previous([int]$N, [string]$Std) {
+    if ($N -gt 3) {
+        if ((Get-UnitState "$($N - 1)-$Std") -ne 'success') { Stop-Refused "step $($N - 1) ($Std) has not succeeded; steps cannot be skipped" }
+    }
+    elseif ($N -gt 1 -and (Get-StepState ($N - 1)) -ne 'success') { Stop-Refused "step $($N - 1) has not succeeded; steps cannot be skipped" }
 }
 # Files added or changed by the PR, without build output, generated code or lock files
 function Get-DiffFiles {
@@ -250,11 +280,60 @@ function Invoke-Child([string]$Path, [string[]]$ArgList) {
 function Invoke-Tool([string]$Skill, [string]$Script, [string[]]$ArgList) {
     return Invoke-Child (Join-Path $skillsDir "$Skill/scripts/$Script.ps1") $ArgList
 }
+# The scoring standard $Name must be the one step 1 planned with: its document, scan rules and settings in
+# standards.ini (the resolve output without the paths, which differ between shells) must not have changed.
+function Get-ResKey([string]$Text) {
+    $lines = foreach ($l in ($Text.Replace("`r", '') -split "`n")) {
+        $f = $l.Split("`t")
+        if (($f[0] -ceq 'standard' -or $f[0] -ceq 'common') -and $f.Count -gt 4) { $f[4] = '' }
+        elseif ($f[0] -ceq 'scan' -and $f.Count -gt 1) { $f[1] = '' }
+        $f -join "`t"
+    }
+    return ($lines -join "`n").TrimEnd("`n")
+}
+function Assert-StdGate([string]$Name) {
+    $saved = P "step1/standards/$Name.resolve"
+    if (-not [IO.File]::Exists($saved)) { Stop-Refused "missing $saved; step 1 has not planned the review" }
+    $r = Invoke-Child (Join-Path $PSScriptRoot 'standard.ps1') @('resolve', '--standards', (Resolve-UserPath $opt.standards), '--settings', (Resolve-UserPath $opt.config), $Name)
+    if ($r.Code -ne 0) { Stop-Refused "the scoring standard $Name cannot be read: $(($r.Text -split "`n")[0])" }
+    if ((Get-ResKey (Read-Utf8Text $saved)) -cne (Get-ResKey $r.Text)) {
+        Stop-Refused "the scoring standard $Name changed after step 1 planned the review (its document, scan rules or settings in standards.ini); restore it, or start the review again (init --reset)"
+    }
+}
+# request.md records the scoring standards of the review: name, version, sha256 and path of each document.
+function Write-RequestStandards {
+    $out = New-Object System.Collections.Generic.List[string]
+    $skip = $false
+    foreach ($l in (Read-Utf8Lines (P 'request.md'))) {
+        if ($l.StartsWith('## Scoring standards')) { $skip = $true; continue }
+        if ($skip -and $l.StartsWith('## ')) { $skip = $false }
+        if (-not $skip) { $out.Add($l) }
+    }
+    while ($out.Count -gt 0 -and -not $out[$out.Count - 1]) { $out.RemoveAt($out.Count - 1) }
+    $out.Add(''); $out.Add('## Scoring standards')
+    foreach ($n in (Get-StdNames)) {
+        foreach ($l in (Read-Utf8Lines (P "step1/standards/$n.resolve"))) {
+            $f = $l.Split("`t")
+            if ($f[0] -ceq 'standard') { $out.Add("- ${n}: $($f[1]) $($f[2]) $($f[3]) $($f[4])") }
+            elseif ($f[0] -ceq 'common') { $out.Add("  - common standard: $($f[1]) $($f[2]) $($f[3]) $($f[4])") }
+        }
+    }
+    Write-Utf8File (P 'request.md') (($out -join "`n") + "`n")
+}
+# The document path of the standard record ("standard") or the common record ("common") of a planned standard.
+function Get-StdDoc([string]$Name, [string]$Kind) {
+    foreach ($l in (Read-Utf8Lines (P "step1/standards/$Name.resolve"))) { $f = $l.Split("`t"); if ($f[0] -ceq $Kind) { return $f[4] } }
+    return ''
+}
 # Prompt of step $N (plugin $Plugin): the step template plus the shared status protocol. Lines marked "[sub] " are only
 # for subagents, lines marked "[inline] " only for the main agent.
-function Get-Prompt([int]$N, [string]$Plugin, [bool]$Inline) {
-    $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"
+function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
+    $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"; $sDoc = ''; $cDoc = 'none'
     if ($N -eq $CR) { $pPath = Get-PlanField $Plugin 1; $pMode = Get-PlanField $Plugin 2; $unitArgs += " --plugin $Plugin"; $dir = P "step$CR/$Plugin" }
+    elseif ($N -gt $CR) {
+        $sDoc = Get-StdDoc $Std 'standard'; $cDoc = Get-StdDoc $Std 'common'; if (-not $cDoc) { $cDoc = 'none' }
+        $unitArgs += " --standard $Std"; $dir = P "step$N/$Std"
+    }
     $tpl = (Read-Utf8Text (Join-Path $skillDir "assets/prompts/step$N.md")) + (Read-Utf8Text (Join-Path $skillDir 'assets/prompts/protocol.md'))
     $lines = foreach ($l in ($tpl -split "`r?`n")) {
         if ($l.StartsWith('[sub] ')) { if ($Inline) { continue }; $l = $l.Substring(6) }
@@ -262,12 +341,19 @@ function Get-Prompt([int]$N, [string]$Plugin, [bool]$Inline) {
         $l
     }
     $text = ($lines -join "`n")
-    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N")
+    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{COMMON_DOC}}', $cDoc)
 }
-# Writes the action "next" prints for a unit ("1", "3" or "2-<plugin>") in state $S; returns $false when it needs nothing.
+# Writes the action "next" prints for a unit ("1", "2-<plugin>" or "3-<standard>") in state $S; returns $false when it
+# needs nothing.
 function Write-NextAction([string]$U, [string]$Label, [string]$S, [bool]$Inline, [bool]$Retry) {
     if ($S -eq 'success') { return $false }
-    if ($U.StartsWith("$CR-")) { $n = $CR; $plugin = $U.Substring(2); $unitArgs = "--step $CR --plugin $plugin" } else { $n = [int]$U; $plugin = ''; $unitArgs = "--step $U" }
+    $std = ''
+    if ($U.StartsWith("$CR-")) { $n = $CR; $plugin = $U.Substring(2); $unitArgs = "--step $CR --plugin $plugin" }
+    elseif ($U.Contains('-')) {
+        $n = [int]$U.Substring(0, 1); $plugin = ''; $std = $U.Substring(2); $unitArgs = "--step $n --standard $std"
+        Assert-StdGate $std
+    }
+    else { $n = [int]$U; $plugin = ''; $unitArgs = "--step $U" }
     $d = P (Get-UnitDir $U)
     $o = New-Object System.Collections.Generic.List[string]
     if ($S -eq 'pending') {
@@ -294,7 +380,7 @@ function Write-NextAction([string]$U, [string]$Label, [string]$S, [bool]$Inline,
         }
         else { $o.Add('Pass the prompt below unchanged to one new subagent with the saved model and reasoning, then run next.') }
         $o.Add('')
-        $o.Add((Get-Prompt $n $plugin $Inline).TrimEnd("`n"))
+        $o.Add((Get-Prompt $n $plugin $std $Inline).TrimEnd("`n"))
     }
     [Console]::Out.Write(($o -join "`n") + "`n")
     return $true
@@ -316,12 +402,17 @@ switch ($cmd) {
             if ([IO.Directory]::Exists((P 'inputs'))) { [IO.Directory]::Delete((P 'inputs'), $true) }
         }
         $repoAbs = Resolve-UserPath $opt.repo
+        # git writes to stderr when the answer is no; Windows PowerShell 5.1 turns that into an error under 'Stop'.
+        $ErrorActionPreference = 'Continue'
         & git -C $repoAbs rev-parse --git-dir 2>$null | Out-Null
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -ne 0) { Exit-WithError "$($opt.repo) is not a git repository" }
         [void][IO.Directory]::CreateDirectory($rootAbs)
         # Keep review files out of git unless the repository already ignores the root (keep .gitkeep).
         if (-not (Test-Exists '.gitignore')) {
+            $ErrorActionPreference = 'Continue'
             & git -C $rootAbs check-ignore -q '.review-probe' 2>$null
+            $ErrorActionPreference = 'Stop'
             if ($LASTEXITCODE -ne 0) { Write-Utf8File (P '.gitignore') "*`n!.gitkeep`n" }
         }
         $tpl = Read-Utf8Text (Join-Path $skillDir 'assets/request-template.md')
@@ -334,13 +425,14 @@ switch ($cmd) {
         if (-not (Test-Exists 'request.md')) { Write-Output "no review in $root; run init first"; exit 0 }
         foreach ($n in 1..5) {
             $s = Get-StepState $n
-            if ($n -eq $CR) {
-                $names = @(Get-PlanNames)
-                $info = if (Test-Exists "step$CR/plan.tsv") { "$($names.Count) plugin(s) planned" } else { 'cr-plan not run' }
-                Write-Output ("step {0}  {1,-11} {2}" -f $CR, $s, $info)
+            if ($n -ge $CR) {
+                $names = @(Get-SubNames $n)
+                if ($n -eq $CR) { $info = if (Test-Exists "step$CR/plan.tsv") { "$($names.Count) plugin(s) planned" } else { 'cr-plan not run' } }
+                else { $info = if ([IO.File]::Exists($stdPlan)) { "$($names.Count) standard(s)" } else { 'not planned' } }
+                Write-Output ("step {0}  {1,-11} {2}" -f $n, $s, $info)
                 foreach ($p in $names) {
-                    $ps = Get-UnitState "$CR-$p"
-                    Write-Output ("  - {0,-28} {1,-11} {2}  {3}" -f $p, $ps, (Get-UnitField "$CR-$p" $ps 'time'), (Get-UnitField "$CR-$p" $ps 'message'))
+                    $ps = Get-UnitState "$n-$p"
+                    Write-Output ("  - {0,-28} {1,-11} {2}  {3}" -f $p, $ps, (Get-UnitField "$n-$p" $ps 'time'), (Get-UnitField "$n-$p" $ps 'message'))
                 }
                 continue
             }
@@ -362,75 +454,90 @@ switch ($cmd) {
         foreach ($p in (Get-PlanNames)) {
             if (Write-NextAction "$CR-$p" "step $CR plugin $p" (Get-UnitState "$CR-$p") $inline $opt.retry) { exit 0 }
         }
-        if (Write-NextAction '3' 'step 3' (Get-UnitState '3') $inline $opt.retry) { exit 0 }
-        if ((Get-UnitState '4') -eq 'failed' -and (Get-UnitField '4' 'failed' 'message').StartsWith('findings.txt failed validation')) {
-            Write-Output "note: scoring rejected findings.txt (details: $(P 'step4/errors.log')); step 3 runs again"
-            [void](Write-NextAction '3' 'step 3' 'failed' $inline $true)
-            exit 0
-        }
-        foreach ($n in 4, 5) {
-            if ((Get-UnitState "$n") -eq 'failed' -and -not $opt.retry) {
-                Write-Output 'action: failed'
-                Write-Output "step $n failed: $(Get-UnitField "$n" 'failed' 'message')"
-                Write-Output "details: $(P "step$n/errors.log")"
-                Write-Output 'Tell the user the reason and ask whether to retry; to retry, run finish.'
+        $stds = @(Get-StdNames)
+        if ($stds.Count -eq 0) { Exit-WithError "step 1 has not planned the review (missing $stdPlan); redo step 1" }
+        foreach ($n in $stds) { if (Write-NextAction "3-$n" "step 3 ($n)" (Get-UnitState "3-$n") $inline $opt.retry) { exit 0 } }
+        foreach ($n in $stds) {
+            if ((Get-UnitState "4-$n") -eq 'failed' -and (Get-UnitField "4-$n" 'failed' 'message').StartsWith('findings.txt failed validation')) {
+                Write-Output "note: scoring rejected findings.txt of $n (details: $(P "step4/$n/errors.log")); step 3 ($n) runs again"
+                [void](Write-NextAction "3-$n" "step 3 ($n)" 'failed' $inline $true)
                 exit 0
             }
         }
-        if ((Get-UnitState '5') -ne 'success') {
+        foreach ($n in $stds) {
+            foreach ($k in 4, 5) {
+                if ((Get-UnitState "$k-$n") -eq 'failed' -and -not $opt.retry) {
+                    Write-Output 'action: failed'
+                    Write-Output "step $k ($n) failed: $(Get-UnitField "$k-$n" 'failed' 'message')"
+                    Write-Output "details: $(P "step$k/$n/errors.log")"
+                    Write-Output 'Tell the user the reason and ask whether to retry; to retry, run finish.'
+                    exit 0
+                }
+            }
+        }
+        if ((Get-StepState 5) -ne 'success') {
             Write-Output 'action: finish'
-            Write-Output 'Run finish: it runs step 4 (score) and step 5 (report) with their scripts.'
+            Write-Output 'Run finish: it runs step 4 (score) and step 5 (report) with their scripts for every standard.'
             exit 0
         }
         Write-Output 'action: done'
-        $g = ''; $t = ''; $c = ''; $dims = ''
-        foreach ($l in (Read-Utf8Lines (P 'step4/score.tsv'))) {
-            $f = $l -split "`t"
-            switch ($f[0]) {
-                'grade' { $g = $f[1] }
-                'total' { $t = $f[1] }
-                'capped' { if ($f[1] -eq '1') { $c = ' (capped at B because of a Critical finding)' } }
-                'dim' { $dims += "$($f[1]) $($f[2])/$($f[3])  " }
+        foreach ($n in $stds) {
+            $g = ''; $t = ''; $c = ''; $dims = ''
+            foreach ($l in (Read-Utf8Lines (P "step4/$n/score.tsv"))) {
+                $f = $l -split "`t"
+                switch ($f[0]) {
+                    'grade' { $g = $f[1] }
+                    'total' { $t = $f[1] }
+                    'capped' { if ($f[1] -eq '1') { $c = ' (capped at B because of a Critical finding)' } }
+                    'dim' { $dims += "$($f[1]) $($f[2])/$($f[3])  " }
+                }
             }
+            Write-Output "result ($n): grade $g, total $t/100$c"
+            Write-Output "dimensions: $dims"
+            Write-Output "report: $((Read-Utf8Lines (P "step5/$n/report-path.txt"))[0].Trim())"
         }
-        Write-Output "result: grade $g, total $t/100$c"
-        Write-Output "dimensions: $dims"
-        Write-Output "report: $((Read-Utf8Lines (P 'step5/report-path.txt'))[0].Trim())"
     }
     'finish' {
         Assert-Review
         if ((Get-StepState 3) -ne 'success') { Stop-Refused 'step 3 has not succeeded; steps cannot be skipped' }
-        # Records the failure of step $N and stops
-        function Stop-Finish([int]$N, [string]$Message) {
-            [void](Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', "$N", '--state', 'failed', '--message', $Message))
-            Write-Output "step $N failed: $Message"
-            Write-Output "details: $(P "step$N/errors.log")"
+        $stds = @(Get-StdNames)
+        foreach ($n in $stds) { Assert-StdGate $n }
+        $stdArgs = @('--root', $rootAbs, '--standards', (Resolve-UserPath $opt.standards))
+        # Records the failure of step $N of standard $Std and stops
+        function Stop-Finish([int]$N, [string]$Std, [string]$Message) {
+            [void](Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', "$N", '--standard', $Std, '--state', 'failed', '--message', $Message)))
+            Write-Output "step $N ($Std) failed: $Message"
+            Write-Output "details: $(P "step$N/$Std/errors.log")"
             Write-Output 'next: run next'
             exit 1
         }
-        [void](Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', '4', '--state', 'working'))
-        $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs)
-        if ($r.Code -ne 0) {
-            [IO.File]::AppendAllText((P 'step4/errors.log'), "[$(Get-Now)] score exited $($r.Code):`n$($r.Text)`n", $script:Utf8NoBom)
-            if ($r.Code -eq 1) { Stop-Finish 4 'findings.txt failed validation; redo step 3' }
-            Stop-Finish 4 "scoring exited $($r.Code): $(($r.Text -split "`n")[0])"
+        # Each standard in turn; the standards whose report is already published are kept.
+        foreach ($n in $stds) {
+            if ((Get-UnitState "5-$n") -eq 'success') { continue }
+            [void](Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', '4', '--standard', $n, '--state', 'working')))
+            $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standards', (Resolve-UserPath $opt.standards), '-Standard', $n)
+            if ($r.Code -ne 0) {
+                [IO.File]::AppendAllText((P "step4/$n/errors.log"), "[$(Get-Now)] score exited $($r.Code):`n$($r.Text)`n", $script:Utf8NoBom)
+                if ($r.Code -eq 1) { Stop-Finish 4 $n 'findings.txt failed validation; redo step 3' }
+                Stop-Finish 4 $n "scoring exited $($r.Code): $(($r.Text -split "`n")[0])"
+            }
+            $grade = @($r.Text -split "`n" | Where-Object { $_.StartsWith('grade ') })[0]
+            [void](Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', '4', '--standard', $n, '--state', 'success', '--message', $grade)))
+            [void](Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', '5', '--standard', $n, '--state', 'working')))
+            $rr = Invoke-Tool 'code-review-scoring-report' 'render-report' @('-Root', $rootAbs, '-Standard', $n)
+            if ($rr.Code -ne 0) {
+                [IO.File]::AppendAllText((P "step5/$n/errors.log"), "[$(Get-Now)] render-report exited $($rr.Code):`n$($rr.Text)`n", $script:Utf8NoBom)
+                Stop-Finish 5 $n "render-report exited $($rr.Code): $(($rr.Text -split "`n")[0])"
+            }
+            $sr = Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', '5', '--standard', $n, '--state', 'success', '--message', 'report published'))
+            if ($sr.Code -ne 0) {
+                [IO.File]::AppendAllText((P "step5/$n/errors.log"), "[$(Get-Now)] $($sr.Text)`n", $script:Utf8NoBom)
+                Stop-Finish 5 $n (($sr.Text -split "`n")[0])
+            }
+            Write-Output "steps 4 and 5 ($n): success"
+            $r.Text -split "`n" | Where-Object { $_ -and -not $_.StartsWith('wrote ') } | ForEach-Object { Write-Output $_ }
+            Write-Output "report: $((Read-Utf8Lines (P "step5/$n/report-path.txt"))[0].Trim())"
         }
-        $grade = @($r.Text -split "`n" | Where-Object { $_.StartsWith('grade ') })[0]
-        [void](Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', '4', '--state', 'success', '--message', $grade))
-        [void](Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', '5', '--state', 'working'))
-        $rr = Invoke-Tool 'code-review-scoring-report' 'render-report' @('-Root', $rootAbs)
-        if ($rr.Code -ne 0) {
-            [IO.File]::AppendAllText((P 'step5/errors.log'), "[$(Get-Now)] render-report exited $($rr.Code):`n$($rr.Text)`n", $script:Utf8NoBom)
-            Stop-Finish 5 "render-report exited $($rr.Code): $(($rr.Text -split "`n")[0])"
-        }
-        $sr = Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', '5', '--state', 'success', '--message', 'report published')
-        if ($sr.Code -ne 0) {
-            [IO.File]::AppendAllText((P 'step5/errors.log'), "[$(Get-Now)] $($sr.Text)`n", $script:Utf8NoBom)
-            Stop-Finish 5 (($sr.Text -split "`n")[0])
-        }
-        Write-Output 'steps 4 and 5: success'
-        $r.Text -split "`n" | Where-Object { $_ -and -not $_.StartsWith('wrote ') } | ForEach-Object { Write-Output $_ }
-        Write-Output "report: $((Read-Utf8Lines (P 'step5/report-path.txt'))[0].Trim())"
     }
     'cr-plan' {
         Assert-Review
@@ -485,21 +592,28 @@ switch ($cmd) {
         $n = Test-Step
         if ($n -gt 3) { Exit-WithError 'steps 4 and 5 have no prompt; run finish' }
         Assert-Review
-        Assert-Previous $n
-        [Console]::Out.Write((Get-Prompt $n $opt.plugin ($null -ne $opt.inline)))
+        Assert-Previous $n $opt.standard
+        if ($n -gt $CR) { Assert-StdGate $opt.standard }
+        [Console]::Out.Write((Get-Prompt $n $opt.plugin $opt.standard ($null -ne $opt.inline)))
     }
     'set' {
         $n = Test-Step; Assert-Review
         $state = $opt.state; $message = $opt.message
         if ($state -cnotin $states) { Exit-WithError '--state must be working, pending, success or failed' }
-        $unit = if ($n -eq $CR) { "$CR-$($opt.plugin)" } else { "$n" }
-        $label = if ($n -eq $CR) { "step $CR plugin $($opt.plugin)" } else { "step $n" }
+        $std = $opt.standard
+        $unit = "$n"; $label = "step $n"
+        if ($n -eq $CR) { $unit = "$CR-$($opt.plugin)"; $label = "step $CR plugin $($opt.plugin)" }
+        if ($n -gt $CR) {
+            $unit = "$n-$std"; $label = "step $n ($std)"
+            if ($state -in 'working', 'success') { Assert-StdGate $std }
+        }
         $cur = Get-UnitState $unit
         $d = Get-UnitDir $unit
         switch ($state) {
             'working' {
-                Assert-Previous $n
-                for ($k = $n + 1; $k -le 5; $k++) { Clear-Step $k }
+                Assert-Previous $n $std
+                # Later steps start over: every unit of them, or only the same standard's after steps 3 and 4.
+                for ($k = $n + 1; $k -le 5; $k++) { if ($n -gt $CR) { Clear-Unit "$k-$std" } else { Clear-Step $k } }
                 [void][IO.Directory]::CreateDirectory((P $d))
             }
             'pending' {
@@ -521,6 +635,8 @@ switch ($cmd) {
                         $open = @(Read-Utf8Lines (P "$d/spec-context.md") | Where-Object { $_ -cmatch '^- [a-z-]+: (unknown|pending)\s*$' -or $_.StartsWith('- [ ] ') })
                         if ($open.Count -gt 0) { Stop-Refused 'spec-context.md still has unresolved inputs or open questions' }
                         if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
+                        if (-not (Test-NonEmpty 'step1/standards/plan.tsv')) { Stop-Refused "missing ${stdPlan}: the review was not planned; check configs/standards.ini (setup check), then run standard plan --diff `"$(P "$d/pr.diff")`" --out `"$(P "$d/standards")`" of code-review-scoring and add its confirm.tsv to the Severity facts of spec-context.md" }
+                        Write-RequestStandards
                     }
                     2 {
                         if (-not (Test-NonEmpty "$d/cr.txt")) { Stop-Refused "missing $(P "$d/cr.txt")" }
@@ -531,18 +647,18 @@ switch ($cmd) {
                     3 {
                         foreach ($f in 'prepared.txt', 'findings.txt') { if (-not (Test-NonEmpty "$d/$f")) { Stop-Refused "missing $(P "$d/$f")" } }
                         if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
-                        $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Check')
+                        $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standards', (Resolve-UserPath $opt.standards), '-Standard', $std, '-Check')
                         if ($r.Code -ne 0) { Stop-Refused "findings.txt does not pass the scoring checks; fix it, then set success again:`n$($r.Text)" }
                     }
                     4 {
                         foreach ($f in 'score.tsv', 'score.json') {
                             if (-not (Test-NonEmpty "$d/$f")) { Stop-Refused "missing $(P "$d/$f")" }
-                            if (-not (Test-NotOlder "$d/$f" 'step3/findings.txt')) { Stop-Refused "$d/$f is older than step3/findings.txt; rerun scoring" }
+                            if (-not (Test-NotOlder "$d/$f" "step3/$std/findings.txt")) { Stop-Refused "$d/$f is older than step3/$std/findings.txt; rerun scoring" }
                         }
                     }
                     5 {
                         if (-not (Test-NonEmpty "$d/report.md")) { Stop-Refused "missing $(P "$d/report.md")" }
-                        if (-not (Test-NotOlder "$d/report.md" 'step4/score.tsv')) { Stop-Refused 'report.md is older than step4/score.tsv; render again' }
+                        if (-not (Test-NotOlder "$d/report.md" "step4/$std/score.tsv")) { Stop-Refused "report.md is older than step4/$std/score.tsv; render again" }
                         foreach ($p in (Get-PlanNames)) {
                             if (-not (Test-NotOlder "$d/report.md" "step$CR/$p/cr.txt")) { Stop-Refused "report.md is older than step$CR/$p/cr.txt; render again" }
                         }

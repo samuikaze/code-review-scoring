@@ -8,6 +8,7 @@ Can appear anywhere in a line, any number of times.
 | --- | --- |
 | `{{PR_TITLE}}` | `- Title:` line of `spec-context.md`, or `--title`; label `title.missing` when empty |
 | `{{REVIEW_DATE}}` | date the report was rendered (YYYY-MM-DD) |
+| `{{STANDARD}}` | name and version of the scoring standard (`standard` line of `score.tsv`), followed by label `standard.common` with `{common}` replaced by the common standard when one was used |
 | `{{GRADE}}` | S, A, B, C or D |
 | `{{TOTAL}}` | total score (0–100) |
 | `{{CAPPED_NOTE}}` | label `capped_note` when a Critical finding capped the grade at B, otherwise empty |
@@ -34,4 +35,4 @@ Must be alone on their line. Replaced by several lines; an empty block becomes t
 
 ## Labels
 
-`assets/labels.tsv` holds `key<TAB>text` pairs. Keys: `none`, `title.missing`, `capped_note`, `sep.list`, `sep.bracket`, `sep.colon`, `dim.A`–`dim.G`, `field.*` (problem, suggestion, assumption, source, content, code, ticket), `check.none` (check id `-`), `loc.pr_wide` (location `-`), `row.other`, `row.upstream`, `upstream.*`, `sub.*`, `impact.*`, and for code review `cr.not_run`, `cr.no_plugins`, `cr.missing`, `cr.col.*` (table headers), `cr.summary`, `cr.highlights`, `cr.tag_sep` (separator in the comment tag, printed with a space on each side), `cr.upstream`, `cr.rejected`, `cr.reason` (rejection reason field), `cr.advisory`, `cr.unjudged` (comment status), `cr.code`, `cr.spec` (location field names), `cr.no_comments`, `cr.skipped` (`{applies}` is replaced by the plugin's patterns), `cr.all_files`. A missing key is printed as the key itself.
+`assets/labels.tsv` holds `key<TAB>text` pairs. Keys: `none`, `title.missing`, `capped_note`, `sep.list`, `sep.bracket`, `sep.colon`, `dim.A`–`dim.G`, `standard.common`, `field.*` (problem, suggestion, assumption, source, content, code, ticket), `check.none` (check id `-`), `loc.pr_wide` (location `-`), `row.other`, `row.upstream`, `upstream.*`, `sub.*`, `impact.*`, and for code review `cr.not_run`, `cr.no_plugins`, `cr.missing`, `cr.col.*` (table headers), `cr.summary`, `cr.highlights`, `cr.tag_sep` (separator in the comment tag, printed with a space on each side), `cr.upstream`, `cr.rejected`, `cr.reason` (rejection reason field), `cr.advisory`, `cr.unjudged` (comment status), `cr.code`, `cr.spec` (location field names), `cr.no_comments`, `cr.skipped` (`{applies}` is replaced by the plugin's patterns), `cr.all_files`. A missing key is printed as the key itself.
