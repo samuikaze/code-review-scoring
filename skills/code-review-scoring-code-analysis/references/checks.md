@@ -5,7 +5,7 @@ Only the written condition may change a severity.
 
 Dimensions: A Correctness, B Security, C Test quality, D Architecture and design, E Performance and resource use,
 F Readability, G Maintainability. Their points and the deduction per severity are settings of the scoring step
-(`configs.ini`); they do not change which checks apply or which severity a finding gets.
+(`configs/settings.ini`); they do not change which checks apply or which severity a finding gets.
 
 ## A. Correctness
 

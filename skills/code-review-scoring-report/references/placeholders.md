@@ -21,7 +21,7 @@ Must be alone on their line. Replaced by several lines; an empty block becomes t
 | --- | --- | --- |
 | `{{CR_OVERVIEW}}` | Markdown table with one row per code review plugin: files reviewed, comment counts per severity, conclusion (header from labels); or label `cr.no_plugins` / `cr.not_run` | `step2/plan.tsv` + `cr.txt` |
 | `{{CR_DETAILS}}` | one `### <plugin>` section per plugin: conclusion, comments sorted Critical → Major → Minor → Nit, highlights. Each comment is `[severity \| rule \| status]` with problem, suggestion, the rejection reason and every code and spec location as a sub-list. Status: the check ids of the records whose `source:` cites the comment (label `check.none` for records without a check id, `cr.upstream` for `U` records), or label `cr.rejected`, `cr.advisory` or `cr.unjudged`. Empty (not `none`) when no plugin ran | `step2/<plugin>/cr.txt` + `F`, `U`, `X` lines |
-| `{{CR_SKIPPED}}` | plugins of `plugins.ini` that did not run because no changed file matched their `applies` | `step2/skipped.tsv` |
+| `{{CR_SKIPPED}}` | plugins of `configs/plugins.ini` that did not run because no changed file matched their `applies` | `step2/skipped.tsv` |
 | `{{SCORE_ROWS}}` | one Markdown table row per dimension: `\| A 正確性 \| 20/25 \| A1 Major -5 \|`, then a row for records without a check id (`row.other`) and one for upstream factors (`row.upstream`), both deducted from the total (put the header row in the template) | `score.tsv` |
 | `{{FINDINGS}}` | numbered deductions sorted Critical → Major → Minor → Nit, each with problem, suggestion, optional assumption and, for deductions confirmed from code review comments, the comment ids | `score.tsv` + `F` lines |
 | `{{SUGGESTIONS}}` | `N` lines | `findings.txt` |

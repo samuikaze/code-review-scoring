@@ -17,7 +17,7 @@ Usage: score.sh [--root DIR] [options]
   -o, --out-dir DIR    where score.tsv / score.json are written (default: ROOT/step4 or the findings dir)
       --check          validate findings.txt only (same checks, exit codes 0/1/2/3), write nothing; step 3 runs it
                        before reporting success
-      --config FILE    scoring settings: [points], [deductions] (incl. merge) and [grades] (default: configs.ini in the
+      --config FILE    scoring settings: [points], [deductions] (incl. merge) and [grades] (default: configs/settings.ini in the
                        project root; settings that are not given keep the defaults)
   -h, --help           show this help
 
@@ -27,9 +27,9 @@ USAGE
 }
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Project root (two levels above the physical skill folder) holds tmp/, reports/ and configs.ini.
+# Project root (two levels above the physical skill folder) holds tmp/, reports/ and configs/settings.ini.
 project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
-root="" findings="" diff="" git_range="" repo="." out_dir="" config="$project_root/configs.ini" crdir="" check=0
+root="" findings="" diff="" git_range="" repo="." out_dir="" config="$project_root/configs/settings.ini" crdir="" check=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;

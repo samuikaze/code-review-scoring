@@ -1,6 +1,6 @@
 # Diff preprocessor shared by prepare-diff.sh and prepare-diff.zsh (POSIX awk).
 # Variables: rules=scan rule file  mode=all|summary|scan|view  maxper=max locations listed per check
-#            merge=true|false ([deductions] merge of configs.ini, shown in the summary for writing findings.txt)
+#            merge=true|false ([deductions] merge of configs/settings.ini, shown in the summary for writing findings.txt)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = no code review comments section)
 # Run with LC_ALL=C; strings are handled as bytes.
 

@@ -36,12 +36,12 @@ Paths are relative to this skill's directory.
    - **0**: done. It prints the grade, the dimension scores and any warnings.
    - **1**: validation failed. Each error names the line in `findings.txt`. Standalone: fix it and run again until it passes. Workflow: `finish` records the failure and step 3 is redone. When an error questions a judgment (a severity that is not allowed, a location outside the diff), recheck the code and the checklist of `code-review-scoring-code-analysis` instead of only reformatting.
    - **3**: step 1 or step 3 still has unresolved inputs or unanswered questions. Standalone: ask the user in one round, record the replies, run again. Workflow: report failed.
-   - **2**: wrong arguments, missing files, or invalid scoring settings in `configs.ini` (tell the user what the error says; do not edit the file yourself).
+   - **2**: wrong arguments, missing files, or invalid scoring settings in `configs/settings.ini` (tell the user what the error says; do not edit the file yourself).
 3. Treat warnings seriously. "unchanged context line" means the location is not new code: move the finding to the added line or drop it.
 
 ## Scoring rules (implemented by the script)
 
-The points, deductions (including whether they are merged) and grade thresholds are settings: the `[points]`, `[deductions]` and `[grades]` sections of `configs.ini` in the project root (`--config` for another file). Anything not set there keeps the default below. The script refuses invalid settings with exit 2 (the seven dimensions must add up to 100, grade thresholds must be S > A > B > C). Never change them on your own; they are the user's choice.
+The points, deductions (including whether they are merged) and grade thresholds are settings: the `[points]`, `[deductions]` and `[grades]` sections of `configs/settings.ini` in the project root (`--config` for another file). Anything not set there keeps the default below. The script refuses invalid settings with exit 2 (the seven dimensions must add up to 100, grade thresholds must be S > A > B > C). Never change them on your own; they are the user's choice.
 
 Defaults:
 

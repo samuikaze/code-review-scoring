@@ -20,15 +20,15 @@ Uses the same GNU-style arguments as review-state.sh so subagent prompts work on
 
 next prints the next action of the workflow: the prompt of the next step or plugin to run (it runs cr-plan first
 when step 2 has no plan yet), the questions to relay, a failure to report, "finish", or the result. --inline renders
-prompts for the main agent (default: from subagent= in configs.ini); --retry prints the prompt again for a failed
+prompts for the main agent (default: from subagent= in configs/settings.ini); --retry prints the prompt again for a failed
 step or plugin. finish runs step 4 (score) and step 5 (report) with their scripts, records both states and prints
 the result summary (exit 1 when one of them failed). prompt prints the prompt of step 1, 2 or 3.
 
-config reads and writes configs.ini in the project root unless --config is given. Without --subagent it prints
+config reads and writes configs/settings.ini in the project root unless --config is given. Without --subagent it prints
 subagent=true|false from the [workflow] section (true = each step runs in its own subagent, false = the main
 agent runs every step); with --platform it prints or saves the model and reasoning of that platform.
 
-cr-plan picks the plugins of plugins.ini whose "applies" patterns match files in the PR diff and writes
+cr-plan picks the plugins of configs/plugins.ini whose "applies" patterns match files in the PR diff and writes
 ROOT/step2/plan.tsv, ROOT/step2/<plugin>/files.txt and ROOT/step2/<plugin>/diff.patch (only that plugin's
 files, to save tokens). Step 2 is success when every planned plugin is success (no plugins = success).
 
@@ -40,7 +40,7 @@ Gates enforced by "set":
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
-Exit codes: 0 ok, 1 finish: step 4 or 5 failed, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 setting not configured, 7 setup incomplete (no plugins.ini; see setup check).
+Exit codes: 0 ok, 1 finish: step 4 or 5 failed, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 setting not configured, 7 setup incomplete (no configs/plugins.ini; see setup check).
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -58,8 +58,8 @@ $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
 $opt = @{ root = (Join-Path $projectRoot 'tmp'); step = ''; plugin = ''; state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
-    config = (Join-Path $projectRoot 'configs.ini'); subagent = ''; platform = ''; model = ''; reasoning = ''
-    plugins = (Join-Path $projectRoot 'plugins.ini'); inline = $null; retry = $false }
+    config = (Join-Path $projectRoot 'configs/settings.ini'); subagent = ''; platform = ''; model = ''; reasoning = ''
+    plugins = (Join-Path $projectRoot 'configs/plugins.ini'); inline = $null; retry = $false }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
@@ -91,7 +91,7 @@ function Get-RequestField([string]$Name) {
     $l = Read-Utf8Lines (P 'request.md') | Where-Object { $_.StartsWith("- ${Name}: ") } | Select-Object -First 1
     if ($l) { return $l.Substring($Name.Length + 4) } return ''
 }
-# configs.ini: [workflow] subagent=true|false, and one [NAME] section per platform with model and reasoning.
+# configs/settings.ini: [workflow] subagent=true|false, and one [NAME] section per platform with model and reasoning.
 function Get-IniValue([string]$File, [string]$Section, [string]$Key) {
     if (-not [IO.File]::Exists($File)) { return '' }
     $inSec = $false; $val = ''
@@ -106,8 +106,8 @@ function Set-IniSection([string]$File, [string]$Section, [string[]]$Pairs) {
     $block = @("[$Section]") + @($Pairs | ForEach-Object { $k, $v = $_ -split '=', 2; "$k=`"$v`"" })
     $lines = New-Object System.Collections.Generic.List[string]
     $skip = $false; $done = $false
-    # A new configs.ini starts as a copy of the commented example
-    $example = Join-Path $projectRoot 'configs.example.ini'
+    # A new configs/settings.ini starts as a copy of the commented example
+    $example = Join-Path $projectRoot 'configs/settings.example.ini'
     $old = if ([IO.File]::Exists($File)) { Read-Utf8Lines $File } elseif ([IO.File]::Exists($example)) { Read-Utf8Lines $example } else { @() }
     foreach ($l in $old) {
         if ($l -match '^\s*\[(.*)\]\s*$') {
@@ -121,6 +121,7 @@ function Set-IniSection([string]$File, [string]$Section, [string[]]$Pairs) {
     }
     while ($lines.Count -gt 0 -and -not $lines[$lines.Count - 1].Trim()) { $lines.RemoveAt($lines.Count - 1) }
     if (-not $done) { if ($lines.Count -gt 0) { $lines.Add('') }; $block | ForEach-Object { $lines.Add($_) } }
+    [void][IO.Directory]::CreateDirectory((Split-Path -Parent (Resolve-UserPath $File)))
     Write-Utf8File $File (($lines -join "`n") + "`n")
 }
 function Assert-Review { if (-not (Test-Exists 'request.md')) { Exit-WithError "no review in $root; run init first" } }

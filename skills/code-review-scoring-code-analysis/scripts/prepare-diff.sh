@@ -14,8 +14,8 @@ Usage: prepare-diff.sh [--root DIR | --input FILE | --git RANGE] [options]
   -m, --mode MODE      all (default) | summary | scan | view
       --max N          max locations listed per check (default 15)
   -o, --out FILE       write output to FILE (UTF-8) instead of stdout
-      --config FILE    configs.ini whose [deductions] merge is shown in the summary
-                       (default: configs.ini in the project root; missing = false)
+      --config FILE    configs/settings.ini whose [deductions] merge is shown in the summary
+                       (default: configs/settings.ini in the project root; missing = false)
   -h, --help           show this help
 
 Output: summary, code review comments of ROOT/step2 with their ids (root mode only), heuristic candidates
@@ -27,7 +27,7 @@ USAGE
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Project root (two levels above the physical skill folder) holds tmp/ and reports/.
 project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
-config="$project_root/configs.ini" crdir="" root="" input="" git_range="" repo="." mode="all" max=15 out=""
+config="$project_root/configs/settings.ini" crdir="" root="" input="" git_range="" repo="." mode="all" max=15 out=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;

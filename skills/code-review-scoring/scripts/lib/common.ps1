@@ -21,7 +21,7 @@ function Resolve-UserPath([string]$Path) {
 }
 
 function Get-ProjectRoot([string]$SkillDir) {
-    # The project root, two levels above the physical skill folder, holds tmp/, reports/, plugins.ini and configs.ini.
+    # The project root, two levels above the physical skill folder, holds tmp/, reports/, configs/plugins.ini and configs/settings.ini.
     # The skill folder may be a junction or symlink (e.g. .agents/skills/...), so resolve it first.
     $item = Get-Item -LiteralPath $SkillDir -Force
     $path = $item.FullName

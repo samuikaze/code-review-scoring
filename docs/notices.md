@@ -21,11 +21,11 @@
 
 ## 隱憂與因應方式
 
-### 1. `configs.ini` 中 `[Copilot]` 的 reasoning 不會生效
+### 1. `configs/settings.ini` 中 `[Copilot]` 的 reasoning 不會生效
 
 - **影響**：設定會被記錄，但 Sub-Agent 實際上沿用主對話的 reasoning。
 - **目前做法**：主 Agent 儲存設定時會告知使用者此值不會套用。
-- **可行的改善**：讓主 Agent 依 `configs.ini` 自動產生一個帶 `model` 與 `reasoning-effort` 的自訂 agent 檔，再用它派發 Sub-Agent。此方式在 Copilot CLI 有效，在 VS Code 本機執行方式仍會被忽略，因此尚未實作。
+- **可行的改善**：讓主 Agent 依 `configs/settings.ini` 自動產生一個帶 `model` 與 `reasoning-effort` 的自訂 agent 檔，再用它派發 Sub-Agent。此方式在 Copilot CLI 有效，在 VS Code 本機執行方式仍會被忽略，因此尚未實作。
 
 ### 2. Sub-Agent 的 model 不能高於主對話的費用等級
 

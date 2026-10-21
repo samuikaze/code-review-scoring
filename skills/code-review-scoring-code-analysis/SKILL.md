@@ -69,7 +69,7 @@ Step 2 ran the code review plugins listed in `tmp/step2/plan.tsv` (columns: plug
 
 ## Severity rules
 
-- **Follow the deduction rule in the `- deductions:` line of the `prepared.txt` summary** (the `[deductions] merge` setting of `configs.ini`; never change it yourself):
+- **Follow the deduction rule in the `- deductions:` line of the `prepared.txt` summary** (the `[deductions] merge` setting of `configs/settings.ini`; never change it yourself):
   - `not merged (merge=false)`: every occurrence is deducted. Record one `F` line per occurrence, with exactly one location (a line range only when it is one occurrence, such as one method or one block). When the same check id occurs in several places, write one `F` line for each place. Never list the same check id at the same location twice.
   - `merged (merge=true)`: one deduction per check id. If the same id occurs in several places, record one `F` line with all locations.
 - **Use the default severity.** Change it only when the condition written in the check is met, and write that condition in column 5. Never raise or lower it on your own judgment, and never adopt a code review plugin's severity.

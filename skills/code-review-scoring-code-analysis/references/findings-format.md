@@ -63,7 +63,7 @@ R|未提供靜態分析報告，純格式問題不扣分。
 - Severity: `Critical`, `Major`, `Minor` or `Nit`. Every `F` and `U` record is deducted, `Nit` included.
 - Check id `-`: no check of the checklist covers the problem. Choose the severity by its meaning (for a code review comment, keep the plugin's severity); it is deducted from the total instead of a dimension. Only these records may use location `-` for a problem of the whole PR.
 - Location: `full/path/from/diff:line` or `path:start-end`, using new-file line numbers. `U` records may list several comma-separated locations in `code:`.
-- How `F` lines are written depends on `[deductions] merge` in `configs.ini`, shown in the `- deductions:` line of the `prepared.txt` summary:
+- How `F` lines are written depends on `[deductions] merge` in `configs/settings.ini`, shown in the `- deductions:` line of the `prepared.txt` summary:
   - `merge=false` (default): one `F` line per occurrence with exactly one location (a range only for one occurrence). The same check id may appear on several lines, one per location, and each is deducted. The same check id at the same location may appear only once.
   - `merge=true`: one `F` line per check id with all its locations, comma-separated; it is deducted once.
   - Records with check id `-` are always one problem per line.

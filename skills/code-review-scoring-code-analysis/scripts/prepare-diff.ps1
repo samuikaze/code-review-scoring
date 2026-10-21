@@ -5,7 +5,7 @@ Preprocess a PR diff: drop non-reviewable files, number new-file lines, list heu
 .DESCRIPTION
 Prints a summary, the code review comments of ROOT/step2 with their ids (with -Root only), heuristic candidates
 (clues only) and a compact diff with new-file line numbers.
-The summary shows the [deductions] merge setting of -Config (default: configs.ini in the project root; missing =
+The summary shows the [deductions] merge setting of -Config (default: configs/settings.ini in the project root; missing =
 false), which decides how findings.txt is written. With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
 -InputPath and -Git, ROOT is tmp in the project root. -InputPath - reads the diff from stdin.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
@@ -37,7 +37,7 @@ if ($sources -gt 1) { Exit-WithError 'use only one of -Root, -InputPath, -Git' }
 $projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
 if ($sources -eq 0) { $Root = Join-Path $projectRoot 'tmp' }
 # [deductions] merge decides how findings.txt is written; the scoring step validates it the same way.
-if (-not $Config) { $Config = Join-Path $projectRoot 'configs.ini' }
+if (-not $Config) { $Config = Join-Path $projectRoot 'configs/settings.ini' }
 $merge = 'false'
 if (Test-UserFile $Config) {
     $sec = ''

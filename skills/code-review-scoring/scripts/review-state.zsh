@@ -12,20 +12,20 @@ Usage: review-state.zsh <command> [options]
 
 Commands:
   init     --git RANGE [--repo DIR] [--title TEXT] [--reset]
-           (refused with exit 7 while plugins.ini is missing: run setup check first)
+           (refused with exit 7 while configs/plugins.ini is missing: run setup check first)
            create ROOT and ROOT/request.md (plus ROOT/.gitignore when git does not ignore ROOT yet).
            Exit 4 if a previous review exists (--reset deletes only the workflow's own files, including
            ROOT/inputs where pasted documents are saved)
   next     [--inline] [--retry]
            the next action of the workflow: the prompt of the next step or plugin to run (runs cr-plan first
            when step 2 has no plan yet), the questions to relay, a failure to report, "finish", or the result.
-           --inline renders prompts for the main agent (default: from subagent= in configs.ini);
+           --inline renders prompts for the main agent (default: from subagent= in configs/settings.ini);
            --retry prints the prompt again for a failed step or plugin
   finish   run step 4 (score) and step 5 (report) with their scripts, record both states and print the result
            summary; refused before step 3 succeeds. Exit 1 when one of them failed (see "next")
   show     print the state of every step (and every step 2 plugin)
   cr-plan  [--plugins FILE]
-           step 2 planning: pick the plugins of plugins.ini whose "applies" patterns match files in the
+           step 2 planning: pick the plugins of configs/plugins.ini whose "applies" patterns match files in the
            PR diff; writes ROOT/step2/plan.tsv, ROOT/step2/<plugin>/files.txt and ROOT/step2/<plugin>/diff.patch
            (only that plugin's files, to save tokens). Refused before step 1 succeeds; "next" runs it
   prompt   --step 1|2|3 [--plugin NAME] [--inline]
@@ -38,7 +38,7 @@ Commands:
   config   --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
            without --model/--reasoning: print the subagent settings of NAME (exit 6 if not set);
            with both: save them in the [NAME] section
-           (default file of both: configs.ini in the project root)
+           (default file of both: configs/settings.ini in the project root)
 
 Common option: --root DIR (default: tmp in the project root)
 
@@ -51,7 +51,7 @@ Gates enforced by "set":
 Step 2 is success when cr-plan has run and every planned plugin is success (no plugins = success).
 
 Exit codes: 0 ok, 1 finish: step 4 or 5 failed, 2 bad arguments, 4 previous review exists, 5 gate refused,
-            6 setting not configured, 7 setup incomplete (no plugins.ini; see setup check).
+            6 setting not configured, 7 setup incomplete (no configs/plugins.ini; see setup check).
 USAGE
 }
 
@@ -59,7 +59,7 @@ USAGE
 abspath() { (cd "$1" && { pwd -W 2>/dev/null || pwd -P; }); }
 script_dir="${0:A:h}"
 skill_dir="$(dirname "$script_dir")"
-# Project root (two levels above the physical skill folder) holds tmp/, reports/, plugins.ini and configs.ini.
+# Project root (two levels above the physical skill folder) holds tmp/, reports/, configs/plugins.ini and configs/settings.ini.
 project_root="$(dirname "$(dirname "$skill_dir")")"
 skills_dir="$(dirname "$skill_dir")"
 self_cmd="zsh \"$script_dir/review-state.zsh\""
@@ -70,7 +70,7 @@ run_tool() { local s="$skills_dir/$1/scripts/$2.zsh"; shift 2; zsh "$s" "$@"; } 
 cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
 root="$project_root/tmp" step="" plugin="" state="" message="" git_range="" repo="." title="" reset=0
-config="$project_root/configs.ini" subagent="" platform="" model="" reasoning="" plugins_file="$project_root/plugins.ini"
+config="$project_root/configs/settings.ini" subagent="" platform="" model="" reasoning="" plugins_file="$project_root/configs/plugins.ini"
 inline="" retry=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -99,7 +99,7 @@ done
 refuse() { echo "refused: $1" >&2; exit 5; }
 now() { date +%Y-%m-%dT%H:%M:%S%z; }
 abs_root() { mkdir -p "$root"; abspath "$root"; }
-# configs.ini: [workflow] subagent=true|false, and one [NAME] section per platform with model and reasoning.
+# configs/settings.ini: [workflow] subagent=true|false, and one [NAME] section per platform with model and reasoning.
 ini_get() {  # $1 = section, $2 = key; prints the value without quotes (empty when not set)
   [[ -f "$config" ]] || return 0
   LC_ALL=C awk -v sec="$1" -v key="$2" '
@@ -114,9 +114,10 @@ ini_get() {  # $1 = section, $2 = key; prints the value without quotes (empty wh
 ini_set() {  # $1 = section, then KEY=VALUE pairs; replaces the section in place, or appends it
   local tmpf body="" kv
   for kv in "${@:2}"; do body+="${kv%%=*}=\"${kv#*=}\""$'\n'; done
-  # A new configs.ini starts as a copy of the commented example
+  # A new configs/settings.ini starts as a copy of the commented example
   if [[ ! -f "$config" ]]; then
-    if [[ -f "$project_root/configs.example.ini" ]]; then cp "$project_root/configs.example.ini" "$config"; else : > "$config"; fi
+    mkdir -p "$(dirname "$config")"
+    if [[ -f "$project_root/configs/settings.example.ini" ]]; then cp "$project_root/configs/settings.example.ini" "$config"; else : > "$config"; fi
   fi
   tmpf="$(mktemp)"
   sec="$1" body="$body" LC_ALL=C awk '

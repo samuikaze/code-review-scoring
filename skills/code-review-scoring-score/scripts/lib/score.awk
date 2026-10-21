@@ -1,6 +1,6 @@
 # Validator and calculator shared by score.sh and score.zsh (POSIX awk). Run with LC_ALL=C.
 # Variables: rules=rules.tsv  idxfile=output of diff-index.awk ("" = skip location checks)
-#            config=configs.ini with the [points], [deductions] (incl. merge) and [grades] sections ("" or missing file = defaults)
+#            config=configs/settings.ini with the [points], [deductions] (incl. merge) and [grades] sections ("" or missing file = defaults)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = skip the code review comment checks)
 #            tsvout / jsonout = output files  checkonly=1: validate only, write nothing
 # Input: findings.txt (format: see references/findings-format.md of code-review-scoring-code-analysis).
@@ -53,7 +53,7 @@ function use_sources(val,    n, s, i, e) {
 }
 function cfgerr(msg) { ncfg++; cfgerrs = cfgerrs "  - " msg "\n" }
 
-# Reads the scoring settings of configs.ini; keys that are not set keep their defaults.
+# Reads the scoring settings of configs/settings.ini; keys that are not set keep their defaults.
 function load_config(file,    l, sec, k, v, sum, i, g) {
     if (file != "") {
         while ((getline l < file) > 0) {
@@ -90,7 +90,7 @@ function load_config(file,    l, sec, k, v, sum, i, g) {
 BEGIN {
     FS = "|"
     split("A B C D E F G", dims, " ")
-    # Defaults; configs.ini can change them
+    # Defaults; configs/settings.ini can change them
     dmax["A"] = 25; dmax["B"] = 15; dmax["C"] = 15; dmax["D"] = 15; dmax["E"] = 10; dmax["F"] = 10; dmax["G"] = 10
     pts["Critical"] = 10; pts["Major"] = 5; pts["Minor"] = 2; pts["Nit"] = 1
     gmin["S"] = 95; gmin["A"] = 85; gmin["B"] = 70; gmin["C"] = 55

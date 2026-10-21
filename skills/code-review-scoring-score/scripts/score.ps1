@@ -7,7 +7,7 @@ With -Root (default: tmp in the project root): uses ROOT/step3/findings.txt and 
 questions in step1/step3, checks that every comment of a mapped code review plugin in ROOT/step2 is deducted or rejected,
 and writes ROOT/step4/score.tsv and ROOT/step4/score.json.
 With -Findings: standalone use without the root layout.
-Scoring settings come from the [points], [deductions] (incl. merge) and [grades] sections of -Config (default: configs.ini in
+Scoring settings come from the [points], [deductions] (incl. merge) and [grades] sections of -Config (default: configs/settings.ini in
 the project root); settings that are not given keep the defaults. Works on Windows PowerShell 5.1 and PowerShell 7+.
 Saved as UTF-8 with BOM; keep that encoding.
 With -Check: validate findings.txt only (same checks and exit codes) and write nothing; step 3 runs it before reporting success.
@@ -35,7 +35,7 @@ Initialize-Utf8
 
 $projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
 if (-not $Root -and -not $Findings) { $Root = Join-Path $projectRoot 'tmp' }
-if (-not $Config) { $Config = Join-Path $projectRoot 'configs.ini' }
+if (-not $Config) { $Config = Join-Path $projectRoot 'configs/settings.ini' }
 if ($Root) {
     if (-not [IO.Directory]::Exists((Resolve-UserPath $Root))) { Exit-WithError "review root not found: $Root" }
     if (-not $Findings) { $Findings = Join-Path $Root 'step3/findings.txt' }
@@ -109,12 +109,12 @@ else {
     [Console]::Error.WriteLine('note: no diff given, location checks skipped')
 }
 
-# Defaults; configs.ini can change them
+# Defaults; configs/settings.ini can change them
 $dimMax = [ordered]@{ A = 25; B = 15; C = 15; D = 15; E = 10; F = 10; G = 10 }
 $pts = @{ Critical = 10; Major = 5; Minor = 2; Nit = 1 }
 $gradeMin = [ordered]@{ S = 95; A = 85; B = 70; C = 55 }
 $merge = $false
-# Reads the scoring settings of configs.ini; keys that are not set keep their defaults.
+# Reads the scoring settings of configs/settings.ini; keys that are not set keep their defaults.
 $cfgErrors = New-Object System.Collections.Generic.List[string]
 if (Test-UserFile $Config) {
     $sec = ''
