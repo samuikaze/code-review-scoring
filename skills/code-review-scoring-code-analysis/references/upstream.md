@@ -1,8 +1,8 @@
 # Upstream factors
 
-A PR's quality depends on upstream material: the SD spec, which in turn relies on the third-party core-system spec and on the specs and processes of the owning unit. When the root cause of a problem is upstream, the implementer is not deducted.
+A PR's quality depends on upstream material: the SD spec, which in turn relies on the third-party core-system spec and on the specs and processes of the owning unit. The root cause of a problem may be upstream.
 
-**You can only decide "suspected". The final attribution is confirmed by a person.** Any problem you judge as a suspected upstream factor gets **no** deduction: write it as a `U` line instead of an `F` line.
+**You can only decide "suspected". The final attribution is confirmed by a person.** Write a problem you judge as a suspected upstream factor as a `U` line instead of an `F` line. It is still deducted, from the total by its severity rather than from a dimension, and the report lists it for human confirmation.
 
 ## Categories
 
@@ -18,7 +18,7 @@ A PR's quality depends on upstream material: the SD spec, which in turn relies o
 - Every `U` line needs a reference: spec section or version, change-log date, or vendor ticket number. No reference, no `U` line.
 - Judge compliance against the spec and process versions **in effect when development started**. Later changes do not make a finished PR wrong.
 - A change communicated only verbally, without written confirmation, does not count; the original version still applies.
-- For 5 working days after a process change, a PR is not deducted for not following the new process.
+- For 5 working days after a process change, not following the new process is a suspected ownership change (`ownership-change`, `process`), not an `F` line.
 - When it cannot be determined whether the cause is the SD spec or the third-party system (for example, the vendor spec version at the time is unknown), classify it as a suspected third-party issue.
 - Do not decide who is responsible, and never name the author of a spec.
 

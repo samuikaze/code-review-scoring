@@ -21,16 +21,50 @@ function codes(locs,    n, a, i, out) {
     return out
 }
 
+# One sub-list item per comma-separated location, or the `none` label on the field line.
+function loclist(field, locs,    n, a, i, out) {
+    if (locs == "" || locs == "-") return "   - " field L("sep.colon") L("none") "\n"
+    n = split(locs, a, ","); out = "   - " field L("sep.colon") "\n"
+    for (i = 1; i <= n; i++) out = out "     - `" trim(a[i]) "`\n"
+    return out
+}
+
+# Links code review comments (<plugin>#<n>, the n-th C record of cr.txt) to the F and U records whose
+# `source:` names them, and to the X records that reject them.
+function link_comments(    r, i, k, n, src, e, hdr, lbl) {
+    for (i = 1; i <= np; i++) pidx[pname[i]] = i
+    for (r = 1; r <= nfr + nu; r++) {
+        k = (r <= nfr) ? "F:" r : "U:" (r - nfr)
+        if (!((k, "source") in fv)) continue
+        lbl = (r > nfr) ? L("cr.upstream") : (frid[r] == "-" ? L("check.none") : frid[r])
+        n = split(fv[k, "source"], src, /、|,/)
+        for (e = 1; e <= n; e++) {
+            if ((hdr = comment_hdr(trim(src[e]))) == "" || ((hdr, lbl) in linked)) continue
+            linked[hdr, lbl] = 1; clink[hdr] = clink[hdr] (clink[hdr] == "" ? "" : L("sep.list")) lbl
+        }
+    }
+    for (r = 1; r <= nxr; r++) if ((hdr = comment_hdr(xid[r])) != "") crej[hdr] = xr[r]
+}
+
+function comment_hdr(id,    p, n) {
+    if (!match(id, /#[0-9]+$/)) return ""
+    p = substr(id, 1, RSTART - 1); n = substr(id, RSTART + 1) + 0
+    if (!(p in pidx) || n < 1 || n > nc[pidx[p]]) return ""
+    return pidx[p] SUBSEP n
+}
+
+function where(locs) { return locs == "-" ? L("loc.pr_wide") : codes(locs) }
+
 function sevrank(s) { return s == "Critical" ? 1 : (s == "Major" ? 2 : (s == "Minor" ? 3 : 4)) }
 
-# Loads ROOT/step4: the plan, skipped plugins and every plugin's normalized cr.txt.
+# Loads ROOT/step2: the plan, skipped plugins and every plugin's normalized cr.txt.
 function load_cr(    l, a, n, i, f, t, cur, key, val) {
     crstate = "not_run"
     if (crdir == "" || (getline l < (crdir "/plan.tsv")) < 0) return
     crstate = "ok"
     do {
         if (l == "") continue
-        split(l, a, "\t"); np++; pname[np] = a[1]; pfiles[np] = a[4]
+        split(l, a, "\t"); np++; pname[np] = a[1]; pmode[np] = a[3]; pfiles[np] = a[4]
     } while ((getline l < (crdir "/plan.tsv")) > 0)
     close(crdir "/plan.tsv")
     while ((getline l < (crdir "/skipped.tsv")) > 0) { if (l == "") continue; split(l, a, "\t"); nsk++; skname[nsk] = a[1]; skapp[nsk] = a[2] }
@@ -52,7 +86,7 @@ function load_cr(    l, a, n, i, f, t, cur, key, val) {
             else if (a[1] == "H") { nh[i]++; ph[i, nh[i]] = a[2] }
             else if (a[1] == "C") {
                 nc[i]++; cur = i SUBSEP nc[i]
-                csev[cur] = a[2]; cloc[cur] = a[3]; crule[cur] = a[4]
+                csev[cur] = a[2]; cloc[cur] = a[3]; crule[cur] = (a[4] == "" ? "-" : a[4])
                 cnt[i, a[2]]++; tot[a[2]]++
             }
         }
@@ -60,7 +94,14 @@ function load_cr(    l, a, n, i, f, t, cur, key, val) {
     }
 }
 
-function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, tag, sevs, s) {
+# Deducted: the linked check ids; otherwise rejected, advisory (never deducted) or not judged yet.
+function comment_status(hdr, i) {
+    if (clink[hdr] != "") return clink[hdr]
+    if (hdr in crej) return L("cr.rejected")
+    return pmode[i] == "advisory" ? L("cr.advisory") : L("cr.unjudged")
+}
+
+function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, ts, sevs, s) {
     b = L("sep.bracket"); c = L("sep.colon"); split("Critical Major Minor Nit", sevs, " ")
     if (crstate == "not_run") { blk["CR_OVERVIEW"] = L("cr.not_run") "\n"; blk["CR_DETAILS"] = ""; inl["CR_TOTALS"] = L("cr.not_run"); blk["CR_SKIPPED"] = ""; return }
     out = ""
@@ -78,16 +119,17 @@ function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, tag, sevs, s) {
             if (!pok[i]) { out = out L("cr.missing") "\n"; continue }
             out = out "**" L("cr.summary") "**" c psum[i] "\n\n"
             # comments sorted by severity, keeping the plugin's order within a severity
-            m = 0
+            m = 0; ts = " " L("cr.tag_sep") " "
             for (j = 1; j <= nc[i]; j++) { m++; order[m] = j }
             for (j = 2; j <= m; j++) { tmp = order[j]; k = j - 1; while (k >= 1 && sevrank(csev[i, order[k]]) > sevrank(csev[i, tmp])) { order[k + 1] = order[k]; k-- } order[k + 1] = tmp }
             if (m == 0) out = out L("cr.no_comments") "\n"
             for (j = 1; j <= m; j++) {
                 hdr = i SUBSEP order[j]
-                tag = csev[hdr] ((crule[hdr] != "" && crule[hdr] != "-") ? b crule[hdr] : "")
-                out = out j ". **[" tag "]**" ((cloc[hdr] != "" && cloc[hdr] != "-") ? " " codes(cloc[hdr]) : "") "\n"
+                out = out j ". [" csev[hdr] ts crule[hdr] ts comment_status(hdr, i) "]\n"
                 out = out "   - " L("field.problem") c cv[hdr, "problem"] "\n"
                 if ((hdr, "suggestion") in cv) out = out "   - " L("field.suggestion") c cv[hdr, "suggestion"] "\n"
+                if (hdr in crej) out = out "   - " L("cr.reason") c crej[hdr] "\n"
+                out = out loclist(L("cr.code"), cloc[hdr]) loclist(L("cr.spec"), cv[hdr, "spec"])
             }
             if (nh[i] > 0) {
                 out = out "\n**" L("cr.highlights") "**\n\n"
@@ -119,10 +161,12 @@ function load_findings(    l, t, a, n, key, val) {
         n = split(l, a, "|"); for (i = 1; i <= n; i++) a[i] = trim(a[i])
         t = a[1]; cur = ""
         if (t == "F") {
-            cur = "F:" a[2]; fsev[a[2]] = a[3]; floc[a[2]] = a[4]
-            if (a[3] == "Nit") { nnit++; nit[nnit] = a[2] } else fdeduct[a[2]] = 1
+            # Records are keyed by their order in findings.txt; score.tsv refers to them by that number.
+            nfr++; cur = "F:" nfr; frid[nfr] = a[2]
         } else if (t == "U") {
-            nu++; cur = "U:" nu; ut[nu] = a[2]; us[nu] = a[3]; ui[nu] = a[4]; ur[nu] = a[5]
+            nu++; cur = "U:" nu; ut[nu] = a[2]; us[nu] = a[3]; ui[nu] = a[4]; usev[nu] = a[5]; ur[nu] = a[6]
+        } else if (t == "X") {
+            nxr++; xid[nxr] = a[2]; xr[nxr] = a[3]
         } else if (t == "S") {
             nl["S"]++; lt["S", nl["S"]] = a[2] L("sep.colon") a[3]
         } else if (t == "H" || t == "N" || t == "I" || t == "R") {
@@ -147,12 +191,13 @@ BEGIN {
         else if (a[1] == "grade") grade = a[2]
         else if (a[1] == "capped") capped = a[2]
         else if (a[1] == "dim") { nd++; dcode[nd] = a[2]; dsc[nd] = a[3]; dmx[nd] = a[4] }
-        else if (a[1] == "finding") { nf++; sid[nf] = a[2]; ssev[nf] = a[3]; spts[nf] = a[4]; sloc[nf] = a[5]; inscore[a[2]] = 1 }
+        else if (a[1] == "finding") { nf++; sid[nf] = a[2]; ssev[nf] = a[3]; spts[nf] = a[4]; sloc[nf] = a[5]; sseq[nf] = a[6] }
+        else if (a[1] == "upstream") { nus++; upts[a[2]] = a[4] }
     }
     close(scoretsv)
     if (nd != 7 || grade == "") fail("score.tsv is missing or incomplete; run the scoring skill first")
-    for (id in fdeduct) if (!(id in inscore)) fail("finding " id " is in findings.txt but not in score.tsv; rerun the scoring skill")
-    for (i = 1; i <= nf; i++) if (!(sid[i] in fdeduct)) fail("finding " sid[i] " is in score.tsv but not in findings.txt; rerun the scoring skill")
+    if (nf != nfr || nus != nu) fail("findings.txt and score.tsv list different records; rerun the scoring skill")
+    for (i = 1; i <= nf; i++) if (frid[sseq[i]] != sid[i]) fail("finding " sid[i] " of score.tsv does not match findings.txt; rerun the scoring skill")
 
     json = ""
     while ((getline l < scorejson) > 0) json = json (json == "" ? "" : "\n") l
@@ -172,26 +217,27 @@ BEGIN {
         for (i = 1; i <= nf; i++) if (substr(sid[i], 1, 1) == dcode[k]) items = items (items == "" ? "" : L("sep.list")) sid[i] " " ssev[i] " -" spts[i]
         blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " dcode[k] " " L("dim." dcode[k]) " | " dsc[k] "/" dmx[k] " | " (items == "" ? L("none") : items) " |\n"
     }
+    # Records without a check id and upstream factors are deducted from the total.
+    items = ""; sum = 0
+    for (i = 1; i <= nf; i++) if (sid[i] == "-") { items = items (items == "" ? "" : L("sep.list")) ssev[i] " -" spts[i]; sum += spts[i] }
+    blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " L("row.other") " | " (sum ? "-" sum : 0) " | " (items == "" ? L("none") : items) " |\n"
+    items = ""; sum = 0
+    for (i = 1; i <= nu; i++) { items = items (items == "" ? "" : L("sep.list")) usev[i] " -" upts[i]; sum += upts[i] }
+    blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " L("row.upstream") " | " (sum ? "-" sum : 0) " | " (items == "" ? L("none") : items) " |\n"
     b = L("sep.bracket"); c = L("sep.colon"); out = ""
     for (i = 1; i <= nf; i++) {
-        id = sid[i]
-        out = out i ". **[" id b ssev[i] b "-" spts[i] "]** " codes(sloc[i]) "\n"
-        out = out "   - " L("field.problem") c fv["F:" id, "problem"] "\n"
-        out = out "   - " L("field.suggestion") c fv["F:" id, "suggestion"] "\n"
-        if (("F:" id, "assumption") in fv) out = out "   - " L("field.assumption") c fv["F:" id, "assumption"] "\n"
+        key = "F:" sseq[i]
+        out = out i ". **[" (sid[i] == "-" ? L("check.none") : sid[i]) b ssev[i] b "-" spts[i] "]** " where(sloc[i]) "\n"
+        out = out "   - " L("field.problem") c fv[key, "problem"] "\n"
+        out = out "   - " L("field.suggestion") c fv[key, "suggestion"] "\n"
+        if ((key, "assumption") in fv) out = out "   - " L("field.assumption") c fv[key, "assumption"] "\n"
+        if ((key, "source") in fv) out = out "   - " L("field.source") c fv[key, "source"] "\n"
     }
     blk["FINDINGS"] = out
-    out = ""
-    for (i = 1; i <= nnit; i++) {
-        id = nit[i]
-        out = out "- [" id "] " codes(floc[id]) c fv["F:" id, "problem"]
-        if (("F:" id, "suggestion") in fv) out = out "（" L("field.suggestion") c fv["F:" id, "suggestion"] "）"
-        out = out "\n"
-    }
-    blk["SUGGESTIONS"] = out bullets("N")
+    blk["SUGGESTIONS"] = bullets("N")
     out = ""
     for (i = 1; i <= nu; i++) {
-        tag = L("upstream." ut[i]) b L("sub." us[i]) ((ui[i] != "" && ui[i] != "-") ? b L("impact." ui[i]) : "")
+        tag = L("upstream." ut[i]) b L("sub." us[i]) ((ui[i] != "" && ui[i] != "-") ? b L("impact." ui[i]) : "") b usev[i] b "-" upts[i]
         out = out i ". **[" tag "]** " ur[i] "\n"
         out = out "   - " L("field.content") c fv["U:" i, "content"] "\n"
         if (("U:" i, "code") in fv) out = out "   - " L("field.code") c codes(fv["U:" i, "code"]) "\n"
@@ -204,6 +250,7 @@ BEGIN {
     blk["REMARKS"] = bullets("R")
     blk["SCORE_JSON"] = json "\n"
     load_cr()
+    link_comments()
     cr_blocks()
 
     inl["PR_TITLE"] = title; inl["REVIEW_DATE"] = today; inl["GRADE"] = grade; inl["TOTAL"] = total

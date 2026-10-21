@@ -7,18 +7,18 @@ usage() {
   cat <<'USAGE'
 Usage: render-report.zsh [--root DIR] [options]
 
-      --root DIR       review root (default: tmp). Reads ROOT/step1/spec-context.md, ROOT/step2/findings.txt,
-                       ROOT/step3/score.tsv, ROOT/step3/score.json and the code review results in ROOT/step4/
+      --root DIR       review root (default: tmp in the project root). Reads ROOT/step1/spec-context.md, ROOT/step3/findings.txt,
+                       ROOT/step4/score.tsv, ROOT/step4/score.json and the code review results in ROOT/step2/
   -t, --template FILE  report template (default: assets/report-template.md of this skill)
   -l, --labels FILE    display labels (default: assets/labels.tsv of this skill)
       --title TEXT     PR title (default: "- Title:" line of spec-context.md)
   -o, --out FILE       working copy (default: ROOT/step5/report.md); '-' = stdout only, nothing is published
-      --reports DIR    where the final report is published (default: reports)
+      --reports DIR    where the final report is published (default: reports next to the review root)
       --no-publish     only write the working copy
 
 The final report is published as REPORTS/<YYYY-MM-DD>_<PR title>.md (the same name is overwritten when the
 same PR is rendered again on the same day); its path is recorded in ROOT/step5/report-path.txt.
-Without ROOT/step4/plan.tsv the code review section says that no code review was run.
+Without ROOT/step2/plan.tsv the code review section says that no code review was run.
   -h, --help           show this help
 
 Exit codes: 0 ok, 1 inputs missing or inconsistent (rerun the scoring skill), 2 bad arguments.
@@ -26,9 +26,11 @@ USAGE
 }
 
 script_dir="${0:A:h}"
+# Project root (two levels above the physical skill folder) holds tmp/ and reports/.
+project_root="${script_dir:h:h:h}"
 skill_dir="${script_dir:h}"
-root="tmp" template="$skill_dir/assets/report-template.md" labels="$skill_dir/assets/labels.tsv" title="" out=""
-reports="reports" publish=1
+root="$project_root/tmp" template="$skill_dir/assets/report-template.md" labels="$skill_dir/assets/labels.tsv" title="" out=""
+reports="" publish=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -42,18 +44,18 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
-findings="$root/step2/findings.txt"
+findings="$root/step3/findings.txt"
 for f in "$findings" "$template" "$labels"; do
   [[ -f "$f" ]] || { echo "error: file not found: $f" >&2; exit 2; }
 done
 for f in score.tsv score.json; do
-  [[ -f "$root/step3/$f" ]] || { echo "error: $root/step3/$f not found; run the scoring skill first" >&2; exit 1; }
-  [[ "$findings" -nt "$root/step3/$f" ]] && { echo "error: findings.txt changed after $f was written; rerun the scoring skill" >&2; exit 1; }
+  [[ -f "$root/step4/$f" ]] || { echo "error: $root/step4/$f not found; run the scoring skill first" >&2; exit 1; }
+  [[ "$findings" -nt "$root/step4/$f" ]] && { echo "error: findings.txt changed after $f was written; rerun the scoring skill" >&2; exit 1; }
 done
 ctx=""; [[ -f "$root/step1/spec-context.md" ]] && ctx="$root/step1/spec-context.md"
 crdir=""
-if [[ -f "$root/step4/plan.tsv" ]]; then
-  crdir="$root/step4"
+if [[ -f "$root/step2/plan.tsv" ]]; then
+  crdir="$root/step2"
   while IFS=$'\t' read -r p _; do
     [[ -n "$p" ]] || continue
     [[ -s "$crdir/$p/cr.txt" ]] || { echo "error: $crdir/$p/cr.txt not found; the code review step has not finished" >&2; exit 1; }
@@ -64,7 +66,7 @@ fi
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 LC_ALL=C awk -v labels="$labels" -v findings="$findings" \
-  -v scoretsv="$root/step3/score.tsv" -v scorejson="$root/step3/score.json" \
+  -v scoretsv="$root/step4/score.tsv" -v scorejson="$root/step4/score.json" \
   -v ctx="$ctx" -v title="$title" -v today="$(date +%Y-%m-%d)" -v crdir="$crdir" \
   -f "$script_dir/lib/render.awk" "$template" > "$tmp"
 if [[ "$out" == "-" ]]; then cat "$tmp"; exit 0; fi
@@ -77,9 +79,10 @@ name="$title"
 [[ -z "$name" && -n "$ctx" ]] && name="$(sed -n 's/^- Title:[[:space:]]*//p' "$ctx" | head -1)"
 name="$(printf '%s' "$name" | LC_ALL=C sed -E 's/[][\/:*?"<>|#%{}[:space:][:cntrl:]]+/-/g; s/^[-.]+//; s/[-.]+$//')"
 [[ -n "$name" ]] || name="pr-review"
+[[ -n "$reports" ]] || reports="$(dirname "$root")/reports"
 mkdir -p "$reports"
 final="$reports/$(date +%Y-%m-%d)_${name}.md"
 cp "$tmp" "$final"
-final_abs="$(cd "$(dirname "$final")" && pwd)/$(basename "$final")"
+final_abs="$(cd "$(dirname "$final")" && { pwd -W 2>/dev/null || pwd; })/$(basename "$final")"
 [[ "$out" == "$root/step5/report.md" ]] && printf '%s\n' "$final_abs" > "$root/step5/report-path.txt"
 echo "published ${final_abs}"

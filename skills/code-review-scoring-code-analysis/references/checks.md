@@ -3,15 +3,9 @@
 Format: id | what to look for | default severity | condition that allows a different severity.
 Only the written condition may change a severity.
 
-| Dimension | Points |
-| --- | --- |
-| A Correctness | 25 |
-| B Security | 15 |
-| C Test quality | 15 |
-| D Architecture and design | 15 |
-| E Performance and resource use | 10 |
-| F Readability | 10 |
-| G Maintainability | 10 |
+Dimensions: A Correctness, B Security, C Test quality, D Architecture and design, E Performance and resource use,
+F Readability, G Maintainability. Their points and the deduction per severity are settings of the scoring step
+(`configs.ini`); they do not change which checks apply or which severity a finding gets.
 
 ## A. Correctness
 

@@ -1,0 +1,21 @@
+# 評分過程的暫存檔（各步驟產出與狀態檔），保留 .gitkeep
+tmp/*
+!tmp/.gitkeep
+
+# 最終版報告，保留 .gitkeep
+reports/*
+!reports/.gitkeep
+
+# scripts/link-skills.* 產生的連結，各環境自行執行腳本建立
+.agents/
+.github/skills/
+.claude/skills/
+
+# 各使用者自己的設定檔（範本為 configs.example.ini、plugins.example.ini）
+/configs.ini
+/plugins.ini
+
+# 作業系統產生的檔案
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -8,53 +8,96 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 
 ## 評分流程
 
-依「閱讀規格書 → 分析程式碼 → 打分數 → CR → 產出報告」五個步驟執行，另有一個主流程 Skill 負責控管。步驟 4 的 CR 由 `plugins.ini` 登記的外掛 Skill 執行，最終報告同時包含 CR 結果與分數結果：
+依「閱讀規格書 → CR → 分析程式碼 → 打分數 → 產出報告」五個步驟執行，另有一個主流程 Skill 負責控管。步驟 2 的 CR 由 `plugins.ini` 登記的外掛 Skill 執行；步驟 3 分析程式碼時會確認 CR 意見，符合評分檢查項的轉為扣分項，所以分數同時反映評分規則與 CR 結果。最終報告包含 CR 結果與分數結果：
 
-| Skill | 角色 | 產出（執行目錄的 `tmp/` 下；最終報告在 `reports/`） |
+| Skill | 角色 | 產出（本專案根目錄的 `tmp/` 下；最終報告在本專案的 `reports/`） |
 | --- | --- | --- |
-| `code-review-scoring` | 主 Agent：確認執行方式、依序派發 Sub-Agent、轉達問題、以狀態檔把關 | `request.md`、`answers.md` |
+| `code-review-scoring` | 主 Agent：確認執行方式、依序派發 Sub-Agent、轉達問題、以狀態檔把關 | `request.md`、`inputs/`、`answers.md` |
 | `code-review-scoring-spec-reading` | 步驟 1：閱讀規格書 | `step1/pr.diff`、`step1/spec-context.md` |
-| `code-review-scoring-code-analysis` | 步驟 2：分析程式碼 | `step2/prepared.txt`、`step2/findings.txt` |
-| `code-review-scoring-score` | 步驟 3：打分數 | `step3/score.tsv`、`step3/score.json` |
-| 外掛 CR Skill（`plugins.ini`） | 步驟 4：CR，依異動檔案決定要跑哪些外掛 | `step4/plan.tsv`、`step4/<外掛>/cr.txt` |
-| `code-review-scoring-report` | 步驟 5：產出報告（CR 結果＋分數結果） | 最終報告 `reports/<日期>_<PR 標題>.md`，工作副本 `step5/report.md` |
+| 外掛 CR Skill（`plugins.ini`） | 步驟 2：CR，依異動檔案決定要跑哪些外掛 | `step2/plan.tsv`、`step2/<外掛>/cr.txt` |
+| `code-review-scoring-code-analysis` | 步驟 3：分析程式碼（確認 CR 意見並轉為扣分項） | `step3/prepared.txt`、`step3/findings.txt` |
+| `code-review-scoring-score` | 步驟 4：打分數（完整流程中由 `review-state finish` 直接執行腳本） | `step4/score.tsv`、`step4/score.json` |
+| `code-review-scoring-report` | 步驟 5：產出報告（CR 結果＋分數結果；完整流程中由 `review-state finish` 直接執行腳本） | 最終報告 `reports/<日期>_<PR 標題>.md`，工作副本 `step5/report.md` |
 
 ### 執行方式
 
 主 Agent 在開始前會先詢問使用者：
 
-- **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。支援 Sub-Agent 的平台由主 Agent 為每一步派發一個 Sub-Agent；不支援的平台由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。
+- **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。是否派發 Sub-Agent 由 `configs.ini` 的 `[workflow]` `subagent` 決定：`true` 時由主 Agent 為步驟 1～3 與每個 CR 外掛各派發一個 Sub-Agent；`false` 時由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。平台不支援 Sub-Agent 時，即使設為 `true` 也會由主 Agent 逐步執行。步驟 4、5 只需要執行腳本，一律由主 Agent 以 `review-state finish` 直接完成，不派發 Sub-Agent。
 - **單一步驟**：直接在對話中執行某一個步驟 Skill，不使用狀態檔。
 
+主 Agent 每次只要執行 `review-state next`，腳本就會印出下一個動作：要執行的步驟 prompt、要轉達的問題、失敗原因、`finish`，或最後的結果摘要。完成後主 Agent 只回覆等級、總分、各面向分數與報告路徑，不會把報告全文貼回對話，完整內容請看 `reports/` 中的檔案。
+
+所有需要交接的內容都寫在 `tmp/`：你在對話中貼上的文件會存成 `tmp/inputs/` 中的檔案，各步驟在提問前會先把目前的成果存檔（例如步驟 3 的 `findings.draft.txt`），回覆後只套用答案，不會整步重做。評分中斷時，在新對話說「繼續評分」即可從 `tmp/` 接續。
+
+### 設定檢查（完整流程每次執行前）
+
+選擇完整流程後，主 Agent 的第一件事就是執行 `setup check`，確認專案根目錄的兩個設定檔。單一步驟用不到這兩個檔案，不會檢查。
+
+| 設定檔 | 何時需要 | 缺少時 |
+| --- | --- | --- |
+| `plugins.ini` | 每次執行完整流程都需要 | 要登記哪些 CR 外掛；不使用外掛時也要建立一份沒有外掛的檔案，表示已確認不用 |
+| `configs.ini` 的 `[workflow]` 區段 | 每次執行完整流程都需要 | `subagent=true`（每一步派發 Sub-Agent）或 `subagent=false`（主 Agent 逐步執行） |
+| `configs.ini` 中該平台的區段 | 只有 `subagent=true` 且平台支援 Sub-Agent 時 | Sub-Agent 要使用的 model 與 reasoning |
+
+有缺少時，主 Agent 會告訴你缺了什麼，並詢問要用哪種方式建立：
+
+- **腳本逐步詢問**：由你自己在終端機執行 `check` 印出的 `wizard` 指令，腳本會逐一詢問外掛名稱、路徑、適用範圍、模式，是否使用 Sub-Agent，以及 model 與 reasoning，並在登記時驗證外掛（SKILL.md 是否存在、名稱是否一致）。AI 無法代為執行，因為它需要互動式終端機；在 Claude Code 中可以輸入 `! <指令>` 直接在對話中執行。
+- **AI 詢問**：主 Agent 在一則訊息中問完所需資料，再以 `setup plugin`、`setup plugins --none`、`review-state config --subagent`、`review-state config --platform` 寫入設定檔。外掛驗證不通過時會告訴你原因並重新詢問。
+
+`check` 通過時會印出 `execution:` 一行，說明這次以 Sub-Agent 或由主 Agent 逐步執行。登記了外掛之後，主 Agent 會執行 `link-skills` 連結外掛 Skill，接著再次執行 `check`，通過後才會繼續。`review-state init` 也會在 `plugins.ini` 不存在時拒絕執行，所以不會因為忘了建立清單而靜靜略過 CR。
+
+也可以不透過 AI，直接在專案中執行：
+
+```bash
+bash skills/code-review-scoring/scripts/setup.sh check --platform Claude
+bash skills/code-review-scoring/scripts/setup.sh wizard --platform Claude
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File skills\code-review-scoring\scripts\setup.ps1 wizard --platform Claude
+```
+
 ### 狀態控管
+
+暫存檔與報告一律寫在本專案根目錄的 `tmp/`、`reports/`，不會寫進被審查的專案。腳本以 Skill 實體資料夾往上兩層找到本專案根目錄（經由 `link-skills` 建立的連結執行也一樣），`--root` 可改用其他目錄，報告則發佈到該目錄旁的 `reports/`。git 指令仍在被審查的專案執行：主 Agent 在被審查專案的根目錄執行 `init`，或以 `--repo` 指定。
 
 ```text
 tmp/
   .gitkeep             保留目錄用
   .gitignore           只有 git 尚未忽略 tmp/ 時才自動產生（* 與 !.gitkeep）
   request.md           主 Agent 記錄 PR、diff 範圍與使用者提供的文件
+  inputs/              使用者在對話中貼上的文件，由主 Agent 存成檔案（--reset 時一併清除）
   stepN-working        Sub-Agent 開始執行
   stepN-pending        Sub-Agent 需要使用者回覆，問題寫在 stepN/questions.md
   stepN-success        步驟完成
   stepN-failed         步驟失敗，原因寫在狀態檔內
-  step4-<外掛>-<狀態>   步驟 4 中每個 CR 外掛各自的狀態檔
+  step2-<外掛>-<狀態>   步驟 2 中每個 CR 外掛各自的狀態檔
   step1/ … step5/      各步驟產出；questions.md（步驟提出的問題）、answers.md（使用者回覆）、errors.log（失敗紀錄）
-  step4/<外掛>/        files.txt（要審查的檔案）、raw/（外掛原始輸出）、cr.txt（整理後的 CR 結果）
+  step2/<外掛>/        files.txt 與 diff.patch（要審查的範圍）、raw/（外掛原始輸出）、cr.txt（整理後的 CR 結果）
+  step3/findings.draft.txt  步驟 3 提問前先存下的扣分項草稿，回覆後從這裡接續
 reports/
   <日期>_<PR 標題>.md   最終報告（CR 結果＋分數結果），步驟 5 成功前必須已發佈到這裡
 ```
 
 - 狀態檔由 Sub-Agent 透過 `review-state` 腳本產生；檔案不存在代表該步驟尚未開始。
-- 腳本會強制把關：前一步不是 `success` 時不能開始下一步；必要產出不存在或已過期時不能標記 `success`；重跑某一步時，後續步驟的狀態會被清除。
-- Sub-Agent 無法直接和使用者對話。需要詢問時寫入 `stepN/questions.md` 並標記 `pending`；主 Agent 詢問使用者、把回覆寫入 `stepN/answers.md` 後，再重新派發同一步。
-- 步驟失敗時，詳細錯誤寫入該步驟目錄的 `errors.log`（例如 `tmp/step3/errors.log`），狀態腳本標記 `failed` 時也會追加一行摘要。
+- 腳本會強制把關：前一步不是 `success` 時不能開始下一步；必要產出不存在或已過期時不能標記 `success`；重跑某一步時，後續步驟的狀態會被清除。步驟 3 標記 `success` 時會以 `score --check` 驗證 `findings.txt`，格式或位置有誤會當場退回，不必等到步驟 4 才失敗、再整步重做步驟 3。
+- Sub-Agent 無法直接和使用者對話。需要詢問時先把目前成果存檔，再寫入 `stepN/questions.md` 並標記 `pending`；主 Agent 詢問使用者、把回覆寫入 `stepN/answers.md` 後，再重新執行同一步，該步驟會從存檔接續。
+- 常見的嚴重度相關問題（是否跨時區、資料表是否持續成長、是否使用 springdoc）會在步驟 1 與缺少的文件一起詢問，減少步驟 3 再停下來提問的機會。
+- 步驟失敗時，詳細錯誤寫入該步驟目錄的 `errors.log`（例如 `tmp/step4/errors.log`），狀態腳本標記 `failed` 時也會追加一行摘要。
 - 支援的 Sub-Agent 工具：Claude Code 的 Agent 工具、GitHub Copilot（VS Code agent mode）的 `runSubagent`，或其他平台的同等工具。
 
-### Sub-Agent 的 Model 與 Reasoning 設定
+### 執行方式與 Sub-Agent 設定
 
-在某個平台第一次以 Sub-Agent 執行完整流程時，主 Agent 會詢問 Sub-Agent 要使用的 model 與 reasoning，並存到 `skills/code-review-scoring/configs.ini`，之後同一平台直接沿用：
+設定存在專案根目錄的 `configs.ini`（與 `plugins.ini` 同一層），由設定檢查在第一次需要時要求建立（見上方「設定檢查」），之後直接沿用：
+
+- `[workflow]` 的 `subagent`：`true` 時每一步派發一個 Sub-Agent，`false` 時只由主 Agent 逐步執行。設為 `false` 時不需要平台區段。
+- 各平台一個區段（`workflow` 保留給上述設定，不能當平台名稱）：Sub-Agent 要使用的 model 與 reasoning，在某個平台第一次以 Sub-Agent 執行時建立。
 
 ```ini
+[workflow]
+subagent="true"
+
 [Claude]
 model="sonnet 5.5"
 reasoning="high"
@@ -64,7 +107,7 @@ model="gpt-5.6"
 reasoning="xhigh"
 ```
 
-要修改時可直接編輯此檔，或執行 `review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。
+要修改時可直接編輯此檔，或執行 `review-state config --subagent true|false`、`review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。也可以在第一次使用前，從範本 `configs.example.ini` 複製一份 `configs.ini`，取消註解要用的區段後修改。
 
 > [!WARNING]
 > **GitHub Copilot 的已知限制**
@@ -83,9 +126,11 @@ skills/
   code-review-scoring/
     SKILL.md
     assets/request-template.md
-    assets/prompts/step1.md … step5.md   # 派給各 Sub-Agent 的指令模板（step4.md 為 CR 外掛用）
-    scripts/review-state.{sh,zsh,ps1}     # init / show / prompt / set / config
-    configs.ini                           # 各平台 Sub-Agent 的 model 與 reasoning（首次使用時產生）
+    assets/prompts/step1.md … step3.md   # 步驟 1～3 的指令模板（step2.md 為 CR 外掛用）
+    assets/prompts/protocol.md            # 各步驟共用的狀態協定（[sub] / [inline] 開頭的行只用於對應的執行方式）
+    references/setup.md                   # 設定檢查、平台設定、狀態指令與目錄說明（需要時才載入）
+    scripts/review-state.{sh,zsh,ps1}     # init / next / finish / show / cr-plan / prompt / set / config（--help 列出用法）
+    scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 plugins.ini、configs.ini（check / wizard / plugins / plugin）
   code-review-scoring-spec-reading/
     SKILL.md
     assets/spec-context-template.md
@@ -109,11 +154,14 @@ skills/
     references/placeholders.md            # 模板佔位符號說明
 scripts/
   link-skills.{sh,zsh,ps1}                # 依 skills/ 與 plugins.ini 同步各工具讀取 Skill 的目錄
-plugins.ini                               # 外掛 Skill 清單
+plugins.example.ini                       # 外掛 Skill 清單範本（複製為 plugins.ini 使用）
+configs.example.ini                       # 執行方式、Sub-Agent 的 model 與 reasoning、評分配分的範本（configs.ini 首次使用時自動產生）
 docs/
   notices.md                              # 注意事項（GitHub Copilot 適用性）
-tmp/                                      # 評分過程的暫存檔（不進版控）
-reports/                                  # 最終版分數報告（不進版控）
+tmp/                                      # 評分過程的暫存檔（所有腳本的預設 review root，不進版控）
+reports/                                  # 最終版分數報告（tmp/ 旁的 reports/，不進版控）
+.gitattributes                            # 固定腳本與設定檔的換行格式
+.gitignore
 ```
 
 ### 版控排除項目
@@ -122,10 +170,58 @@ reports/                                  # 最終版分數報告（不進版控
 
 - `tmp/*`、`reports/*`：評分過程與報告，含 PR 內容，不進版控。
 - `.agents/`、`.github/skills/`、`.claude/skills/`：`link-skills` 產生的連結與 `.managed` 清單，各環境自行執行腳本建立。
-- `skills/code-review-scoring/configs.ini`：各使用者自行選擇的 Sub-Agent model 與 reasoning。若團隊要共用同一份設定，請從 `.gitignore` 移除這一行。
+- `configs.ini`、`plugins.ini`：各使用者自己的執行方式與 Sub-Agent 設定、外掛清單（外掛路徑依各人環境而不同）。版控中只放範本 `configs.example.ini`、`plugins.example.ini`；若團隊要共用同一份設定，請從 `.gitignore` 移除對應的那一行。
 - `.DS_Store`、`Thumbs.db`、`desktop.ini`：作業系統產生的檔案。
 
+### 換行格式
+
+`.gitattributes` 固定 `.sh`、`.zsh`、`.awk`、`.tsv`、`.ini`、`.md` 使用 LF。Windows 上若設定了 `core.autocrlf=true`，沒有這個設定時取出的檔案會變成 CRLF，bash／zsh 腳本在 WSL、macOS、Linux 上會無法執行，awk 讀取規則表也會出錯。`.ps1` 則交由 git 依平台處理。
+
+已經取出的工作目錄若是在加入 `.gitattributes` 之前建立的，請執行一次以下指令，讓 git 依新規則重新整理換行：
+
+```bash
+git add --renormalize .
+```
+
 每個 Skill 的 `scripts/lib/` 放 awk 核心（bash/zsh 共用）與 PowerShell 共用函式。為了讓每個 Skill 都能單獨安裝，`lib/common.ps1` 在各 Skill 中各有一份相同的副本，修改時請一併更新。
+
+## 調整配分
+
+各面向滿分、各嚴重度扣分與等級門檻設定在專案根目錄 `configs.ini` 的 `[points]`、`[deductions]`、`[grades]` 區段，未設定的項目使用預設值：
+
+| 面向 | 預設滿分 | | 嚴重度 | 預設扣分 | | 等級 | 預設最低總分 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A 正確性 | 25 | | Critical | 10 | | S | 95 |
+| B 安全性 | 15 | | Major | 5 | | A | 85 |
+| C 測試品質 | 15 | | Minor | 2 | | B | 70 |
+| D 架構與設計 | 15 | | Nit | 1 | | C | 55 |
+| E 效能與資源 | 10 | | | | | D | 低於 C |
+| F 可讀性 | 10 | | | | | | |
+| G 可維護性 | 10 | | | | | | |
+
+```ini
+[points]
+A="30"
+B="20"
+C="10"
+D="10"
+E="10"
+F="10"
+G="10"
+
+[deductions]
+Major="6"
+merge="true"
+```
+
+- 七個面向合計必須為 100，等級門檻必須 S > A > B > C，數值為整數；不符合時打分數步驟會失敗並列出錯誤。
+- 所有問題都會扣分，包括 Nit。對應不到 A～G 檢查項的問題（檢查代碼 `-`）與上游因素，依嚴重度直接從總分扣分，不計入任何面向；總分最低為 0。
+- 有 Critical 扣分項時，等級上限固定為 B。
+- 是否合併扣分由 `[deductions]` 的 `merge` 決定：
+  - `merge="false"`（預設）：不合併，每一處問題各自是一筆扣分項，同一個檢查代碼出現在三處就扣三次。
+  - `merge="true"`：合併，同一個檢查代碼只寫一筆並列出所有位置，只扣一次。
+  - 分析程式碼步驟會從 `prepared.txt` 摘要的 `- deductions:` 一行得知目前的方式；面向得分最低為 0。
+- 修改後重新執行打分數（步驟 4）與產出報告（步驟 5）即可生效（完整流程中執行 `review-state finish`）；範例見 `configs.example.ini`。第一次建立的 `configs.ini` 會從範本複製，配分區段預設為註解。
 
 ## 調整報告
 
@@ -134,6 +230,8 @@ reports/                                  # 最終版分數報告（不進版控
 - 可用的佔位符號見 `references/placeholders.md`。
 
 ## 安裝到各工具
+
+`plugins.ini` 不需要事先手動建立：第一次執行完整流程時，設定檢查會引導建立（見「設定檢查」）。也可以先執行 `setup wizard`，或從範本 `plugins.example.ini` 複製後自行編輯。
 
 `link-skills` 會依 `skills/` 與 `plugins.ini` 同步各工具讀取 Skill 的目錄：建立缺少的連結，並解除已從清單移除的外掛連結。重複執行是安全的；已是最新狀態時不會做任何變更。
 
@@ -165,9 +263,14 @@ powershell -ExecutionPolicy Bypass -File scripts\link-skills.ps1 -Check
 
 ## 外掛 Skill
 
-其他團隊或同仁已做好的 Skill（例如前端、後端的 CR Skill），不需要複製或改寫，在專案根目錄的 `plugins.ini` 登記路徑後執行 `link-skills` 即可掛進來：
+其他團隊或同仁已做好的 Skill（例如前端、後端的 CR Skill），不需要複製或改寫，在專案根目錄的 `plugins.ini`（從 `plugins.example.ini` 複製而來）登記路徑後執行 `link-skills` 即可掛進來：
 
 ```ini
+[backend-code-review]
+path="../shared-skills/backend-code-review"
+applies="*.java,*.kt,*.sql"
+mode="mapped"
+
 [frontend-code-review]
 path="../shared-skills/frontend-code-review"
 applies="*.ts,*.tsx,*.vue,*.scss"
@@ -178,8 +281,10 @@ mode="advisory"
 | --- | --- | --- |
 | 區段名稱 | 是 | 必須和該 Skill 的 SKILL.md 中的 `name` 一致 |
 | `path` | 是 | Skill 資料夾路徑；相對路徑以 `plugins.ini` 所在目錄為準 |
-| `applies` | 否 | 適用的檔案範圍（以逗號分隔的萬用字元），供日後的外掛步驟判斷是否執行 |
-| `mode` | 否 | `advisory`：只提供 CR 意見，不影響分數（預設）；`mapped`：意見對應檢查代碼並納入計分（尚未支援） |
+| `applies` | 否 | 適用的檔案範圍（以逗號分隔的萬用字元）；未填表示全部異動檔案 |
+| `mode` | 否 | `mapped`（預設）：步驟 3 確認 CR 意見，確認屬實的一律扣分，不成立的需說明原因；`advisory`：CR 意見只呈現在報告中，不影響分數 |
+
+內建的評分檢查項目前只適用 Java／Spring Boot 3。其他技術的 CR 外掛（例如前端）設為 `mapped` 時，對應不到檢查項的意見會歸入「其他」，依外掛給的嚴重度從總分扣分；不希望這類外掛影響分數時，請設為 `advisory`。
 
 ### 同步規則
 
@@ -200,39 +305,81 @@ mode="advisory"
 - 外掛 Skill 的描述請寫得具體（例如註明「前端 Vue／TypeScript 的 CR 規範」）。描述太籠統時，使用者在主對話中說「審查這個 PR」，可能會和主流程 Skill 搶著被觸發。
 - 外掛 Skill 不需要配合這套框架修改。主流程派給它的指令會限定審查範圍、輸出位置與狀態協定，並要求把結果整理成統一的 `cr.txt`。
 
-### 外掛在流程中的執行方式（步驟 4）
+### 外掛在流程中的執行方式（步驟 2）
 
-1. 步驟 3 成功後，主 Agent 執行 `review-state cr-plan`：依 PR 實際異動的檔案（排除建置產物、自動產生檔與 lock 檔）比對每個外掛的 `applies`，決定要執行哪些外掛，各外掛要審查的檔案寫在 `tmp/step4/<外掛>/files.txt`。沒有任何外掛適用時，步驟 4 直接視為完成。
-2. 每個適用的外掛由一個 Sub-Agent 依序執行（不支援 Sub-Agent 的平台由主 Agent 自己執行），一樣遵守狀態協定，狀態檔為 `tmp/step4-<外掛>-<狀態>`。
-3. 外掛依自己的規範審查，原始輸出放在 `tmp/step4/<外掛>/raw/`，再整理成統一格式的 `cr.txt`：
+1. 步驟 1 成功後，執行 `review-state cr-plan`：依 PR 實際異動的檔案（排除建置產物、自動產生檔與 lock 檔）比對每個外掛的 `applies`，決定要執行哪些外掛。各外掛要審查的檔案寫在 `tmp/step2/<外掛>/files.txt`，並切出只含這些檔案的 `diff.patch`。沒有任何外掛適用時，步驟 2 直接視為完成。
+2. 每個適用的外掛由一個 Sub-Agent 依序執行（不支援 Sub-Agent 的平台由主 Agent 自己執行），一樣遵守狀態協定，狀態檔為 `tmp/step2-<外掛>-<狀態>`。`review-state next` 在步驟 2 尚未規劃時會自動執行 `cr-plan`。
+3. 外掛只讀自己的 `diff.patch`，依自己的規範審查，原始輸出放在 `tmp/step2/<外掛>/raw/`，再整理成統一格式的 `cr.txt`：
 
    ```text
    S|整體結論
    C|Major|src/web/order/OrderForm.vue:42|FE-STATE-03
    problem: 表單送出後沒有處理 API 錯誤。
    suggestion: 在 catch 中顯示錯誤訊息。
+   spec: docs/spec/order-sd.md:42,docs/spec/order-sd.md:57
    H|做得好的地方
    ```
 
-   嚴重度依意義對應到 Critical、Major、Minor、Nit；外掛原本的規則編號放在第 4 欄。標記成功時，狀態腳本會驗證 `cr.txt` 的格式。
-4. 所有外掛都成功後才能進入步驟 5。CR 意見目前只會呈現在報告中（`mode="advisory"`），不影響分數。
+   嚴重度依意義對應到 Critical、Major、Minor、Nit；外掛原本的規則編號放在第 4 欄；`spec:`（選填）列出意見依據的所有規格書位置。標記成功時，狀態腳本會驗證 `cr.txt` 的格式。
+4. 所有外掛都成功後才能進入步驟 3。
+
+### CR 結果如何影響分數（步驟 3）
+
+- `prepare-diff` 會在 `prepared.txt` 列出每則意見的編號 `<外掛>#<序號>`（該外掛 `cr.txt` 中第幾則意見）。
+- `mapped` 外掛的每一則意見，分析程式碼時都會對照程式碼確認，結果只有兩種：
+  - **確認屬實**：一律扣分，並以 `source: <意見編號>` 註明來自哪則意見。符合 A～G 檢查項的，依評分規則的預設嚴重度與調整條件扣在該檢查項；對應不到任何檢查項的，檢查代碼寫 `-`，依外掛給的嚴重度從總分扣分；判斷根本原因疑似在上游的，記為上游因素並扣分。
+  - **不成立**（外掛誤判、不在本次異動範圍內、無法在程式碼中確認）：寫成 `X|<意見編號>|原因`，原因會顯示在報告中。
+- 打分數時會檢查每則 `mapped` 意見都已扣分或註明不成立，有遺漏就無法通過。
+- `advisory` 外掛的意見只作為參考，不會轉為扣分項。
+
+### 為什麼 CR 排在分析程式碼之前
+
+- **分數更準確**：評分同時參考評分規則與 CR 規範，CR 找到的問題會反映在分數中。
+- **節省 token**：每個外掛只讀自己範圍內的 `diff.patch`，不讀整份 PR；分析程式碼時把 CR 已找到的問題當成線索確認即可，不必重新從頭找一遍。
 
 ### 報告內容
 
 最終報告分成兩部分：
 
-- **一、CR 結果**：各外掛的總覽表（審查檔案數、各嚴重度意見數、結論）、各外掛的意見明細（依嚴重度排序）與亮點，以及因沒有符合的異動檔案而未執行的外掛。
-- **二、評分結果**：原本的評分內容（各面向得分、問題明細、建議、上游因素、亮點、評分備註、結構化結果）。
+- **一、CR 結果**：各外掛的總覽表（審查檔案數、各嚴重度意見數、結論）、各外掛的意見明細（依嚴重度排序）與亮點，以及因沒有符合的異動檔案而未執行的外掛。每則意見的標頭為「嚴重度 | 規則 | 判定」，程式碼位置與規格書位置逐行全部列出：
+
+  ```text
+  1. [Critical | EXT-CODE | A8]
+     - 問題：取消訂單流程與規格不符。
+     - 建議：依規格補上狀態檢查。
+     - 程式碼位置：
+       - `src/main/java/com/ex/order/OrderService.java:14`
+       - `src/main/java/com/ex/order/OrderService.java:25`
+     - 規格書位置：
+       - `docs/spec/order-sd.md:42`
+       - `docs/spec/order-sd.md:57`
+  ```
+
+  「判定」依扣分項與上游因素的 `source:` 對應：
+  - 已扣分的意見列出對應的檢查代碼，例如 `A8`；對應不到檢查項的顯示「其他」，記為上游因素的顯示「上游因素」。
+  - 不成立的顯示「不成立」，並多一行「不成立原因」。
+  - `advisory` 外掛的意見顯示「僅供參考」。
+- **二、評分結果**：各面向得分、問題明細、建議、上游因素、亮點、評分備註、結構化結果。
+  - 得分表在七個面向之後，另列「其他（未對應檢查項）」與「上游因素」兩列的扣分。
+  - 問題明細包含 Nit；由 CR 意見確認而來的扣分項會標示來源的意見編號。
+  - 「建議（不扣分）」只放步驟 3 額外提出的建議。
 
 報告開頭會同時列出評分等級與 CR 意見總數。版面與用語可在 `assets/report-template.md`、`assets/labels.tsv` 調整，可用的佔位符號見 `skills/code-review-scoring-report/references/placeholders.md`。
 
 ## 腳本為什麼存在
 
 - `link-skills`：依 `skills/` 與 `plugins.ini` 同步各工具的 Skill 連結，並在變更前檢查名稱與設定。
-- `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生 Sub-Agent 指令，並強制依序執行。
+- `setup`：每次執行完整流程前檢查 `plugins.ini` 與 `configs.ini`，並以逐步詢問或指令的方式建立，登記外掛時先驗證，避免設定錯誤到 CR 步驟才發現。
+- `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
 - `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以規則表列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。
-- `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、同代碼只扣一次），並計算分數與等級，避免 AI 計算錯誤。
+- `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs.ini` 的配分計算分數與等級，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
 
+腳本的提示、訊息與註解一律使用英文，避免主控台編碼不同時出現亂碼。報告中由腳本插入的中文用語（含全形括號、冒號等符號）都放在 `skills/code-review-scoring-report/assets/labels.tsv`。
+
 PowerShell 腳本以 UTF-8 with BOM 儲存，並在執行時將主控台與 git 輸出切換為 UTF-8，Windows PowerShell 5.1 也能正確處理中文。編輯 `.ps1` 時請保留 BOM。
+
+在 Windows 的 Git Bash 執行 bash 腳本時，輸出與 Sub-Agent 指令中的路徑會使用 `C:/...` 格式，而不是 `/c/...` 或 `/tmp/...`，所以 Sub-Agent 不論改用 PowerShell 或 bash 都能找到同一個檔案。
+
+三種腳本在相同輸入下的產出一致（已在 Windows 上以 PowerShell 5.1 與 Git Bash 驗證完整五步驟流程）。zsh 版由 bash 版轉換而來，修改 bash 版時請同步更新 zsh 版。

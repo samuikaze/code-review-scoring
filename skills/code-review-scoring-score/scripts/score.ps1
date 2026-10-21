@@ -3,15 +3,19 @@
 Validate findings.txt and compute dimension scores, total and grade.
 
 .DESCRIPTION
-With -Root (default tmp): uses ROOT/step2/findings.txt and ROOT/step1/pr.diff, refuses unanswered
-questions in step1/step2, and writes ROOT/step3/score.tsv and ROOT/step3/score.json.
-With -Findings: standalone use without the root layout. Works on Windows PowerShell 5.1 and PowerShell 7+.
+With -Root (default: tmp in the project root): uses ROOT/step3/findings.txt and ROOT/step1/pr.diff, refuses unanswered
+questions in step1/step3, checks that every comment of a mapped code review plugin in ROOT/step2 is deducted or rejected,
+and writes ROOT/step4/score.tsv and ROOT/step4/score.json.
+With -Findings: standalone use without the root layout.
+Scoring settings come from the [points], [deductions] (incl. merge) and [grades] sections of -Config (default: configs.ini in
+the project root); settings that are not given keep the defaults. Works on Windows PowerShell 5.1 and PowerShell 7+.
 Saved as UTF-8 with BOM; keep that encoding.
-Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad arguments,
+With -Check: validate findings.txt only (same checks and exit codes) and write nothing; step 3 runs it before reporting success.
+Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad arguments or invalid scoring settings,
 3 spec-context.md still has unresolved inputs or questions.
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File score.ps1 -Root tmp
+powershell -ExecutionPolicy Bypass -File score.ps1
 #>
 [CmdletBinding()]
 param(
@@ -20,20 +24,24 @@ param(
     [Alias('d')][string]$Diff,
     [Alias('g')][string]$Git,
     [Alias('r')][string]$Repo = '.',
-    [Alias('o')][string]$OutDir
+    [Alias('o')][string]$OutDir,
+    [string]$Config,
+    [switch]$Check
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
 
-if (-not $Root -and -not $Findings) { $Root = 'tmp' }
+$projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
+if (-not $Root -and -not $Findings) { $Root = Join-Path $projectRoot 'tmp' }
+if (-not $Config) { $Config = Join-Path $projectRoot 'configs.ini' }
 if ($Root) {
     if (-not [IO.Directory]::Exists((Resolve-UserPath $Root))) { Exit-WithError "review root not found: $Root" }
-    if (-not $Findings) { $Findings = Join-Path $Root 'step2/findings.txt' }
+    if (-not $Findings) { $Findings = Join-Path $Root 'step3/findings.txt' }
     if (-not $Diff -and -not $Git -and (Test-UserFile (Join-Path $Root 'step1/pr.diff'))) { $Diff = Join-Path $Root 'step1/pr.diff' }
-    if (-not $OutDir) {
-        $OutDir = Join-Path $Root 'step3'
+    if (-not $OutDir -and -not $Check) {
+        $OutDir = Join-Path $Root 'step4'
         [void][IO.Directory]::CreateDirectory((Resolve-UserPath $OutDir))
     }
     # Scoring must wait until every input is resolved and every question is answered.
@@ -47,7 +55,7 @@ if ($Root) {
             exit 3
         }
     }
-    foreach ($s in 'step1', 'step2') {
+    foreach ($s in 'step1', 'step3') {
         if ((Test-UserFile (Join-Path $Root "$s/questions.md")) -and -not (Test-UserFile (Join-Path $Root "$s/answers.md"))) {
             [Console]::Error.WriteLine("error: $(Join-Path $Root "$s/questions.md") has no answers.md yet; ask the user first")
             exit 3
@@ -101,7 +109,47 @@ else {
     [Console]::Error.WriteLine('note: no diff given, location checks skipped')
 }
 
-$pts = @{ Critical = 10; Major = 5; Minor = 2; Nit = 0 }
+# Defaults; configs.ini can change them
+$dimMax = [ordered]@{ A = 25; B = 15; C = 15; D = 15; E = 10; F = 10; G = 10 }
+$pts = @{ Critical = 10; Major = 5; Minor = 2; Nit = 1 }
+$gradeMin = [ordered]@{ S = 95; A = 85; B = 70; C = 55 }
+$merge = $false
+# Reads the scoring settings of configs.ini; keys that are not set keep their defaults.
+$cfgErrors = New-Object System.Collections.Generic.List[string]
+if (Test-UserFile $Config) {
+    $sec = ''
+    foreach ($l in (Read-Utf8Lines $Config)) {
+        if ($l -match '^\s*[;#]' -or $l -match '^\s*$') { continue }
+        if ($l -match '^\s*\[(.*)\]\s*$') { $sec = $Matches[1]; continue }
+        if ($sec -cnotin 'points', 'deductions', 'grades' -or $l -notmatch '^([^=]*)=(.*)$') { continue }
+        $k = $Matches[1].Trim(); $v = $Matches[2].Trim(); if ($v -match '^"(.*)"$') { $v = $Matches[1] }
+        if ($sec -eq 'deductions' -and $k -ceq 'merge') {
+            $v = $v.ToLowerInvariant()
+            if ($v -cnotin 'true', 'false') { $cfgErrors.Add("  - [deductions] merge: `"$v`" is not true or false") }
+            else { $merge = ($v -eq 'true') }
+            continue
+        }
+        $target = switch -CaseSensitive ($sec) { 'points' { $dimMax } 'deductions' { $pts } 'grades' { $gradeMin } }
+        $allowed = switch -CaseSensitive ($sec) { 'points' { 'A, B, C, D, E, F, G' } 'deductions' { 'Critical, Major, Minor, Nit, merge' } 'grades' { 'S, A, B, C' } }
+        $what = switch -CaseSensitive ($sec) { 'points' { 'dimension' } 'deductions' { 'severity' } 'grades' { 'grade' } }
+        if (-not (@($target.Keys) -ccontains $k)) { $cfgErrors.Add("  - [$sec] ${k}: unknown $what (allowed: $allowed)"); continue }
+        if ($v -notmatch '^[0-9]+$') { $cfgErrors.Add("  - [$sec] ${k}: `"$v`" is not a whole number"); continue }
+        $target[$k] = [int]$v
+    }
+}
+$sum = 0; foreach ($d in $dimMax.Keys) { $sum += $dimMax[$d] }
+if ($sum -ne 100) { $cfgErrors.Add("  - [points] the seven dimensions must add up to 100, not $sum") }
+if ($gradeMin.S -gt 100) { $cfgErrors.Add('  - [grades] S must be at most 100') }
+$g = @('S', 'A', 'B', 'C')
+for ($i = 0; $i -lt 3; $i++) {
+    if ($gradeMin[$g[$i]] -le $gradeMin[$g[$i + 1]]) { $cfgErrors.Add("  - [grades] $($g[$i]) ($($gradeMin[$g[$i]])) must be higher than $($g[$i + 1]) ($($gradeMin[$g[$i + 1]]))") }
+}
+if ($cfgErrors.Count -gt 0) {
+    [Console]::Error.WriteLine("invalid scoring settings in ${Config}:")
+    $cfgErrors | ForEach-Object { [Console]::Error.WriteLine($_) }
+    exit 2
+}
+
 $rank = @{ Critical = 1; Major = 2; Minor = 3; Nit = 4 }
 $uTypes = @{
     'spec-gap'         = @('missing', 'wrong', 'ambiguous')
@@ -110,17 +158,36 @@ $uTypes = @{
 }
 $errors = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
-$found = [ordered]@{}
+$found = New-Object System.Collections.Generic.List[object]
+$seen = @{}; $idSeen = @{}
 $upstream = New-Object System.Collections.Generic.List[object]
 $skipped = New-Object System.Collections.Generic.List[object]
 
 function Add-Error([int]$Line, [string]$Message) { $script:errors.Add("  - line ${Line}: $Message") }
 
+# Comment ids are <plugin>#<n>: the n-th C record of the plugin's cr.txt (prepare-diff lists them in prepared.txt).
+$commentMode = [ordered]@{}; $hasCr = $false
+if ($Root -and (Test-UserFile (Join-Path $Root 'step2/plan.tsv'))) {
+    $hasCr = $true
+    foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step2/plan.tsv') | Where-Object { $_ })) {
+        $p = $l -split "`t"; $crFile = Join-Path $Root "step2/$($p[0])/cr.txt"; $n = 0
+        if (Test-UserFile $crFile) { foreach ($x in (Read-Utf8Lines $crFile)) { if ($x -match '^\s*C\s*\|') { $n++; $commentMode["$($p[0])#$n"] = $p[2] } } }
+    }
+}
+$used = @{}; $rejected = New-Object System.Collections.Generic.List[object]; $rejectedIds = @{}
+function Test-Comment([int]$Line, [string]$Id, [string]$What) {
+    if ($Id -notmatch '^[^#]+#[0-9]+$') { Add-Error $Line "$What`"$Id`" is not a comment id <plugin>#<n> (listed in prepared.txt)"; return $false }
+    if (-not $script:hasCr) { return $true }
+    if (-not $script:commentMode.Contains($Id)) { Add-Error $Line "$What$Id is not a code review comment of step 2"; return $false }
+    if ($script:commentMode[$Id] -cne 'mapped') { Add-Error $Line "$What$Id belongs to an advisory plugin; advisory comments are never deducted or rejected"; return $false }
+    return $true
+}
+
 # Checks that the record just finished has the continuation fields it needs.
 function Close-Record {
     if ($script:rec -eq 'F') {
         if (-not $script:fld.ContainsKey('problem')) { Add-Error $script:recLine "$($script:recId) is missing `"problem:`"" }
-        if ($script:recSev -ne 'Nit' -and -not $script:fld.ContainsKey('suggestion')) { Add-Error $script:recLine "$($script:recId) is missing `"suggestion:`"" }
+        if (-not $script:fld.ContainsKey('suggestion')) { Add-Error $script:recLine "$($script:recId) is missing `"suggestion:`"" }
     }
     elseif ($script:rec -eq 'U') {
         if (-not $script:fld.ContainsKey('content')) { Add-Error $script:recLine 'upstream record is missing "content:"' }
@@ -128,7 +195,7 @@ function Close-Record {
     $script:rec = ''; $script:fld = @{}
 }
 
-$rec = ''; $fld = @{}; $recId = ''; $recSev = ''; $recLine = 0
+$rec = ''; $fld = @{}; $recId = ''; $recLine = 0
 $no = 0
 foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
     $no++
@@ -138,22 +205,26 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
         $key = $Matches[1]; $val = $Matches[2].Trim()
         if ($rec -eq 'skip') { continue }
         if ($rec -eq '') { Add-Error $no "field `"$key`" is not under an F or U record"; continue }
-        if ($rec -eq 'F' -and $key -cnotin 'problem', 'suggestion', 'assumption') { Add-Error $no "unknown field `"$key`" for F (allowed: problem, suggestion, assumption)"; continue }
-        if ($rec -eq 'U' -and $key -cnotin 'content', 'code', 'ticket') { Add-Error $no "unknown field `"$key`" for U (allowed: content, code, ticket)"; continue }
+        if ($rec -eq 'F' -and $key -cnotin 'problem', 'suggestion', 'assumption', 'source') { Add-Error $no "unknown field `"$key`" for F (allowed: problem, suggestion, assumption, source)"; continue }
+        if ($rec -eq 'U' -and $key -cnotin 'content', 'code', 'ticket', 'source') { Add-Error $no "unknown field `"$key`" for U (allowed: content, code, ticket, source)"; continue }
         if (-not $val) { Add-Error $no "field `"$key`" is empty"; continue }
+        # source: lists the code review comments a deduction confirms, separated by 、 or commas.
+        if ($key -ceq 'source') { foreach ($e in ($val -split '、|,' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) { if (Test-Comment $no $e 'source ') { $used[$e] = $true } } }
         $fld[$key] = $val
         continue
     }
     Close-Record
     $c = @($line -split '\|' | ForEach-Object { $_.Trim() })
-    while ($c.Count -lt 5) { $c += '' }
+    while ($c.Count -lt 6) { $c += '' }
     switch -CaseSensitive ($c[0]) {
         'F' {
             $id = $c[1]; $sev = $c[2]; $locs = $c[3]; $reason = $c[4]
-            $rec = 'skip'; $recId = $id; $recSev = $sev; $recLine = $no
-            if (-not $def.ContainsKey($id)) { Add-Error $no "unknown check id $id"; break }
+            $rec = 'skip'; $recId = $id; $recLine = $no
+            # Check id "-": no check of the checklist covers the problem; deducted from the total by its severity.
+            $other = ($id -eq '-')
+            if (-not $other -and -not $def.ContainsKey($id)) { Add-Error $no "unknown check id $id (use - when no check covers the problem)"; break }
             if ($sev -cnotin 'Critical', 'Major', 'Minor', 'Nit') { Add-Error $no "${id}: severity `"$sev`" is not Critical/Major/Minor/Nit"; break }
-            if ($sev -ne $def[$id] -and $sev -ne 'Nit') {
+            if (-not $other -and $sev -ne $def[$id] -and $sev -ne 'Nit') {
                 if ($adj[$id] -notcontains $sev) {
                     $adjText = if ($adj[$id].Count -gt 0) { ", the allowed adjustment $($adj[$id] -join ',')" } else { '' }
                     Add-Error $no "${id}: severity must be the default $($def[$id])$adjText or Nit, not $sev"; break
@@ -161,20 +232,28 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
                 if (-not $reason) { Add-Error $no "${id}: non-default severity $sev needs the matching adjustment condition in column 5"; break }
             }
             if ($id -eq 'C1' -and $sev -eq 'Critical' -and $useIndex -and $hasTest) { Add-Error $no 'C1 Critical requires that the PR changes no test file, but the diff contains test files' }
-            if ($found.Contains($id)) { Add-Error $no "$id appears more than once. A check id is deducted once: merge all locations into one record"; break }
-            if (-not $locs) { Add-Error $no "${id}: missing file:line locations"; break }
+            if (-not $locs) { Add-Error $no "${id}: missing file:line location"; break }
+            if ($locs -eq '-' -and -not $other) { Add-Error $no "${id}: location - (whole PR) is only allowed when the check id is -; give file:line"; break }
+            # merge=true: one F record per check id with all its locations, deducted once.
+            # merge=false: one F record per occurrence with one location, each deducted.
+            # Records without a check id (-) are always deducted one by one.
+            if ($merge -and -not $other -and $idSeen.ContainsKey($id)) { Add-Error $no "$id appears more than once. Deductions are merged (merge=true): put every location of a check id into one record"; break }
+            if (-not $merge -and $locs.Contains(',')) { Add-Error $no "${id}: several locations in one record. Deductions are not merged (merge=false): write one F record per location"; break }
             $locList = New-Object System.Collections.Generic.List[string]
-            foreach ($loc in ($locs -split ',' | ForEach-Object { $_.Trim() })) {
+            foreach ($loc in @(if ($locs -ne '-') { $locs -split ',' | ForEach-Object { $_.Trim() } })) {
                 if ($loc -notmatch '^(.+):(\d+)(-\d+)?$') { Add-Error $no "${id}: location `"$loc`" is not file:line"; continue }
                 $fp = $Matches[1]; $ln = $Matches[2]
-                if ($sev -ne 'Nit' -and $useIndex) {
+                if ($useIndex) {
                     if (-not $known.ContainsKey($fp)) { Add-Error $no "${id}: file `"$fp`" is not in the diff (use the full path from the diff, no ...)" }
                     elseif (-not $kind.ContainsKey("$fp|$ln")) { Add-Error $no "${id}: $loc is outside the diff hunks" }
                     elseif ($kind["$fp|$ln"] -ne '+') { $warnings.Add("  - ${id}: $loc is an unchanged context line; make sure the problem is in added or changed code") }
                 }
                 $locList.Add($loc)
             }
-            $found[$id] = [pscustomobject]@{ Id = $id; Severity = $sev; Locations = $locList }
+            $clean = if ($locs -eq '-') { '-' } else { $locList -join ',' }
+            if (-not $merge -and -not $other -and $seen.ContainsKey("$id|$clean")) { Add-Error $no "$id at $clean is recorded twice; one problem at one location is deducted once"; break }
+            $idSeen[$id] = $true; $seen["$id|$clean"] = $true
+            $found.Add([pscustomobject]@{ Seq = $found.Count + 1; Id = $id; Severity = $sev; Locations = $locList; Clean = $clean })
             $rec = 'F'
         }
         'U' {
@@ -183,9 +262,17 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
             if ($uTypes[$c[1]] -cnotcontains $c[2]) { Add-Error $no "upstream subtype for $($c[1]) must be one of: $($uTypes[$c[1]] -join ',')"; break }
             if ($c[1] -eq 'spec-gap' -and $c[3] -cnotin 'high', 'medium', 'low') { Add-Error $no 'spec-gap needs impact high, medium or low'; break }
             if ($c[1] -ne 'spec-gap' -and $c[3] -and $c[3] -ne '-') { Add-Error $no 'impact is only used for spec-gap; write - instead'; break }
-            if (-not $c[4]) { Add-Error $no 'upstream record needs a reference (spec section/version, change-log date or vendor ticket); without one, do not list it'; break }
-            $upstream.Add([pscustomobject]@{ Type = $c[1]; Subtype = $c[2]; Impact = $c[3]; Reference = $c[4] })
+            if ($c[4] -cnotin 'Critical', 'Major', 'Minor', 'Nit') { Add-Error $no "upstream severity `"$($c[4])`" is not Critical/Major/Minor/Nit"; break }
+            if (-not $c[5]) { Add-Error $no 'upstream record needs a reference (spec section/version, change-log date or vendor ticket); without one, do not list it'; break }
+            $upstream.Add([pscustomobject]@{ Type = $c[1]; Subtype = $c[2]; Impact = $c[3]; Severity = $c[4]; Reference = $c[5] })
             $rec = 'U'
+        }
+        # X|<plugin>#<n>|reason: a code review comment that step 3 found not to be a real problem in this PR.
+        'X' {
+            if (-not $c[1] -or -not $c[2]) { Add-Error $no 'format is X|<plugin>#<n>|reason'; break }
+            if (-not (Test-Comment $no $c[1] 'rejected comment ')) { break }
+            if ($rejectedIds.ContainsKey($c[1])) { Add-Error $no "comment $($c[1]) is rejected twice"; break }
+            $rejectedIds[$c[1]] = $true; $rejected.Add([pscustomobject]@{ Comment = $c[1]; Reason = $c[2] })
         }
         'S' {
             if (-not $c[1] -or -not $c[2]) { Add-Error $no 'format is S|check-id|reason'; break }
@@ -194,19 +281,30 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
         { $_ -cin 'H', 'N', 'I', 'R' } {
             if (-not $c[1]) { Add-Error $no "$($c[0]) record has no text" }
         }
-        default { Add-Error $no "unknown record type `"$($c[0])`" (allowed: F, U, S, H, N, I, R)" }
+        default { Add-Error $no "unknown record type `"$($c[0])`" (allowed: F, U, X, S, H, N, I, R)" }
     }
 }
 Close-Record
+# Every comment of a mapped plugin is either deducted (source: of an F or U record) or rejected (X).
+foreach ($e in $commentMode.Keys) {
+    if ($commentMode[$e] -cne 'mapped') { continue }
+    if ($used.ContainsKey($e) -and $rejectedIds.ContainsKey($e)) { $errors.Add("  - comment $e is both deducted (source:) and rejected (X)") }
+    elseif (-not $used.ContainsKey($e) -and -not $rejectedIds.ContainsKey($e)) { $errors.Add("  - comment $e is neither deducted (an F or U record with source: $e) nor rejected (X|$e|reason)") }
+}
 
 $tsvPath = Join-Path $OutDir 'score.tsv'; $jsonPath = Join-Path $OutDir 'score.json'
-foreach ($old in $tsvPath, $jsonPath) { if (Test-UserFile $old) { [IO.File]::Delete((Resolve-UserPath $old)) } }
+if (-not $Check) { foreach ($old in $tsvPath, $jsonPath) { if (Test-UserFile $old) { [IO.File]::Delete((Resolve-UserPath $old)) } } }
 
 if ($errors.Count -gt 0) {
     [Console]::Error.WriteLine("validation failed with $($errors.Count) error(s). Fix findings.txt and run again:")
     $errors | ForEach-Object { [Console]::Error.WriteLine($_) }
     if ($warnings.Count -gt 0) { [Console]::Error.WriteLine('warnings:'); $warnings | ForEach-Object { [Console]::Error.WriteLine($_) } }
     exit 1
+}
+if ($Check) {
+    [Console]::Out.Write("findings.txt is valid ($($found.Count) deductions, $($upstream.Count) upstream, $($rejected.Count) rejected comments)`n")
+    if ($warnings.Count -gt 0) { [Console]::Error.WriteLine('warnings:'); $warnings | ForEach-Object { [Console]::Error.WriteLine($_) } }
+    exit 0
 }
 
 function ConvertTo-JsonString([string]$s) {
@@ -217,57 +315,64 @@ function Join-JsonArray($items) {
     return "[`n" + ($items -join ",`n") + "`n  ]"
 }
 
-$dimMax = [ordered]@{ A = 25; B = 15; C = 15; D = 15; E = 10; F = 10; G = 10 }
-$sorted = @($found.Values | Sort-Object @{ Expression = { $rank[$_.Severity] } }, @{ Expression = { $_.Id } })
-$deducted = @($sorted | Where-Object { $_.Severity -ne 'Nit' })
-$scores = [ordered]@{}; $total = 0; $crit = $false
+# Sorted by severity, then check id with records without one (-) last; occurrences of one id keep their order in findings.txt
+$sorted = @($found | Sort-Object @{ Expression = { $rank[$_.Severity] } }, @{ Expression = { [int]($_.Id -eq '-') } }, @{ Expression = { $_.Id } }, @{ Expression = { $_.Seq } })
+$scores = [ordered]@{}; $total = 0
 foreach ($d in $dimMax.Keys) {
     $ded = 0
-    foreach ($x in $deducted) {
-        if ($x.Id.Substring(0, 1) -ne $d) { continue }
-        $ded += $pts[$x.Severity]
-        if ($x.Severity -eq 'Critical') { $crit = $true }
-    }
+    foreach ($x in $sorted) { if ($x.Id.Substring(0, 1) -ceq $d) { $ded += $pts[$x.Severity] } }
     $scores[$d] = [Math]::Max(0, $dimMax[$d] - $ded)
     $total += $scores[$d]
 }
-$grade = if ($total -ge 95) { 'S' } elseif ($total -ge 85) { 'A' } elseif ($total -ge 70) { 'B' } elseif ($total -ge 55) { 'C' } else { 'D' }
+# Records without a check id and upstream factors are deducted from the total.
+$othDed = 0; foreach ($x in $sorted) { if ($x.Id -eq '-') { $othDed += $pts[$x.Severity] } }
+$upDed = 0; foreach ($u in $upstream) { $upDed += $pts[$u.Severity] }
+$crit = (@($found | Where-Object { $_.Severity -eq 'Critical' }).Count + @($upstream | Where-Object { $_.Severity -eq 'Critical' }).Count) -gt 0
+$total = [Math]::Max(0, $total - $othDed - $upDed)
+$grade = if ($total -ge $gradeMin.S) { 'S' } elseif ($total -ge $gradeMin.A) { 'A' } elseif ($total -ge $gradeMin.B) { 'B' } elseif ($total -ge $gradeMin.C) { 'C' } else { 'D' }
 $capped = $false
 if ($crit -and $grade -in 'S', 'A') { $grade = 'B'; $capped = $true }
 
 $tsv = New-Object System.Text.StringBuilder
 [void]$tsv.Append("total`t$total`ngrade`t$grade`ncapped`t$([int]$capped)`ncritical`t$([int]$crit)`n")
 foreach ($d in $dimMax.Keys) { [void]$tsv.Append("dim`t$d`t$($scores[$d])`t$($dimMax[$d])`n") }
-foreach ($x in $deducted) { [void]$tsv.Append("finding`t$($x.Id)`t$($x.Severity)`t$($pts[$x.Severity])`t$($x.Locations -join ',')`n") }
+foreach ($x in $sorted) { [void]$tsv.Append("finding`t$($x.Id)`t$($x.Severity)`t$($pts[$x.Severity])`t$($x.Clean)`t$($x.Seq)`n") }
+$i = 0; foreach ($u in $upstream) { $i++; [void]$tsv.Append("upstream`t$i`t$($u.Severity)`t$($pts[$u.Severity])`n") }
 Write-Utf8File $tsvPath $tsv.ToString()
 
 $q = '"'
 $dimJson = @($dimMax.Keys | ForEach-Object { $q + $_ + $q + ': ' + $scores[$_] }) -join ', '
-$fj = @($deducted | ForEach-Object {
+$fj = @($sorted | ForEach-Object {
         $locJson = @($_.Locations | ForEach-Object { ConvertTo-JsonString $_ }) -join ', '
-        '    { "id": ' + (ConvertTo-JsonString $_.Id) + ', "severity": ' + (ConvertTo-JsonString $_.Severity) +
+        $idJson = if ($_.Id -eq '-') { 'null' } else { ConvertTo-JsonString $_.Id }
+        '    { "id": ' + $idJson + ', "severity": ' + (ConvertTo-JsonString $_.Severity) +
         ', "deduction": ' + $pts[$_.Severity] + ', "locations": [' + $locJson + '] }'
     })
 $uj = @($upstream | ForEach-Object {
         $imp = if (-not $_.Impact -or $_.Impact -eq '-') { 'null' } else { ConvertTo-JsonString $_.Impact }
         '    { "type": ' + (ConvertTo-JsonString $_.Type) + ', "subtype": ' + (ConvertTo-JsonString $_.Subtype) +
-        ', "impact": ' + $imp + ', "reference": ' + (ConvertTo-JsonString $_.Reference) + ' }'
+        ', "impact": ' + $imp + ', "severity": ' + (ConvertTo-JsonString $_.Severity) + ', "deduction": ' + $pts[$_.Severity] +
+        ', "reference": ' + (ConvertTo-JsonString $_.Reference) + ' }'
     })
+$xj = @($rejected | ForEach-Object { '    { "comment": ' + (ConvertTo-JsonString $_.Comment) + ', "reason": ' + (ConvertTo-JsonString $_.Reason) + ' }' })
 $sj = @($skipped | ForEach-Object { '    { "id": ' + (ConvertTo-JsonString $_.Id) + ', "reason": ' + (ConvertTo-JsonString $_.Reason) + ' }' })
 $json = "{`n" +
 '  "total": ' + $total + ",`n" +
 '  "grade": "' + $grade + '"' + ",`n" +
 '  "hasCritical": ' + $crit.ToString().ToLower() + ",`n" +
 '  "dimensions": { ' + $dimJson + " },`n" +
+'  "otherDeduction": ' + $othDed + ",`n" +
+'  "upstreamDeduction": ' + $upDed + ",`n" +
 '  "findings": ' + (Join-JsonArray $fj) + ",`n" +
 '  "upstream": ' + (Join-JsonArray $uj) + ",`n" +
+'  "rejectedComments": ' + (Join-JsonArray $xj) + ",`n" +
 '  "skippedChecks": ' + (Join-JsonArray $sj) + "`n}`n"
 Write-Utf8File $jsonPath $json
 
 $capNote = if ($capped) { ' (capped at B because of a Critical finding)' } else { '' }
 $summary = "grade $grade, total $total/100$capNote`n" +
 (@($dimMax.Keys | ForEach-Object { "$_ $($scores[$_])/$($dimMax[$_])  " }) -join '') + "`n" +
-"deductions: $($deducted.Count), upstream: $($upstream.Count), skipped checks: $($skipped.Count)`n"
+"deductions: $($found.Count) (without a check id: $(@($found | Where-Object { $_.Id -eq '-' }).Count)), upstream: $($upstream.Count), rejected comments: $($rejected.Count), skipped checks: $($skipped.Count)`n"
 [Console]::Out.Write($summary)
 if ($warnings.Count -gt 0) { [Console]::Error.WriteLine('warnings:'); $warnings | ForEach-Object { [Console]::Error.WriteLine($_) } }
 Write-Output "wrote $tsvPath and $jsonPath"

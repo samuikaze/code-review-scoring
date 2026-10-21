@@ -3,13 +3,16 @@
 Preprocess a PR diff: drop non-reviewable files, number new-file lines, list heuristic candidates.
 
 .DESCRIPTION
-Prints a summary, heuristic candidates (clues only) and a compact diff with new-file line numbers.
-With -Root, reads ROOT/step1/pr.diff and writes ROOT/step2/prepared.txt unless -Out is given.
+Prints a summary, the code review comments of ROOT/step2 with their ids (with -Root only), heuristic candidates
+(clues only) and a compact diff with new-file line numbers.
+The summary shows the [deductions] merge setting of -Config (default: configs.ini in the project root; missing =
+false), which decides how findings.txt is written. With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
+-InputPath and -Git, ROOT is tmp in the project root. -InputPath - reads the diff from stdin.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 2 bad arguments or input.
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File prepare-diff.ps1 -Root tmp
+powershell -ExecutionPolicy Bypass -File prepare-diff.ps1
 .EXAMPLE
 pwsh -File prepare-diff.ps1 -Git origin/main...HEAD -Mode scan
 #>
@@ -21,19 +24,34 @@ param(
     [Alias('r')][string]$Repo = '.',
     [Alias('m')][ValidateSet('all', 'summary', 'scan', 'view')][string]$Mode = 'all',
     [int]$Max = 15,
-    [Alias('o')][string]$Out
+    [Alias('o')][string]$Out,
+    [string]$Config
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
 
-if (@($Root, $InputPath, $Git | Where-Object { $_ }).Count -gt 1) { Exit-WithError 'use only one of -Root, -InputPath, -Git' }
+$sources = @($Root, $InputPath, $Git | Where-Object { $_ }).Count
+if ($sources -gt 1) { Exit-WithError 'use only one of -Root, -InputPath, -Git' }
+$projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
+if ($sources -eq 0) { $Root = Join-Path $projectRoot 'tmp' }
+# [deductions] merge decides how findings.txt is written; the scoring step validates it the same way.
+if (-not $Config) { $Config = Join-Path $projectRoot 'configs.ini' }
+$merge = 'false'
+if (Test-UserFile $Config) {
+    $sec = ''
+    foreach ($l in (Read-Utf8Lines $Config)) {
+        if ($l -match '^\s*\[(.*)\]\s*$') { $sec = $Matches[1]; continue }
+        if ($sec -ceq 'deductions' -and $l -cmatch '^\s*merge\s*=\s*"?(.*?)"?\s*$') { $merge = $Matches[1].ToLowerInvariant() }
+    }
+    if ($merge -cnotin 'true', 'false') { Exit-WithError "[deductions] merge in $Config must be true or false, not $merge" }
+}
 if ($Root) {
     $InputPath = Join-Path $Root 'step1/pr.diff'
     if (-not $Out) {
-        [void][IO.Directory]::CreateDirectory((Resolve-UserPath (Join-Path $Root 'step2')))
-        $Out = Join-Path $Root 'step2/prepared.txt'
+        [void][IO.Directory]::CreateDirectory((Resolve-UserPath (Join-Path $Root 'step3')))
+        $Out = Join-Path $Root 'step3/prepared.txt'
     }
 }
 $diffText = Get-DiffText -InputPath $InputPath -Git $Git -Repo $Repo
@@ -190,6 +208,7 @@ foreach ($f in $files) {
 $sb = New-Object System.Text.StringBuilder
 if ($Mode -in 'all', 'summary') {
     [void]$sb.Append("## Summary`n")
+    [void]$sb.Append("- deductions: $(if ($merge -eq 'true') { 'merged (merge=true): one F line per check id with all its locations; deducted once' } else { 'not merged (merge=false): one F line per location; every occurrence is deducted' })`n")
     [void]$sb.Append("- reviewable files: $nk, excluded: $nx; main code changed: $nMain, test files: $nTest, migrations: $nMig`n")
     foreach ($f in $files) {
         $tagv = if ($f.IsTest) { ' [test]' } elseif ($f.IsMig) { ' [migration]' } else { '' }
@@ -197,6 +216,26 @@ if ($Mode -in 'all', 'summary') {
         else { [void]$sb.Append("  - $($f.Path) [$($f.Status) +$($f.Adds) -$($f.Dels)]$tagv`n") }
     }
     [void]$sb.Append("`n")
+    # Lists every code review comment with its id <plugin>#<n> (the n-th C record of the plugin's cr.txt).
+    if ($Root -and (Test-UserFile (Join-Path $Root 'step2/plan.tsv'))) {
+        [void]$sb.Append("## Code review comments (cite the ids in source: of F/U lines or in X lines; see the skill)`n")
+        $listed = 0
+        foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step2/plan.tsv') | Where-Object { $_ })) {
+            $p = $l -split "`t"; $crFile = Join-Path $Root "step2/$($p[0])/cr.txt"; $n = 0
+            if (-not (Test-UserFile $crFile)) { continue }
+            foreach ($x in (Read-Utf8Lines $crFile)) {
+                $x = $x.TrimEnd("`r")
+                if ($x -match '^\s*C\s*\|') {
+                    $n++; $listed++; $t = @($x -split '\|' | ForEach-Object { $_.Trim() }); while ($t.Count -lt 4) { $t += '' }
+                    $rule = if ($t[3]) { $t[3] } else { '-' }
+                    [void]$sb.Append("- $($p[0])#$n [$($p[2])] $($t[1]) $rule | $($t[2])`n")
+                }
+                elseif ($n -gt 0 -and $x -match '^\s*problem:') { [void]$sb.Append("  $($x.Trim())`n") }
+            }
+        }
+        if ($listed -eq 0) { [void]$sb.Append("- none`n") }
+        [void]$sb.Append("`n")
+    }
 }
 if ($Mode -in 'all', 'scan') {
     [void]$sb.Append("## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)`n")

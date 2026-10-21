@@ -1,29 +1,29 @@
 #!/usr/bin/env zsh
-# 依 skills/ 與 plugins.ini 同步各 AI 工具讀取 Skill 的目錄：建立缺少的連結、解除已不在清單中的連結。
-# macOS / Linux 建立 symlink；Windows 的 Git Bash / MSYS2 / Cygwin 建立 Junction（不需系統管理員權限）。
-# 只會變更本腳本建立過的連結（記錄在各目錄的 .managed），不會動到其他連結或實體目錄。
+# Syncs the skill folders that AI tools read with skills/ and plugins.ini: creates missing links and removes links that are no longer listed.
+# macOS / Linux get symlinks; Git Bash / MSYS2 / Cygwin on Windows get junctions (no administrator rights needed).
+# Only links created by this script (listed in .managed in each folder) are changed; other links and real folders are left alone.
 emulate -L zsh
 setopt err_exit no_unset pipe_fail ksh_arrays
 
 usage() {
   cat <<'USAGE'
-用法：link-skills.zsh [選項]
+Usage: link-skills.zsh [options]
 
-  -t, --target LIST  要同步的目標，以逗號分隔（預設 agents,github）：
-                       agents  → .agents/skills（Codex、Gemini CLI 等通用位置）
-                       github  → .github/skills（GitHub Copilot）
-                       claude  → .claude/skills（Claude Code）
-                       all     → 以上全部
-  -c, --config FILE  外掛清單（預設：專案根目錄的 plugins.ini）
-      --check        只檢查並列出會做的變更，不實際修改
-      --remove       移除本腳本建立的所有連結（不會刪除 Skill 本身）
-  -h, --help         顯示說明
+  -t, --target LIST  targets to sync, comma-separated (default: agents,github):
+                       agents  -> .agents/skills (shared location for Codex, Gemini CLI and others)
+                       github  -> .github/skills (GitHub Copilot)
+                       claude  -> .claude/skills (Claude Code)
+                       all     -> all of the above
+  -c, --config FILE  plugin list (default: plugins.ini in the project root)
+      --check        only check and list the changes, without applying them
+      --remove       remove every link created by this script (the skills themselves are kept)
+  -h, --help         show this help
 
-同步前會檢查：SKILL.md 是否存在、資料夾名稱與 name 是否一致、名稱是否重複、
-是否設定了 disable-model-invocation: true，以及目標位置是否已有不是本腳本建立的同名項目。
-有任何問題時不會做任何變更。
+Before syncing it checks that every SKILL.md exists, that folder names match their name, that names
+are unique, that no skill sets disable-model-invocation: true, and that no target already holds an item
+with the same name that this script did not create. Nothing is changed when a check fails.
 
-結束代碼：0 成功、1 檢查未通過、2 參數錯誤。
+Exit codes: 0 ok, 1 check failed, 2 bad arguments.
 USAGE
 }
 
@@ -31,12 +31,12 @@ root="${0:A:h:h}"
 targets="agents,github" config="" mode="sync"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -t|--target) targets="${2:?--target 需要參數}"; shift 2 ;;
-    -c|--config) config="${2:?--config 需要參數}"; shift 2 ;;
+    -t|--target) targets="${2:?--target needs a value}"; shift 2 ;;
+    -c|--config) config="${2:?--config needs a value}"; shift 2 ;;
     --check) mode="check"; shift ;;
     --remove) mode="remove"; shift ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "錯誤：未知的參數 $1（使用 --help 查看用法）" >&2; exit 2 ;;
+    *) echo "error: unknown option $1 (see --help)" >&2; exit 2 ;;
   esac
 done
 [[ "$targets" == "all" ]] && targets="agents,github,claude"
@@ -45,7 +45,7 @@ done
 is_windows=0
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) is_windows=1 ;; esac
 
-# Junction 在 Git Bash 中不一定會被 -L 判定為連結，因此另外用 cmd 的 dir 屬性判斷
+# Git Bash does not always report a junction as a link with -L, so also check its dir attributes with cmd
 is_link() {
   [[ -L "$1" ]] && return 0
   if [[ $is_windows -eq 1 && -d "$1" ]]; then
@@ -57,27 +57,27 @@ is_link() {
 remove_link() {
   if [[ $is_windows -eq 1 ]]; then cmd //c "rmdir \"$(cygpath -w "$1")\"" >/dev/null; else rm -f "$1"; fi
 }
-make_link() {  # $1=連結位置 $2=Skill 的絕對路徑 $3=internal|plugin
+make_link() {  # $1 = link location, $2 = absolute skill path, $3 = internal|plugin
   if [[ $is_windows -eq 1 ]]; then
     cmd //c "mklink /J \"$(cygpath -w "$1")\" \"$(cygpath -w "$2")\"" >/dev/null
   elif [[ "$3" == "internal" ]]; then
-    ln -s "../../skills/$(basename "$2")" "$1"   # 專案內的 Skill 用相對路徑，搬動專案也不會失效
+    ln -s "../../skills/$(basename "$2")" "$1"   # relative for skills of this project, so moving the project keeps the links working
   else
     ln -s "$2" "$1"
   fi
 }
 same_dir() { [[ "$(cd "$1" 2>/dev/null && pwd -P)" == "$(cd "$2" 2>/dev/null && pwd -P)" ]]; }
-fm_name() {  # 讀取 SKILL.md frontmatter 的 name
+fm_name() {  # name in the frontmatter of a SKILL.md
   awk -v q="'" 'NR == 1 && !/^---/ { exit } NR > 1 && /^---/ { exit }
     NR > 1 && /^name:/ { sub(/^name:[ \t]*/, ""); sub(/[ \t\r]+$/, ""); gsub(/^"|"$/, ""); if (substr($0, 1, 1) == q) $0 = substr($0, 2, length($0) - 2); print; exit }' "$1"
 }
-fm_disabled() {  # frontmatter 是否設定 disable-model-invocation: true
+fm_disabled() {  # whether the frontmatter sets disable-model-invocation: true
   awk 'NR == 1 && !/^---/ { exit } NR > 1 && /^---/ { exit }
     NR > 1 && /^disable-model-invocation:/ { v = $0; sub(/^[^:]*:[ \t]*/, "", v); gsub(/["\047\r \t]/, "", v); if (v == "true") found = 1; exit }
     END { exit !found }' "$1"
 }
 
-# ---- 1. 收集要連結的 Skill：skills/ 下的全部 + plugins.ini ----
+# ---- 1. Skills to link: everything under skills/ plus plugins.ini ----
 names=() paths=() kinds=() errors=()
 for d in "$root"/skills/*(N); do
   [[ -f "$d/SKILL.md" ]] || continue
@@ -92,12 +92,12 @@ if [[ -f "$config" ]]; then
         if [[ -d "$val" ]]; then
           names+=("$sec"); paths+=("$(cd "$val" && pwd)"); kinds+=("plugin")
         else
-          errors+=("[$sec] 找不到路徑 $val")
+          errors+=("[$sec] path not found: $val")
         fi ;;
-      mode) [[ "$val" == "advisory" || "$val" == "mapped" ]] || errors+=("[$sec] mode 只能是 advisory 或 mapped，不能是 $val") ;;
+      mode) [[ "$val" == "advisory" || "$val" == "mapped" ]] || errors+=("[$sec] mode must be advisory or mapped, not $val") ;;
       applies) ;;
-      __nopath__) errors+=("[$sec] 缺少 path") ;;
-      *) errors+=("[$sec] 未知的設定 $key") ;;
+      __nopath__) errors+=("[$sec] path is missing") ;;
+      *) errors+=("[$sec] unknown setting $key") ;;
     esac
   done < <(LC_ALL=C awk '
     /^[ \t]*[;#]/ || /^[ \t]*$/ { next }
@@ -111,30 +111,30 @@ if [[ -f "$config" ]]; then
     END { if (sec != "" && !haspath) print sec "\t__nopath__\t" }
   ' "$config")
 elif [[ "$config" != "$root/plugins.ini" ]]; then
-  echo "錯誤：找不到外掛清單 $config" >&2; exit 2
+  echo "error: plugin list not found: $config" >&2; exit 2
 fi
 
-# ---- 2. 檢查每個 Skill ----
+# ---- 2. Check every skill ----
 count=${#names[@]}
 for ((i = 0; i < count; i++)); do
   n="${names[$i]}" p="${paths[$i]}"
-  if [[ ! -f "$p/SKILL.md" ]]; then errors+=("${n}：找不到 $p/SKILL.md"); continue; fi
+  if [[ ! -f "$p/SKILL.md" ]]; then errors+=("${n}: $p/SKILL.md not found"); continue; fi
   fn="$(fm_name "$p/SKILL.md")"
-  [[ "${kinds[$i]}" == "plugin" && "$fn" != "$n" ]] && errors+=("${n}：外掛區段名稱必須和 SKILL.md 的 name「${fn}」一致")
-  [[ "$(basename "$p")" == "$fn" ]] || errors+=("${n}：資料夾名稱「$(basename "$p")」和 SKILL.md 的 name「${fn}」不一致")
-  fm_disabled "$p/SKILL.md" && errors+=("${n}：設定了 disable-model-invocation: true，Sub-Agent 將無法透過 Skill 工具載入")
-  for ((j = 0; j < i; j++)); do [[ "${names[$j]}" == "$n" ]] && errors+=("${n}：名稱重複（${paths[$j]} 與 ${p}）"); done
+  [[ "${kinds[$i]}" == "plugin" && "$fn" != "$n" ]] && errors+=("${n}: the plugin section name must match the name in SKILL.md (\"${fn}\")")
+  [[ "$(basename "$p")" == "$fn" ]] || errors+=("${n}: folder name \"$(basename "$p")\" does not match the name in SKILL.md (\"${fn}\")")
+  fm_disabled "$p/SKILL.md" && errors+=("${n}: disable-model-invocation: true is set, so subagents cannot load it with the skill tool")
+  for ((j = 0; j < i; j++)); do [[ "${names[$j]}" == "$n" ]] && errors+=("${n}: duplicate name (${paths[$j]} and ${p})"); done
 done
 
-# ---- 3. 對每個目標比對現況，列出變更 ----
+# ---- 3. Compare every target with its current state and plan the changes ----
 target_list=("${(@s:,:)targets}")
-plan=()   # 每筆：動作<TAB>目錄<TAB>名稱<TAB>路徑<TAB>種類
+plan=()   # each item: action<TAB>folder<TAB>name<TAB>path<TAB>kind
 for t in "${target_list[@]}"; do
   case "$t" in
     agents) dir="$root/.agents/skills" ;;
     github) dir="$root/.github/skills" ;;
     claude) dir="$root/.claude/skills" ;;
-    *) echo "錯誤：未知的目標 ${t}（只能是 agents、github、claude、all）" >&2; exit 2 ;;
+    *) echo "error: unknown target ${t} (must be agents, github, claude or all)" >&2; exit 2 ;;
   esac
   managed=()
   [[ -f "$dir/.managed" ]] && while IFS= read -r m; do [[ -n "$m" ]] && managed+=("$m"); done < "$dir/.managed"
@@ -153,9 +153,9 @@ for t in "${target_list[@]}"; do
         continue
       fi
       if is_managed "$n"; then plan+=("relink	$dir	$n	${paths[$i]}	${kinds[$i]}"); continue; fi
-      errors+=("${link#"$root"/}：已有不是本腳本建立的連結，指向其他位置，請手動確認後移除")
+      errors+=("${link#"$root"/}: a link not created by this script points elsewhere; check it and remove it manually")
     elif [[ -e "$link" ]]; then
-      errors+=("${link#"$root"/}：已存在實體檔案或目錄，請手動確認後移除")
+      errors+=("${link#"$root"/}: a real file or folder is in the way; check it and remove it manually")
     else
       plan+=("link	$dir	$n	${paths[$i]}	${kinds[$i]}")
     fi
@@ -168,12 +168,12 @@ for t in "${target_list[@]}"; do
 done
 
 if [[ ${#errors[@]} -gt 0 ]]; then
-  echo "檢查未通過，沒有做任何變更：" >&2
+  echo "check failed, nothing was changed:" >&2
   for e in "${errors[@]}"; do echo "  - $e" >&2; done
   exit 1
 fi
 
-# ---- 4. 套用變更 ----
+# ---- 4. Apply the changes ----
 changes=0
 for item in ${plan[@]+"${plan[@]}"}; do
   IFS=$'\t' read -r action dir n p kind <<< "$item"
@@ -181,12 +181,11 @@ for item in ${plan[@]+"${plan[@]}"}; do
   case "$action" in
     link|relink|adopt|unlink)
       changes=$((changes + 1))
-      label=""
-      case "$action" in link) label="連結" ;; relink) label="重新連結" ;; adopt) label="納入管理" ;; unlink) label="解除連結" ;; esac
-      if [[ "$mode" == "check" ]]; then echo "將${label} ${rel}${p:+ → $p}"; continue; fi
+      label="$action" done_label="${action}ed"
+      if [[ "$mode" == "check" ]]; then echo "would ${label} ${rel}${p:+ -> $p}"; continue; fi
       [[ "$action" == "unlink" || "$action" == "relink" ]] && remove_link "$dir/$n"
       if [[ "$action" == "link" || "$action" == "relink" ]]; then mkdir -p "$dir"; make_link "$dir/$n" "$p" "$kind"; fi
-      echo "已${label} ${rel}${p:+ → $p}"
+      echo "${done_label} ${rel}${p:+ -> $p}"
       ;;
     manifest)
       [[ "$mode" == "check" ]] && continue
@@ -196,5 +195,5 @@ for item in ${plan[@]+"${plan[@]}"}; do
       ;;
   esac
 done
-[[ $changes -eq 0 ]] && echo "已是最新狀態，沒有需要變更的連結"
+[[ $changes -eq 0 ]] && echo "already up to date; no link needs to change"
 exit 0
