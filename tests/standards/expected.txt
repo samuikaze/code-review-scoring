@@ -231,3 +231,20 @@ exit=3
 ### resolve --standards missing.ini
 error: missing.ini: file not found; copy configs/standards.example.ini to configs/standards.ini
 exit=3
+### stamp --file good-v2.md --scan good-scan.tsv --out stamped.tmp.tsv
+wrote stamped.tmp.tsv
+# source: good-v2.md v0.2 sha256:28801aba8ae9d5bb7d08cf4f8472cb5ca628efb871204f41bd9debfe6ac2b948
+exit=0
+### lint --file good-v2.md --scan stamped.tmp.tsv
+document: springboot-3 v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 1 confirmations
+scan rules: 2 line rules, 2 scopes, 1 PR hints
+error: stamped.tmp.tsv:5: C1 is not a check item of the standard (removed or renamed?)
+
+result: 1 error(s), 0 warning(s)
+exit=1
+### stamp --file bad.md --scan good-scan.tsv --out stamped.tmp.tsv
+error: bad.md:15: dimension B is listed more than once; run standard lint first
+exit=3
+### stamp --file good-v2.md --out stamped.tmp.tsv
+error: stamp needs --file DOC.md --scan DRAFT.tsv --out RULES.tsv
+exit=2

@@ -30,6 +30,10 @@ Uses the same GNU-style arguments as standard.sh:
       their own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
       report and kind framework|common|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
       each report, and DIR/confirm.tsv (standard, check codes, what to confirm before scoring)
+  standard.ps1 stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--common]
+      write a reviewed scan rule file (--scan, e.g. a draft) to --out with the source line
+      "# source: <document file> <version> sha256:<hash>" of the document (--file), so lint can tell when the
+      document changes later; an existing source line is replaced
 
 Options: --standards FILE  (default: configs/standards.ini in the project root)
          --settings FILE   (default: configs/settings.ini in the project root; its [points] are checked with the overrides)
@@ -202,6 +206,28 @@ switch ($cmd) {
         if (-not $opt.file) { Exit-WithError 'parse needs --file DOC.md' }
         $out = Get-ParsedDoc $opt.file $opt.role
         [Console]::Out.Write((($out -join "`n") + "`n"))
+    }
+    'stamp' {
+        if (-not $opt.file -or -not $opt.scan -or -not $opt.out) { Exit-WithError 'stamp needs --file DOC.md --scan DRAFT.tsv --out RULES.tsv' }
+        foreach ($f in $opt.file, $opt.scan) { if (-not (Test-UserFile $f)) { Exit-WithError "file not found: $f" } }
+        $doc = Get-ParsedDoc $opt.file $opt.role
+        $docPath = Get-Full $opt.file
+        $src = "# source: $([IO.Path]::GetFileName($docPath)) $(Get-Field $doc 'version') sha256:$((Get-FileHash -Algorithm SHA256 -LiteralPath $docPath).Hash.ToLowerInvariant())"
+        # The source line replaces the first existing one (others are dropped), or goes first.
+        $lines = New-Object System.Collections.Generic.List[string]
+        $done = $false
+        foreach ($l in (Read-Utf8Lines $opt.scan)) {
+            $l = $l.TrimEnd("`r")
+            if ($l.StartsWith('# source:')) { if (-not $done) { $lines.Add($src) }; $done = $true; continue }
+            $lines.Add($l)
+        }
+        while ($lines.Count -gt 0 -and -not $lines[$lines.Count - 1]) { $lines.RemoveAt($lines.Count - 1) }
+        if (-not $done) { $lines.Insert(0, $src) }
+        $outPath = Get-Full $opt.out
+        [void][IO.Directory]::CreateDirectory((Split-Path -Parent $outPath))
+        Write-Utf8File $outPath (($lines -join "`n") + "`n")
+        Write-Line "wrote $($outPath.Replace('\', '/'))"
+        Write-Line $src
     }
     'diff' {
         if ($names.Count -ne 2) { Exit-WithError 'diff needs OLD.md NEW.md' }

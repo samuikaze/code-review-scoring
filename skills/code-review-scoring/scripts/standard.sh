@@ -12,6 +12,7 @@ Usage: standard.sh lint [--standards FILE] [--settings FILE] [NAME ...]
        standard.sh diff OLD.md NEW.md
        standard.sh resolve [--standards FILE] [--settings FILE] [NAME]
        standard.sh plan --diff PR.diff --out DIR [--standards FILE] [--settings FILE]
+       standard.sh stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--common]
 
 Commands:
   lint     check configs/standards.ini and the documents and scan rule files it lists (only the NAMEs given),
@@ -31,6 +32,9 @@ Commands:
            their own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
            report and kind framework|common|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
            each report, and DIR/confirm.tsv (standard, check codes, what to confirm before scoring)
+  stamp    write a reviewed scan rule file (--scan, e.g. a draft) to --out with the source line
+           "# source: <document file> <version> sha256:<hash>" of the document (--file), so lint can tell when the
+           document changes later; an existing source line is replaced
 
 Options: --standards FILE  (default: configs/standards.ini in the project root)
          --settings FILE   (default: configs/settings.ini in the project root; its [points] are checked with the overrides)
@@ -178,6 +182,22 @@ case "$cmd" in
     e="$(awk -F'\t' '$1 == "!error" { print ($2 != "" ? ":" $2 : "") ": " $3; exit }' "$tmpd/doc")"
     [[ -z "$e" ]] || { echo "error: $file$e; run standard lint first" >&2; exit 3; }
     awk -F'\t' '$1 !~ /^!/ && $1 != "stats"' "$tmpd/doc"
+    ;;
+
+  stamp)
+    [[ -n "$file" && -n "$scan" && -n "$pout" ]] || { echo "error: stamp needs --file DOC.md --scan DRAFT.tsv --out RULES.tsv" >&2; exit 2; }
+    for f in "$file" "$scan"; do [[ -f "$f" ]] || { echo "error: file not found: $f" >&2; exit 2; }; done
+    run_awk -v mode=doc -v role="$role" "$file" > "$tmpd/doc"
+    e="$(awk -F'\t' '$1 == "!error" { print ($2 != "" ? ":" $2 : "") ": " $3; exit }' "$tmpd/doc")"
+    [[ -z "$e" ]] || { echo "error: $file$e; run standard lint first" >&2; exit 3; }
+    src="# source: $(basename "$file") $(field version "$tmpd/doc") sha256:$(sha "$file")"
+    # The source line replaces the first existing one (others are dropped), or goes first.
+    awk -v src="$src" '{ sub(/\r$/, "") } /^# source:/ { if (!d) o[++n] = src; d = 1; next } { o[++n] = $0 }
+      END { while (n > 0 && o[n] == "") n--; if (!d) print src; for (i = 1; i <= n; i++) print o[i] }' "$scan" > "$tmpd/stamped"
+    mkdir -p "$(dirname "$pout")"
+    cp "$tmpd/stamped" "$pout"
+    echo "wrote $(full "$pout")"
+    echo "$src"
     ;;
 
   diff)

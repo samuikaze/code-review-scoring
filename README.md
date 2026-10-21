@@ -148,7 +148,7 @@ skills/
     references/setup.md                   # 設定檢查、平台設定、狀態指令與目錄說明（需要時才載入）
     scripts/review-state.{sh,zsh,ps1}     # init / next / finish / show / cr-plan / prompt / set / config（--help 列出用法）
     scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 configs/plugins.ini、configs/settings.ini（check / wizard / plugins / plugin）
-    scripts/standard.{sh,zsh,ps1}         # 評分標準的 lint / parse / diff / resolve / plan（lint 只在撰寫標準時執行，plan 供步驟 1 規劃評分）
+    scripts/standard.{sh,zsh,ps1}         # 評分標準的 lint / parse / diff / resolve / plan / stamp（lint、stamp 只在維護標準時執行，plan 供步驟 1 規劃評分）
     scripts/lib/standard.{awk,ps1}        # 評分標準的解析器（awk 供 bash、zsh 共用，PowerShell 版規則與訊息相同）
   code-review-scoring-spec-reading/
     SKILL.md
@@ -168,6 +168,11 @@ skills/
     assets/report-template.md             # 分數報告模板（可自行調整）
     assets/labels.tsv                     # 報告中由腳本插入的文字
     references/placeholders.md            # 模板佔位符號說明
+  code-review-scoring-standard/           # 維護評分標準用（不參與評分流程）
+    SKILL.md                              # 檢查、產生、審核三種模式
+    references/scan-format.md             # 掃描規則檔格式與正規表示式限制
+    references/review-checklist.md        # 審核掃描規則的檢查清單與 review.md 格式
+    assets/generator-prompt.md            # 產生掃描規則的 Sub-Agent 指令
 scripts/
   link-skills.{sh,zsh,ps1}                # 依 skills/ 與 configs/plugins.ini 同步各工具讀取 Skill 的目錄
 configs/                                  # 設定檔（只有 *.example.ini 進版控）
@@ -230,6 +235,21 @@ git add --renormalize .
 - 評分流程不執行 lint。標準格式有誤時，評分腳本會停止並提示先執行 lint。
 - 掃描規則檔（TSV）列出可以用正規表示式找出的候選線索，只是提示，不會直接扣分；格式與 `@scope`、`@pr` 記錄見範本與 `tests/prepare/` 的例子。
 - 評分途中不要修改標準：步驟 1 會記錄當下的標準，之後被修改時流程會拒絕繼續（見「依評分標準拆分報告」）。
+
+### 維護評分標準
+
+`code-review-scoring-standard` Skill 只在你提到維護標準時觸發（例如「檢查評分標準」「產生掃描規則」「審核掃描規則」），評分流程不會載入它：
+
+- **檢查模式**：對標準文件與掃描規則檔執行 lint，說明錯誤與警告的修正方式，不修改任何檔案。
+- **產生模式**：依標準文件產生或更新掃描規則檔，不需手寫正規表示式。
+  1. 標準文件先通過 lint。
+  2. 由一個 Sub-Agent 產生草稿 `tmp/scan-rules/<標準>/draft.tsv`，並在 `notes.md` 列出沒有產生規則的檢查項與原因。
+  3. 腳本 lint 草稿（格式、引用的代碼與範圍、正規表示式在 awk 與 .NET 都能編譯）。
+  4. 主 Agent 依固定的檢查清單審核草稿與標準文件是否有出入，結果寫到 `review.md`；有問題就退回 Sub-Agent 修正，最多 3 輪。
+  5. 通過後列出和既有檔案的差異請你確認，確認後才以 `standard stamp` 寫入 `standards.ini` 的 `scan` 指定的位置，並在檔頭記錄來源標準文件的版本與雜湊值。
+- **審核模式**：只對既有的掃描規則檔執行 lint 與審核，結果寫到 `review.md`，不修改任何檔案。
+
+不支援 Sub-Agent 的平台（或 `subagent=false`）由主 Agent 依序完成產生與審核，流程與檔案相同，但獨立性較低。標準文件與 `standards.ini` 一律由你自己修改，AI 只回報問題。
 
 ## 調整配分
 
@@ -420,7 +440,7 @@ CR 外掛設為 `mapped` 時，對應不到評分標準檢查項的意見會歸�
 - `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
 - `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以評分標準的掃描規則檔列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。框架標準的 `applies` 沒有涵蓋的檔案標上 `[common]`，改用通用標準的掃描規則；檔案分類（`@scope`）與 PR 層級的提示（`@pr`，例如主程式有異動卻沒有測試檔）也寫在掃描規則檔中，腳本不含任何框架的判斷。
-- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），挑出要評分的標準與通用標準、輸出檢查項、配分覆寫、適用檔案與掃描規則檔給 `score` 與 `prepare-diff`（`resolve`），以及在步驟 1 依異動檔案決定要產出哪幾份報告、切出各報告的 diff（`plan`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度拼字、代碼重複、面向是否齊全、`standards.ini` 的配分加總與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `plan` 與 `review-state` 的檢查呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時直接停止（結束碼 2 或 3），請先執行 `lint` 修正。
+- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），挑出要評分的標準與通用標準、輸出檢查項、配分覆寫、適用檔案與掃描規則檔給 `score` 與 `prepare-diff`（`resolve`），在步驟 1 依異動檔案決定要產出哪幾份報告、切出各報告的 diff（`plan`），以及把審核通過的掃描規則草稿加上來源檔頭後寫入正式位置（`stamp`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度拼字、代碼重複、面向是否齊全、`standards.ini` 的配分加總與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `plan` 與 `review-state` 的檢查呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時直接停止（結束碼 2 或 3），請先執行 `lint` 修正。
 - `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs/settings.ini` 的配分（評分標準在 `configs/standards.ini` 設定的 `points.*` 優先）計算分數與等級；檢查代碼與可用的嚴重度讀自評分標準文件，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
 

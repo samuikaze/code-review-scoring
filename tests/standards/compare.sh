@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the standard lint / parse / diff / resolve cases with every installed shell (bash, zsh, PowerShell) and compares
+# Runs the standard lint / parse / diff / resolve / stamp cases with every installed shell (bash, zsh, PowerShell) and compares
 # their output with expected.txt. Paths are normalized, so the expected output is the same on every machine.
 #   bash tests/standards/compare.sh            compare
 #   bash tests/standards/compare.sh --update   rewrite expected.txt from the bash output
@@ -30,6 +30,10 @@ cases=(
   "resolve --standards good-standards.ini nope"
   "resolve --standards bad-standards.ini"
   "resolve --standards missing.ini"
+  "stamp --file good-v2.md --scan good-scan.tsv --out stamped.tmp.tsv"
+  "lint --file good-v2.md --scan stamped.tmp.tsv"
+  "stamp --file bad.md --scan good-scan.tsv --out stamped.tmp.tsv"
+  "stamp --file good-v2.md --out stamped.tmp.tsv"
 )
 
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"; root="$(cd ../.. && pwd)"; root_w="$(cd ../.. && { pwd -W 2>/dev/null || pwd; })"
@@ -43,6 +47,7 @@ run_all() {  # $@ = command that runs the script; prints every case with its exi
     "$@" $c 2>&1 | norm
     echo "exit=${PIPESTATUS[0]}"
   done
+  rm -f stamped.tmp.tsv
 }
 
 declare -a shells=("bash:bash $scripts/standard.sh")
