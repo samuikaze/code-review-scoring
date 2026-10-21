@@ -1,6 +1,7 @@
 # Diff preprocessor shared by prepare-diff.sh and prepare-diff.zsh (POSIX awk).
 # Variables: rules=scan rule file  mode=all|summary|scan|view  maxper=max locations listed per check
 #            merge=true|false ([deductions] merge of configs.ini, shown in the summary for writing findings.txt)
+#            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = no code review comments section)
 # Run with LC_ALL=C; strings are handled as bytes.
 
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
@@ -44,6 +45,27 @@ function classify(f,    p) {
     if (p ~ /(^|\/)(target|build|out|dist|\.gradle|node_modules)\// || p ~ /(^|\/)generated(-sources|-test-sources)?\//) excl[f] = "build output / generated"
     else if (p ~ /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$/ || p ~ /\.lock$/) excl[f] = "lock file"
     else if (p ~ /\.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$/) excl[f] = "binary file"
+}
+
+# Lists every code review comment with its id <plugin>#<n> (the n-th C record of the plugin's cr.txt).
+function list_comments(    l, x, a, f, c, n, t, j, out) {
+    if (crdir == "" || (getline l < (crdir "/plan.tsv")) <= 0) return
+    print "## Code review comments (cite the ids in source: of F/U lines or in X lines; see the skill)"
+    out = ""
+    do {
+        if (l == "") continue
+        split(l, a, "\t"); f = crdir "/" a[1] "/cr.txt"; c = 0
+        while ((getline x < f) > 0) {
+            sub(/\r$/, "", x)
+            if (x ~ /^[ \t]*C[ \t]*\|/) {
+                c++; n = split(x, t, "|"); for (j = 1; j <= n; j++) t[j] = trim(t[j])
+                out = out sprintf("- %s#%d [%s] %s %s | %s\n", a[1], c, a[3], t[2], (t[4] == "" ? "-" : t[4]), t[3])
+            } else if (c > 0 && x ~ /^[ \t]*problem:/) out = out "  " trim(x) "\n"
+        }
+        close(f)
+    } while ((getline l < (crdir "/plan.tsv")) > 0)
+    close(crdir "/plan.tsv")
+    printf "%s\n", (out == "" ? "- none\n" : out)
 }
 
 function new_file(p) {
@@ -173,6 +195,7 @@ END {
             else printf "  - %s [%s +%d -%d]%s\n", path[f], status[f], adds[f], dels[f], tagv
         }
         print ""
+        list_comments()
     }
 
     if (mode == "all" || mode == "scan") {

@@ -3,7 +3,8 @@
 Preprocess a PR diff: drop non-reviewable files, number new-file lines, list heuristic candidates.
 
 .DESCRIPTION
-Prints a summary, heuristic candidates (clues only) and a compact diff with new-file line numbers.
+Prints a summary, the code review comments of ROOT/step2 with their ids (with -Root only), heuristic candidates
+(clues only) and a compact diff with new-file line numbers.
 The summary shows the [deductions] merge setting of -Config (default: configs.ini in the project root; missing =
 false), which decides how findings.txt is written. With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
 -InputPath and -Git, ROOT is tmp in the project root. -InputPath - reads the diff from stdin.
@@ -215,6 +216,26 @@ if ($Mode -in 'all', 'summary') {
         else { [void]$sb.Append("  - $($f.Path) [$($f.Status) +$($f.Adds) -$($f.Dels)]$tagv`n") }
     }
     [void]$sb.Append("`n")
+    # Lists every code review comment with its id <plugin>#<n> (the n-th C record of the plugin's cr.txt).
+    if ($Root -and (Test-UserFile (Join-Path $Root 'step2/plan.tsv'))) {
+        [void]$sb.Append("## Code review comments (cite the ids in source: of F/U lines or in X lines; see the skill)`n")
+        $listed = 0
+        foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step2/plan.tsv') | Where-Object { $_ })) {
+            $p = $l -split "`t"; $crFile = Join-Path $Root "step2/$($p[0])/cr.txt"; $n = 0
+            if (-not (Test-UserFile $crFile)) { continue }
+            foreach ($x in (Read-Utf8Lines $crFile)) {
+                $x = $x.TrimEnd("`r")
+                if ($x -match '^\s*C\s*\|') {
+                    $n++; $listed++; $t = @($x -split '\|' | ForEach-Object { $_.Trim() }); while ($t.Count -lt 4) { $t += '' }
+                    $rule = if ($t[3]) { $t[3] } else { '-' }
+                    [void]$sb.Append("- $($p[0])#$n [$($p[2])] $($t[1]) $rule | $($t[2])`n")
+                }
+                elseif ($n -gt 0 -and $x -match '^\s*problem:') { [void]$sb.Append("  $($x.Trim())`n") }
+            }
+        }
+        if ($listed -eq 0) { [void]$sb.Append("- none`n") }
+        [void]$sb.Append("`n")
+    }
 }
 if ($Mode -in 'all', 'scan') {
     [void]$sb.Append("## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)`n")

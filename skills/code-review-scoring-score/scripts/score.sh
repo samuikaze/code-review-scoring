@@ -8,7 +8,8 @@ Usage: score.sh [--root DIR] [options]
        score.sh --findings FILE [--diff FILE | --git RANGE [--repo DIR]] [--out-dir DIR]
 
       --root DIR       review root (default: tmp in the project root). Uses ROOT/step3/findings.txt and ROOT/step1/pr.diff,
-                       refuses unanswered questions in step1/step3, writes ROOT/step4/score.tsv and score.json
+                       refuses unanswered questions in step1/step3, checks that every comment of a mapped code review
+                       plugin in ROOT/step2 is deducted or rejected, writes ROOT/step4/score.tsv and score.json
   -f, --findings FILE  findings file (standalone use without the root layout)
   -d, --diff FILE      diff used to verify that every location is an added line
   -g, --git RANGE      run git diff RANGE as the verification diff
@@ -26,7 +27,7 @@ USAGE
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Project root (two levels above the physical skill folder) holds tmp/, reports/ and configs.ini.
 project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
-root="" findings="" diff="" git_range="" repo="." out_dir="" config="$project_root/configs.ini"
+root="" findings="" diff="" git_range="" repo="." out_dir="" config="$project_root/configs.ini" crdir=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -44,6 +45,7 @@ done
 if [[ -n "$root" ]]; then
   [[ -d "$root" ]] || { echo "error: review root not found: $root" >&2; exit 2; }
   [[ -z "$findings" ]] && findings="$root/step3/findings.txt"
+  crdir="$root/step2"
   [[ -z "$diff" && -z "$git_range" && -f "$root/step1/pr.diff" ]] && diff="$root/step1/pr.diff"
   [[ -z "$out_dir" ]] && { mkdir -p "$root/step4"; out_dir="$root/step4"; }
   # Scoring must wait until every input is resolved and every question is answered.
@@ -85,7 +87,7 @@ else
 fi
 
 rm -f "$out_dir/score.tsv" "$out_dir/score.json"
-LC_ALL=C awk -v rules="$script_dir/rules.tsv" -v idxfile="$idx" -v config="$config" \
+LC_ALL=C awk -v rules="$script_dir/rules.tsv" -v idxfile="$idx" -v config="$config" -v crdir="$crdir" \
   -v tsvout="$out_dir/score.tsv" -v jsonout="$out_dir/score.json" \
   -f "$script_dir/lib/score.awk" "$findings"
 echo "wrote ${out_dir}/score.tsv and ${out_dir}/score.json"

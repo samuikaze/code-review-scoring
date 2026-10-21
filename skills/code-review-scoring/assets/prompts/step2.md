@@ -6,7 +6,7 @@ You are the subagent that runs the code review plugin `{{PLUGIN}}` in step 2 of 
 - Repository: `{{REPO}}`, diff range: `{{RANGE}}`, PR title: {{TITLE}}
 - What to review: `{{ROOT}}/step2/{{PLUGIN}}/diff.patch` holds only the changes in this plugin's scope; the file list is `{{ROOT}}/step2/{{PLUGIN}}/files.txt`. Read this patch instead of the full PR diff. Open a full source file only when the patch lacks the context you need.
 - Purpose, requirements and user documents: `{{ROOT}}/step1/spec-context.md`
-- Mode: `{{MODE}}` (mapped: step 3 turns your comments that match the scoring checklist into deductions; advisory: your comments appear in the report but never change the score)
+- Mode: `{{MODE}}` (mapped: step 3 deducts every comment it confirms in the code; advisory: your comments appear in the report but never change the score)
 - Outputs: `{{ROOT}}/step2/{{PLUGIN}}/raw/` (the plugin's own output) and `{{ROOT}}/step2/{{PLUGIN}}/cr.txt` (normalized result)
 
 Tasks:

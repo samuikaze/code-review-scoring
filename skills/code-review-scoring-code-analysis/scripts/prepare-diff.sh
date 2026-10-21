@@ -18,7 +18,8 @@ Usage: prepare-diff.sh [--root DIR | --input FILE | --git RANGE] [options]
                        (default: configs.ini in the project root; missing = false)
   -h, --help           show this help
 
-Output: summary, heuristic candidates (clues only), compact diff with new-file line numbers.
+Output: summary, code review comments of ROOT/step2 with their ids (root mode only), heuristic candidates
+(clues only), compact diff with new-file line numbers.
 Exit codes: 0 ok, 2 bad arguments or input.
 USAGE
 }
@@ -26,7 +27,7 @@ USAGE
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Project root (two levels above the physical skill folder) holds tmp/ and reports/.
 project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
-config="$project_root/configs.ini" root="" input="" git_range="" repo="." mode="all" max=15 out=""
+config="$project_root/configs.ini" crdir="" root="" input="" git_range="" repo="." mode="all" max=15 out=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -50,6 +51,7 @@ sources=0
 [[ $sources -eq 0 ]] && root="$project_root/tmp"
 if [[ -n "$root" ]]; then
   input="$root/step1/pr.diff"
+  crdir="$root/step2"
   [[ -z "$out" ]] && { mkdir -p "$root/step3"; out="$root/step3/prepared.txt"; }
 fi
 
@@ -76,7 +78,7 @@ else
   cat -- "$input" > "$tmp"
 fi
 
-run() { LC_ALL=C awk -v rules="$script_dir/scan-rules.tsv" -v mode="$mode" -v maxper="$max" -v merge="$merge" -f "$script_dir/lib/prepare.awk" "$tmp"; }
+run() { LC_ALL=C awk -v rules="$script_dir/scan-rules.tsv" -v mode="$mode" -v maxper="$max" -v merge="$merge" -v crdir="$crdir" -f "$script_dir/lib/prepare.awk" "$tmp"; }
 if [[ -n "$out" ]]; then
   run > "$out"
   echo "wrote ${out} ($(wc -l < "$out" | tr -d ' ') lines)"

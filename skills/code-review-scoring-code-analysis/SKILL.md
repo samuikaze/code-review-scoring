@@ -19,7 +19,7 @@ Find the problems in the PR and record them as findings. Do not calculate scores
 - **Workflow mode:** you were dispatched by `code-review-scoring` with a prompt that contains a status command. Follow that prompt's status protocol. You cannot talk to the user: questions go to `tmp/step3/questions.md`, replies arrive in `tmp/step3/answers.md`.
 - **Standalone mode:** the user invoked this skill directly. First ask whether they want the full workflow (then switch to `code-review-scoring`) or only this step. For this step only: ask the user directly, write no status files, and when done suggest `code-review-scoring-score`. Without step 1 output, use `prepare-diff --git <range>` or `--input <file>` and collect the PR description and documents from the user yourself. Without step 2 output, skip "Using code review results".
 
-Apply every rule literally. When no rule covers a situation, do not deduct; explain it in an `R` line.
+Apply every rule literally. When no check covers a problem, record it with check id `-` (see the severity rules).
 
 ## Script
 
@@ -47,11 +47,15 @@ It writes `tmp/step3/prepared.txt`: a summary, the candidates, and the compact d
 
 Step 2 ran the code review plugins listed in `tmp/step2/plan.tsv` (columns: plugin, path, mode, file count). Each plugin's comments are in `tmp/step2/<plugin>/cr.txt` as `C|severity|locations|rule` with `problem:` and `suggestion:` lines. They are leads that save you from searching the whole diff again, not verdicts.
 
-- **`mapped` plugins:** for every comment, open the cited lines and decide whether it is a real problem that matches a check id of the checklist.
-  - It matches and you can confirm it in the code: record it under that check id as the deduction rule below says, with the default severity and the checklist's rules, plus a line `source: <plugin> <rule id>`. The plugin's own severity never decides the deduction. The report shows the check id next to the comment, so write the exact plugin name and rule id from `cr.txt`.
-  - It confirms a problem that is already recorded: do not record it again; add any new location as the deduction rule allows and append the plugin to that line's `source:`.
-  - It does not match any check, it is outside the scored lines, or you cannot confirm it: do not record it. It still appears in the report's code review section.
-- **`advisory` plugins:** read their comments for context only; never turn them into findings.
+`prepared.txt` lists every comment with its id `<plugin>#<n>` under **Code review comments**. Every problem a `mapped` plugin found is deducted; the report shows each comment with the check ids it was deducted under.
+
+- **`mapped` plugins:** for every comment, open the cited lines and decide whether it is a real problem in the scored lines. Each comment must end in exactly one of these (the scoring step refuses findings that leave one out):
+  - It is real and matches a check: record it under that check id as the deduction rule below says, with the default severity and the checklist's rules (the plugin's severity does not decide it), plus `source: <comment id>`.
+  - It is real but no check covers it: record `F|-|<the plugin's severity>|<locations>` with `source: <comment id>`. Use location `-` for a problem of the whole PR.
+  - It is real and its root cause is suspected upstream: record a `U` line with `source: <comment id>`.
+  - It confirms a problem that is already recorded: add the comment id to that line's `source:` (several ids separated by `、`), and add any new location as the deduction rule allows.
+  - It is not a real problem (wrong, outside the scored lines, or not confirmable in the code): write `X|<comment id>|<reason>`. The reason appears in the report.
+- **`advisory` plugins:** read their comments for context only; never cite them in `source:` or `X` lines.
 - Do not copy comments into `N` lines; the report already lists every code review comment.
 
 ## Scope
@@ -68,7 +72,8 @@ Step 2 ran the code review plugins listed in `tmp/step2/plan.tsv` (columns: plug
   - `merged (merge=true)`: one deduction per check id. If the same id occurs in several places, record one `F` line with all locations.
 - **Use the default severity.** Change it only when the condition written in the check is met, and write that condition in column 5. Never raise or lower it on your own judgment, and never adopt a code review plugin's severity.
 - **Ask before downgrading.** When a check needs information the diff does not show, ask (procedure step 7). Only when the user says it cannot be provided, use the lower severity and write the assumption.
-- **Evidence required.** Every deduction must point to a file and line in the diff. "Might be a problem" that the diff cannot confirm is a `Nit` (no deduction).
+- **Every problem is deducted.** `Nit` is deducted too. A problem that no check covers is recorded with check id `-` and the severity that matches its meaning; never move a problem to `N` or `R` lines to avoid a deduction.
+- **Evidence required.** Every deduction must point to a file and line in the diff (only check id `-` may use `-` for a problem of the whole PR). "Might be a problem" that the diff cannot confirm is a `Nit`.
 - **No double counting with static analysis.** If a static analysis report was provided, issues it already lists are not deducted. Without a report, pure formatting (indentation, whitespace, import order) is not deducted.
 - **Third-party workaround exemption.** Code that works around a third-party core-system problem is exempt from F and G checks when it has a comment explaining why **and** the vendor ticket number. Missing either one: deduct as usual.
 - Severity meaning, for judging conditions: Critical = data corruption, security incident or outage; Major = fails in specific situations or clearly lowers quality; Minor = works, but there is a better way; Nit = style preference.
@@ -87,10 +92,10 @@ Step 2 ran the code review plugins listed in `tmp/step2/plan.tsv` (columns: plug
 ## Self-check before handing off
 
 - [ ] Every deduction points to a real added line in the diff and has `problem` and `suggestion`.
-- [ ] Each check id appears in at most one `F` line.
+- [ ] `F` lines follow the deduction rule of the `- deductions:` line.
 - [ ] Every non-default severity meets the condition written in the check, and column 5 says so.
-- [ ] Every `F` line that came from a code review comment has a `source:` line, and every comment of a `mapped` plugin was either confirmed or deliberately left out.
-- [ ] Problems judged as suspected upstream are `U` lines, not `F` lines.
+- [ ] Every comment of a `mapped` plugin in `prepared.txt` is cited in `source:` of an `F` or `U` line, or rejected in an `X` line with a reason, and none is both.
+- [ ] Problems judged as suspected upstream are `U` lines with a severity, not `F` lines.
 - [ ] All questions were asked and answered.
 - [ ] Highlights (`H`) only describe strengths actually visible in the diff. If there are none, write none.
 - [ ] Nothing evaluates the author as a person.

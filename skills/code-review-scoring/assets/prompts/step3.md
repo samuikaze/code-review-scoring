@@ -8,7 +8,7 @@ You are the subagent for step 3 of a code review scoring workflow. Load the `cod
 
 Tasks:
 1. Run `prepare-diff --root "{{ROOT}}"`.
-2. Use the code review results as described in the skill's "Using code review results" section: confirm each comment of a `mapped` plugin against the code and the checklist, and record the confirmed ones as findings with a `source:` line. Comments of `advisory` plugins never become findings.
+2. Use the code review results as described in the skill's "Using code review results" section: confirm each comment of a `mapped` plugin against the code and the checklist; every confirmed comment is deducted (cite its id `<plugin>#<n>` from `prepared.txt` in `source:`), and every rejected one gets an `X` line with the reason. Comments of `advisory` plugins never become findings.
 3. Review every remaining check of the skill's checklist. Do not re-derive problems the code review already found; confirm them instead.
 4. Questions for the user (row counts, cross-timezone business, springdoc, missing documents for a suspected upstream factor, …) go to `questions.md` after the whole diff has been reviewed; then report pending.
 5. Write `findings.txt` in the skill's format and run the skill's self-check before reporting success.

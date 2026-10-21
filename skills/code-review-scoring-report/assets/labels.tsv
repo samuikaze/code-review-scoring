@@ -5,8 +5,6 @@ capped_note	（有 Critical 扣分項，等級上限為 B）
 sep.list	、
 sep.bracket	｜
 sep.colon	：
-paren.open	（
-paren.close	）
 dim.A	正確性
 dim.B	安全性
 dim.C	測試品質
@@ -21,6 +19,10 @@ field.source	來源
 field.content	內容
 field.code	相關程式碼
 field.ticket	廠商問題單號
+check.none	其他
+loc.pr_wide	整個 PR
+row.other	其他（未對應檢查項）
+row.upstream	上游因素
 upstream.spec-gap	疑似規格缺漏
 upstream.third-party	疑似第三方問題
 upstream.ownership-change	疑似主責單位變更
@@ -47,7 +49,11 @@ cr.col.summary	結論
 cr.summary	結論
 cr.highlights	亮點
 cr.tag_sep	|
-cr.unscored	未扣分
+cr.upstream	上游因素
+cr.rejected	不成立
+cr.reason	不成立原因
+cr.advisory	僅供參考
+cr.unjudged	未判定
 cr.code	程式碼位置
 cr.spec	規格書位置
 cr.no_comments	無 CR 意見
