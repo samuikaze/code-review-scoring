@@ -1,5 +1,5 @@
 # Builds a line index from a unified diff so score can verify finding locations (POSIX awk).
-# Output: L<TAB>path<TAB>new line number<TAB>"+" (added) or " " (context);  T<TAB>test file path
+# Output: L<TAB>path<TAB>new line number<TAB>"+" (added) or " " (context)
 { sub(/\r$/, ""); line = $0 }
 inhunk && (oleft > 0 || nleft > 0) {
     tag = (line == "") ? " " : substr(line, 1, 1)

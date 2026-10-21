@@ -1,0 +1,10 @@
+# With a diff: C1 Critical is no longer refused when the diff has test files; locations must be in the diff
+F|C1|Critical|a.java:2|PR 沒有涵蓋新邏輯的測試
+problem: x
+suggestion: y
+F|A1|Major|a.java:9
+problem: x
+suggestion: y
+F|A3|Major|b.java:1
+problem: x
+suggestion: y

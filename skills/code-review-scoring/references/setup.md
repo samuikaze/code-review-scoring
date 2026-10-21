@@ -10,11 +10,14 @@ It covers, in the project root:
 
 - `configs/plugins.ini`: the code review plugins (it may list none);
 - `configs/settings.ini`, `[workflow]` section: `subagent=true` (each step runs in its own subagent) or `subagent=false` (you run every step yourself);
-- `configs/settings.ini`, `[<platform>]` section: the subagent model and reasoning, needed only when `subagent=true` and `--platform` is given.
+- `configs/settings.ini`, `[<platform>]` section: the subagent model and reasoning, needed only when `subagent=true` and `--platform` is given;
+- `configs/standards.ini`: the scoring standards; step 4 cannot score without at least one registered standard.
 
 When exit 7 comes with `legacy:` lines, the old `configs.ini` / `plugins.ini` is still in the project root (these files moved into `configs/`). Show the user the `legacy:` and `note:` lines and the move commands that `check` printed, ask them to move the files themselves, and run `check` again afterwards. Never move, merge or delete them yourself.
 
-Otherwise exit 7 means something is missing. Tell the user what is missing and ask which way to create it (one question):
+When `configs/standards.ini` is reported as `missing` or `no standard registered`, tell the user to copy `configs/standards.example.ini` to `configs/standards.ini` and register their standard documents (written from `docs/templates/scoring-rule-template.md`), then run `standard lint` to check them. The wizard does not cover the standards, and you never write `standards.ini` or a standard document yourself. Run `check` again afterwards.
+
+Otherwise exit 7 means a setting is missing. Tell the user what is missing and ask which way to create it (one question):
 
 - **Wizard in a terminal:** the user runs the `wizard` command that `check` printed; it needs an interactive terminal, so you cannot run it. In Claude Code the user can type `! <command>` to run it in this session.
 - **Answer your questions:** ask in one message only what is missing:

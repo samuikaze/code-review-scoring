@@ -11,6 +11,7 @@ Usage: standard.zsh lint [--standards FILE] [--settings FILE] [NAME ...]
        standard.zsh lint --file DOC.md [--scan RULES.tsv] [--common]
        standard.zsh parse --file DOC.md [--common]
        standard.zsh diff OLD.md NEW.md
+       standard.zsh resolve [--standards FILE] [--settings FILE] [NAME]
 
 Commands:
   lint     check configs/standards.ini and the documents and scan rule files it lists (only the NAMEs given),
@@ -19,12 +20,17 @@ Commands:
   parse    print the parsed document as TAB-separated records (name, version, dim, check, confirm);
            stops at the first format error (exit 3)
   diff     list the dimensions, check items and confirmations that differ between two versions of a document
+  resolve  for score: the standard NAME (default: the only framework standard, or the common one when there is
+           none) and the common standard, as TAB-separated records: "standard" / "common" (name, version,
+           sha256, path), "points" (the overrides of NAME) and the "check" records of each document.
+           Stops when standards.ini or a document has a format error (exit 3)
 
 Options: --standards FILE  (default: configs/standards.ini in the project root)
          --settings FILE   (default: configs/settings.ini in the project root; its [points] are checked with the overrides)
          --common          the document is the common standard (its check codes start with CM-)
 
-Exit codes: 0 ok (warnings allowed), 1 lint found errors, 2 bad arguments, 3 the document has a format error.
+Exit codes: 0 ok (warnings allowed), 1 lint found errors, 2 bad arguments or unknown NAME, 3 standards.ini or the document
+            has a format error or is missing.
 USAGE
 }
 
@@ -176,6 +182,36 @@ case "$cmd" in
       i=$((i + 1))
     done
     run_awk -v mode=diff "$tmpd/d0" "$tmpd/d1"
+    ;;
+
+  resolve)
+    [[ ${#names[@]} -le 1 ]] || { echo "error: resolve takes at most one NAME" >&2; exit 2; }
+    standards="$(full "$standards")"
+    [[ -f "$standards" ]] || { echo "error: $standards: file not found; copy configs/standards.example.ini to configs/standards.ini" >&2; exit 3; }
+    base="$(dirname "$standards")"
+    run_awk -v mode=standards -v settings="$settings" "$standards" > "$tmpd/ini"
+    e="$(awk -F'\t' '$1 == "!error" { print ($2 != "" ? ":" $2 : "") ": " $3; exit }' "$tmpd/ini")"
+    [[ -z "$e" ]] || { echo "error: $standards$e; run standard lint first" >&2; exit 3; }
+    want="${names[1]:-}"
+    if [[ -z "$want" ]]; then
+      # Without a NAME: the only framework standard, or the common one when there is no framework standard.
+      want="$(awk -F'\t' '$1 == "std" && $6 != "common" { n++; l = l (n > 1 ? ", " : "") $2; w = $2 }
+        $1 == "std" && $6 == "common" { c = $2 }
+        END { if (n > 1) print "!several standards are registered (" l "); pick one by name"; else if (n == 1) print w; else if (c != "") print c; else print "!no standard is registered" }' "$tmpd/ini")"
+      [[ "$want" != !* ]] || { echo "error: $standards: ${want#!}" >&2; exit 2; }
+    fi
+    awk -F'\t' -v n="$want" '$1 == "std" && $2 == n { f = 1 } END { exit !f }' "$tmpd/ini" || { echo "error: $standards: [$want] is not registered" >&2; exit 2; }
+    # The standard itself first, then the common standard (when it is another one); each with its check items.
+    while IFS=$'\t' read -r -u 3 k1 name k2 dpath k3 role; do
+      dpath="$(resolve "$dpath")"
+      [[ -f "$dpath" ]] || { echo "error: $dpath: file not found; run standard lint first" >&2; exit 3; }
+      run_awk -v mode=doc -v role="${role#-}" "$dpath" > "$tmpd/doc"
+      e="$(awk -F'\t' '$1 == "!error" { print ($2 != "" ? ":" $2 : "") ": " $3; exit }' "$tmpd/doc")"
+      [[ -z "$e" ]] || { echo "error: $dpath$e; run standard lint first" >&2; exit 3; }
+      printf '%s\t%s\t%s\tsha256:%s\t%s\n' "$([[ "$name" == "$want" ]] && echo standard || echo common)" "$name" "$(field version "$tmpd/doc")" "$(sha "$dpath")" "$dpath"
+      if [[ "$name" == "$want" ]]; then awk -F'\t' -v n="$name" '$1 == "points" && $2 == n { print "points\t" $3 "\t" $4 }' "$tmpd/ini"; fi
+      awk -F'\t' '$1 == "check"' "$tmpd/doc"
+    done 3< <(awk -F'\t' -v n="$want" '$1 == "std" && $2 == n { print } $1 == "std" && $6 == "common" && $2 != n { c = $0 } END { if (c != "") print c }' "$tmpd/ini")
     ;;
 
   *) echo "error: unknown command $cmd (see --help)" >&2; exit 2 ;;

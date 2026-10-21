@@ -17,13 +17,19 @@ Uses the same GNU-style arguments as standard.sh:
       stops at the first format error (exit 3)
   standard.ps1 diff OLD.md NEW.md
       list the dimensions, check items and confirmations that differ between two versions of a document
+  standard.ps1 resolve [--standards FILE] [--settings FILE] [NAME]
+      for score: the standard NAME (default: the only framework standard, or the common one when there is
+      none) and the common standard, as TAB-separated records: "standard" / "common" (name, version,
+      sha256, path), "points" (the overrides of NAME) and the "check" records of each document.
+      Stops when standards.ini or a document has a format error (exit 3)
 
 Options: --standards FILE  (default: configs/standards.ini in the project root)
          --settings FILE   (default: configs/settings.ini in the project root; its [points] are checked with the overrides)
          --common          the document is the common standard (its check codes start with CM-)
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
-Exit codes: 0 ok (warnings allowed), 1 lint found errors, 2 bad arguments, 3 the document has a format error.
+Exit codes: 0 ok (warnings allowed), 1 lint found errors, 2 bad arguments or unknown NAME, 3 standards.ini or the document
+has a format error or is missing.
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -194,6 +200,60 @@ switch ($cmd) {
         $old = Get-ParsedDoc $names[0] $opt.role
         $new = Get-ParsedDoc $names[1] $opt.role
         foreach ($l in (Invoke-StdDiff $old $new)) { Write-Line $l }
+    }
+    'resolve' {
+        if ($names.Count -gt 1) { Exit-WithError 'resolve takes at most one NAME' }
+        $standards = Get-Full $opt.standards
+        if (-not [IO.File]::Exists($standards)) {
+            [Console]::Error.WriteLine("error: ${standards}: file not found; copy configs/standards.example.ini to configs/standards.ini"); exit 3
+        }
+        $base = Split-Path -Parent $standards
+        $ini = Invoke-StdIni $standards (Resolve-UserPath $opt.settings)
+        foreach ($l in $ini) {
+            $a = $l.Split("`t")
+            if ($a[0] -ceq '!error') {
+                $at = if ($a[1] -ne '') { ":$($a[1])" } else { '' }
+                [Console]::Error.WriteLine("error: $standards${at}: $($a[2]); run standard lint first"); exit 3
+            }
+        }
+        $records = New-Object System.Collections.Generic.List[object]
+        foreach ($l in $ini) { if ($l.StartsWith("std`t", [StringComparison]::Ordinal)) { $records.Add($l.Split("`t")) } }
+        $want = if ($names.Count -eq 1) { [string]$names[0] } else { '' }
+        $common = $null; $frameworks = New-Object System.Collections.Generic.List[string]
+        foreach ($r in $records) { if ($r[5] -ceq 'common') { $common = $r } else { $frameworks.Add($r[1]) } }
+        if (-not $want) {
+            # Without a NAME: the only framework standard, or the common one when there is no framework standard.
+            if ($frameworks.Count -gt 1) { Exit-WithError "${standards}: several standards are registered ($($frameworks -join ', ')); pick one by name" }
+            elseif ($frameworks.Count -eq 1) { $want = $frameworks[0] }
+            elseif ($common) { $want = $common[1] }
+            else { Exit-WithError "${standards}: no standard is registered" }
+        }
+        # The standard itself first, then the common standard (when it is another one); each with its check items.
+        $pick = New-Object System.Collections.Generic.List[object]
+        foreach ($r in $records) { if ($r[1] -ceq $want) { $pick.Add($r) } }
+        if ($pick.Count -eq 0) { Exit-WithError "${standards}: [$want] is not registered" }
+        if ($common -and $common[1] -cne $want) { $pick.Add($common) }
+        $sb = New-Object System.Text.StringBuilder
+        foreach ($r in $pick) {
+            $dpath = Resolve-StdPath $r[3] $base
+            if (-not [IO.File]::Exists($dpath)) { [Console]::Error.WriteLine("error: ${dpath}: file not found; run standard lint first"); exit 3 }
+            $out = Invoke-StdDoc $dpath $(if ($r[5] -ceq '-') { '' } else { $r[5] })
+            foreach ($l in $out) {
+                $a = $l.Split("`t")
+                if ($a[0] -ceq '!error') {
+                    $at = if ($a[1] -ne '') { ":$($a[1])" } else { '' }
+                    [Console]::Error.WriteLine("error: $dpath${at}: $($a[2]); run standard lint first"); exit 3
+                }
+            }
+            $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $dpath).Hash.ToLowerInvariant()
+            $kind = if ($r[1] -ceq $want) { 'standard' } else { 'common' }
+            [void]$sb.Append("$kind`t$($r[1])`t$(Get-Field $out 'version')`tsha256:$h`t$dpath`n")
+            if ($r[1] -ceq $want) {
+                foreach ($l in $ini) { $a = $l.Split("`t"); if ($a[0] -ceq 'points' -and $a[1] -ceq $want) { [void]$sb.Append("points`t$($a[2])`t$($a[3])`n") } }
+            }
+            foreach ($l in $out) { if ($l.StartsWith("check`t", [StringComparison]::Ordinal)) { [void]$sb.Append("$l`n") } }
+        }
+        [Console]::Out.Write($sb.ToString())
     }
     default { Exit-WithError "unknown command $cmd (see Get-Help)" }
 }

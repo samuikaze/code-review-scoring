@@ -207,3 +207,25 @@ exit=3
 ### diff good-v1.md
 error: diff needs OLD.md NEW.md
 exit=2
+### resolve --standards good-standards.ini
+standard	springboot-3	v0.1	sha256:0aed7bc76d20fcc7cd89c7114fb366d09eb951b071f8e5f22750c3baddb41481	good-v1.md
+points	C	20
+points	F	5
+check	A1	Minor	-	-	正常	22
+check	C1	Major	Critical	沒有測試時	測試	30
+common	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	good-common.md
+check	CM-A1	Minor	-	-	正常	22
+exit=0
+### resolve --standards good-standards.ini common
+standard	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	good-common.md
+check	CM-A1	Minor	-	-	正常	22
+exit=0
+### resolve --standards good-standards.ini nope
+error: good-standards.ini: [nope] is not registered
+exit=2
+### resolve --standards bad-standards.ini
+error: bad-standards.ini:2: key outside a [section]; run standard lint first
+exit=3
+### resolve --standards missing.ini
+error: missing.ini: file not found; copy configs/standards.example.ini to configs/standards.ini
+exit=3

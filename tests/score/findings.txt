@@ -1,0 +1,42 @@
+# Regression fixture for score: every dimension, adjusted severities, Nit, records without a check id, upstream, rejected and skipped
+F|A1|Major|src/main/java/com/ex/order/OrderService.java:88
+problem: 取消訂單時沒有處理已出貨狀態。
+suggestion: 取消前檢查訂單狀態。
+F|A2|Critical|src/main/java/com/ex/order/OrderService.java:90
+problem: 金額計算錯誤。
+suggestion: 修正計算。
+F|A7|Major|src/main/java/com/ex/order/OrderService.java:12|影響對外 API
+problem: x
+suggestion: y
+F|B4|Nit|src/main/java/com/ex/order/OrderController.java:5
+problem: x
+suggestion: y
+F|C1|Critical|src/main/java/com/ex/order/OrderService.java:30|PR 完全沒有測試
+problem: x
+suggestion: y
+F|C4|Minor|src/test/java/com/ex/order/OrderServiceTest.java:10
+problem: x
+suggestion: y
+F|D2|Major|src/main/java/com/ex/order/OrderService.java:40
+problem: x
+suggestion: y
+F|E2|Major|src/main/java/com/ex/order/OrderService.java:26|PR 描述說明 orders 為持續成長的交易資料
+problem: findAll() 一次載入整張 orders 資料表。
+suggestion: 改用 Pageable 分頁查詢。
+F|F3|Minor|src/main/java/com/ex/order/OrderService.java:42
+problem: x
+suggestion: y
+F|F3|Minor|src/main/java/com/ex/refund/RefundService.java:17
+problem: x
+suggestion: y
+F|G6|Major|src/main/java/com/ex/order/OrderService.java:50
+problem: x
+suggestion: y
+F|-|Minor|-
+problem: PR 沒有附上 API 異動說明。
+suggestion: 在 PR 描述補上異動的端點與欄位。
+U|spec-gap|missing|high|Major|退款 SD 規格書 v1.2 §4.2
+content: 規格未定義部分退款情境。
+X|backend-code-review#2|不在本次異動範圍內。
+S|B9|未提供相依套件弱點掃描結果
+H|狀態轉換集中在 OrderStateMachine。

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the standard lint / parse / diff cases with every installed shell (bash, zsh, PowerShell) and compares
+# Runs the standard lint / parse / diff / resolve cases with every installed shell (bash, zsh, PowerShell) and compares
 # their output with expected.txt. Paths are normalized, so the expected output is the same on every machine.
 #   bash tests/standards/compare.sh            compare
 #   bash tests/standards/compare.sh --update   rewrite expected.txt from the bash output
@@ -25,6 +25,11 @@ cases=(
   "diff good-v1.md good-v1.md"
   "diff good-v1.md bad.md"
   "diff good-v1.md"
+  "resolve --standards good-standards.ini"
+  "resolve --standards good-standards.ini common"
+  "resolve --standards good-standards.ini nope"
+  "resolve --standards bad-standards.ini"
+  "resolve --standards missing.ini"
 )
 
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"; root="$(cd ../.. && pwd)"; root_w="$(cd ../.. && { pwd -W 2>/dev/null || pwd; })"

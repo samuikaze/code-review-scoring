@@ -1,6 +1,7 @@
 ﻿<#
 .SYNOPSIS
-Setup check for the code review scoring workflow: configs/plugins.ini and configs/settings.ini in the project root.
+Setup check for the code review scoring workflow: configs/plugins.ini, configs/settings.ini and configs/standards.ini
+in the project root.
 
 .DESCRIPTION
 "check" tells the agent what is missing; the missing files are created either by the user with the
@@ -10,7 +11,8 @@ Uses the same GNU-style arguments as setup.sh:
   setup.ps1 check [--platform NAME]
       report whether configs/plugins.ini exists, whether configs/settings.ini sets subagent=true|false
       and, when it is true and --platform is given, whether it has a [NAME] section (give --platform only
-      when the platform has a subagent tool). Prints the execution style. Exit 7 when something is missing,
+      when the platform has a subagent tool), and whether configs/standards.ini registers a scoring standard.
+      Prints the execution style. Exit 7 when something is missing,
       or when the old configs.ini / plugins.ini is still in the project root (all commands stop then)
   setup.ps1 wizard [--platform NAME]
       create what is missing by asking the user step by step; needs an interactive console,
@@ -23,6 +25,7 @@ Uses the same GNU-style arguments as setup.sh:
 
 Options: --plugins FILE (default: configs/plugins.ini in the project root)
          --config FILE  (default: configs/settings.ini in the project root)
+         --standards FILE (default: configs/standards.ini in the project root; check only)
 Settings in configs/settings.ini are saved with: review-state config --subagent true|false
                                    and review-state config --platform NAME --model TEXT --reasoning TEXT
 After the plugins change, run scripts/link-skills in the project root.
@@ -46,11 +49,12 @@ $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
 $opt = @{ plugins = (Join-Path $projectRoot 'configs/plugins.ini'); config = (Join-Path $projectRoot 'configs/settings.ini')
+    standards = (Join-Path $projectRoot 'configs/standards.ini')
     platform = ''; name = ''; path = ''; applies = ''; mode = 'mapped'; none = $false }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -in '--plugins', '--config', '--platform', '--name', '--path', '--applies', '--mode') {
+    if ($a -in '--plugins', '--config', '--standards', '--platform', '--name', '--path', '--applies', '--mode') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]; $i += 2
     }
@@ -211,12 +215,24 @@ switch ($cmd) {
             if (Test-Platform) { [Console]::WriteLine("configs/settings.ini [$($opt.platform)]: ok $configFile") }
             else { [Console]::WriteLine("configs/settings.ini [$($opt.platform)]: missing $configFile"); $missing = $true }
         }
+        # Scoring needs at least one standard; the user registers them (the wizard does not create standards.ini).
+        $standardsFile = Resolve-UserPath $opt.standards
+        $stds = @()
+        if ([IO.File]::Exists($standardsFile)) { $stds = @(Read-Utf8Lines $standardsFile | Where-Object { $_ -match '^[ \t]*\[([^\]]*)\]' } | ForEach-Object { $Matches[1] }) }
+        if ($stds.Count -gt 0) { [Console]::WriteLine("configs/standards.ini: ok ($($stds.Count) standard(s): $($stds -join ', ')) $standardsFile") }
+        elseif ([IO.File]::Exists($standardsFile)) { [Console]::WriteLine("configs/standards.ini: no standard registered $standardsFile") }
+        else { [Console]::WriteLine("configs/standards.ini: missing $standardsFile") }
+        if ($stds.Count -eq 0) {
+            [Console]::WriteLine('next: ask the user to register their scoring standards: copy configs/standards.example.ini to configs/standards.ini')
+            [Console]::WriteLine('      and add the standard documents (template: docs/templates/scoring-rule-template.md); never create them yourself')
+        }
         if ($missing) {
             $p = if ($opt.platform) { " --platform $($opt.platform)" } else { '' }
             [Console]::WriteLine('next: ask the user whether to create the missing settings with the wizard in a terminal')
             [Console]::WriteLine("      ($selfCmd wizard$p) or by answering your questions")
             exit 7
         }
+        if ($stds.Count -eq 0) { exit 7 }
         if ($sub -eq 'true' -and $opt.platform) { [Console]::WriteLine("execution: subagent (each step runs in its own subagent with the [$($opt.platform)] settings)") }
         elseif ($sub -eq 'true') { [Console]::WriteLine('execution: inline (subagent=true, but no --platform was given, so the main agent runs every step)') }
         else { [Console]::WriteLine('execution: inline (subagent=false, so the main agent runs every step)') }

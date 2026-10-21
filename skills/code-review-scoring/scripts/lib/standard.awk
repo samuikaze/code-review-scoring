@@ -368,6 +368,7 @@ function std_end(   i, j, s, n, p, a, x, sum, ncommon) {
         }
         # Empty values are written as - so that the shells can read the TAB-separated fields.
         print "std\t" s "\t" stdl[s] "\t" dash(val[s, "path"]) "\t" dash(val[s, "scan"]) "\t" dash(val[s, "role"])
+        for (j = 1; j <= 7; j++) if ((s SUBSEP LET[j]) in pts) print "points\t" s "\t" LET[j] "\t" pts[s, LET[j]]
     }
     if (!ncommon) diag("warn", "", "no common standard (role=\"common\"); files that no framework standard covers will not be scored")
 }

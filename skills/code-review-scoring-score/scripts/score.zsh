@@ -20,16 +20,22 @@ Usage: score.zsh [--root DIR] [options]
                        before reporting success
       --config FILE    scoring settings: [points], [deductions] (incl. merge) and [grades] (default: configs/settings.ini in the
                        project root; settings that are not given keep the defaults)
+      --standard NAME  the scoring standard (a section of standards.ini); default: the only framework standard, or the
+                       common standard when no framework standard is registered. Its check items, those of the common
+                       standard and its points overrides are used
+      --standards FILE the registered standards (default: configs/standards.ini in the project root)
   -h, --help           show this help
 
 Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun),
-            2 bad arguments or invalid scoring settings, 3 spec-context.md still has unresolved inputs or questions.
+            2 bad arguments, invalid scoring settings or standards (run standard lint), 3 spec-context.md still has unresolved inputs or questions.
 USAGE
 }
 
 script_dir="${0:A:h}"
 # Project root (two levels above the physical skill folder) holds tmp/, reports/ and configs/settings.ini.
 project_root="${script_dir:h:h:h}"
+skills_dir="${script_dir:h:h}"
+standards="$project_root/configs/standards.ini" standard=""
 root="" findings="" diff="" git_range="" repo="." out_dir="" config="$project_root/configs/settings.ini" crdir="" check=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,6 +46,8 @@ while [[ $# -gt 0 ]]; do
     -r|--repo) repo="${2:?--repo needs a value}"; shift 2 ;;
     -o|--out-dir) out_dir="${2:?--out-dir needs a value}"; shift 2 ;;
     --config) config="${2:?--config needs a value}"; shift 2 ;;
+    --standard) standard="${2:?--standard needs a value}"; shift 2 ;;
+    --standards) standards="${2:?--standards needs a value}"; shift 2 ;;
     --check) check=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
@@ -74,8 +82,11 @@ fi
 [[ -z "$out_dir" ]] && out_dir="$(dirname "$findings")"
 
 idx=""
-tmp="$(mktemp)"
-trap 'rm -f "$tmp" ${idx:+"$idx"}' EXIT
+tmp="$(mktemp)" rules="$(mktemp)"
+trap 'rm -f "$tmp" "$rules" ${idx:+"$idx"}' EXIT
+# Check items and points overrides of the standard (code-review-scoring/scripts/standard.zsh resolve).
+zsh "$skills_dir/code-review-scoring/scripts/standard.zsh" resolve --standards "$standards" --settings "$config" ${standard:+"$standard"} \
+  > "$rules" || exit 2  # resolve has printed the error
 if [[ -n "$diff" || -n "$git_range" ]]; then
   idx="$(mktemp)"
   if [[ -n "$git_range" ]]; then
@@ -91,7 +102,7 @@ else
 fi
 
 [[ $check -eq 1 ]] || rm -f "$out_dir/score.tsv" "$out_dir/score.json"
-LC_ALL=C awk -v rules="$script_dir/rules.tsv" -v idxfile="$idx" -v config="$config" -v crdir="$crdir" \
+LC_ALL=C awk -v rules="$rules" -v idxfile="$idx" -v config="$config" -v crdir="$crdir" \
   -v tsvout="$out_dir/score.tsv" -v jsonout="$out_dir/score.json" -v checkonly="$check" \
   -f "$script_dir/lib/score.awk" "$findings"
 [[ $check -eq 1 ]] || echo "wrote ${out_dir}/score.tsv and ${out_dir}/score.json"

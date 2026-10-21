@@ -406,6 +406,7 @@ function Invoke-StdIni([string]$Path, [string]$Settings) {
         }
         # Empty values are written as - so that the shells can read the TAB-separated fields.
         $out.Add("std`t$s`t$($stdl[$s])`t$(Get-StdDash (& $get 'path'))`t$(Get-StdDash (& $get 'scan'))`t$(Get-StdDash $srole)")
+        foreach ($x in $Let) { if ($pts.ContainsKey("$s`t$x")) { $out.Add("points`t$s`t$x`t$($pts["$s`t$x"])") } }
     }
     if ($ncommon -eq 0) { & $diag 'warn' '' 'no common standard (role="common"); files that no framework standard covers will not be scored' }
     return , $out.ToArray()

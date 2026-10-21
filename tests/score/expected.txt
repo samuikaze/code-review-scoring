@@ -1,0 +1,419 @@
+### --findings findings.txt --config none.ini --standards standards.ini
+note: no diff given, location checks skipped
+grade D, total 41/100
+A 5/25  B 14/15  C 3/15  D 10/15  E 5/10  F 6/10  G 5/10  
+deductions: 12 (without a check id: 1), upstream: 1, rejected comments: 1, skipped checks: 1
+standard: legacy v1.0, common: common v0.1
+wrote OUT/score.tsv and OUT/score.json
+exit=0
+--- score.tsv
+total	41
+grade	D
+capped	0
+critical	1
+standard	legacy	v1.0	sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800
+common	common	v0.1	sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+dim	A	5	25
+dim	B	14	15
+dim	C	3	15
+dim	D	10	15
+dim	E	5	10
+dim	F	6	10
+dim	G	5	10
+finding	A2	Critical	10	src/main/java/com/ex/order/OrderService.java:90	2
+finding	C1	Critical	10	src/main/java/com/ex/order/OrderService.java:30	5
+finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	1
+finding	A7	Major	5	src/main/java/com/ex/order/OrderService.java:12	3
+finding	D2	Major	5	src/main/java/com/ex/order/OrderService.java:40	7
+finding	E2	Major	5	src/main/java/com/ex/order/OrderService.java:26	8
+finding	G6	Major	5	src/main/java/com/ex/order/OrderService.java:50	11
+finding	C4	Minor	2	src/test/java/com/ex/order/OrderServiceTest.java:10	6
+finding	F3	Minor	2	src/main/java/com/ex/order/OrderService.java:42	9
+finding	F3	Minor	2	src/main/java/com/ex/refund/RefundService.java:17	10
+finding	-	Minor	2	-	12
+finding	B4	Nit	1	src/main/java/com/ex/order/OrderController.java:5	4
+upstream	1	Major	5
+--- score.json
+{
+  "total": 41,
+  "grade": "D",
+  "hasCritical": true,
+  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800" },
+  "common": { "name": "common", "version": "v0.1", "hash": "sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df" },
+  "dimensions": { "A": 5, "B": 14, "C": 3, "D": 10, "E": 5, "F": 6, "G": 5 },
+  "otherDeduction": 2,
+  "upstreamDeduction": 5,
+  "findings": [
+    { "id": "A2", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:90"] },
+    { "id": "C1", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:30"] },
+    { "id": "A1", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:88"] },
+    { "id": "A7", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:12"] },
+    { "id": "D2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:40"] },
+    { "id": "E2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:26"] },
+    { "id": "G6", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:50"] },
+    { "id": "C4", "severity": "Minor", "deduction": 2, "locations": ["src/test/java/com/ex/order/OrderServiceTest.java:10"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/order/OrderService.java:42"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/refund/RefundService.java:17"] },
+    { "id": null, "severity": "Minor", "deduction": 2, "locations": [] },
+    { "id": "B4", "severity": "Nit", "deduction": 1, "locations": ["src/main/java/com/ex/order/OrderController.java:5"] }
+  ],
+  "upstream": [
+    { "type": "spec-gap", "subtype": "missing", "impact": "high", "severity": "Major", "deduction": 5, "reference": "退款 SD 規格書 v1.2 §4.2" }
+  ],
+  "rejectedComments": [
+    { "comment": "backend-code-review#2", "reason": "不在本次異動範圍內。" }
+  ],
+  "skippedChecks": [
+    { "id": "B9", "reason": "未提供相依套件弱點掃描結果" }
+  ]
+}
+### --findings findings.txt --config points.ini --standards standards.ini
+note: no diff given, location checks skipped
+grade D, total 41/100
+A 10/30  B 14/15  C 3/15  D 10/15  E 5/10  F 6/10  G 0/5  
+deductions: 12 (without a check id: 1), upstream: 1, rejected comments: 1, skipped checks: 1
+standard: legacy v1.0, common: common v0.1
+wrote OUT/score.tsv and OUT/score.json
+exit=0
+--- score.tsv
+total	41
+grade	D
+capped	0
+critical	1
+standard	legacy	v1.0	sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800
+common	common	v0.1	sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+dim	A	10	30
+dim	B	14	15
+dim	C	3	15
+dim	D	10	15
+dim	E	5	10
+dim	F	6	10
+dim	G	0	5
+finding	A2	Critical	10	src/main/java/com/ex/order/OrderService.java:90	2
+finding	C1	Critical	10	src/main/java/com/ex/order/OrderService.java:30	5
+finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	1
+finding	A7	Major	5	src/main/java/com/ex/order/OrderService.java:12	3
+finding	D2	Major	5	src/main/java/com/ex/order/OrderService.java:40	7
+finding	E2	Major	5	src/main/java/com/ex/order/OrderService.java:26	8
+finding	G6	Major	5	src/main/java/com/ex/order/OrderService.java:50	11
+finding	C4	Minor	2	src/test/java/com/ex/order/OrderServiceTest.java:10	6
+finding	F3	Minor	2	src/main/java/com/ex/order/OrderService.java:42	9
+finding	F3	Minor	2	src/main/java/com/ex/refund/RefundService.java:17	10
+finding	-	Minor	2	-	12
+finding	B4	Nit	1	src/main/java/com/ex/order/OrderController.java:5	4
+upstream	1	Major	5
+--- score.json
+{
+  "total": 41,
+  "grade": "D",
+  "hasCritical": true,
+  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800" },
+  "common": { "name": "common", "version": "v0.1", "hash": "sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df" },
+  "dimensions": { "A": 10, "B": 14, "C": 3, "D": 10, "E": 5, "F": 6, "G": 0 },
+  "otherDeduction": 2,
+  "upstreamDeduction": 5,
+  "findings": [
+    { "id": "A2", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:90"] },
+    { "id": "C1", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:30"] },
+    { "id": "A1", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:88"] },
+    { "id": "A7", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:12"] },
+    { "id": "D2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:40"] },
+    { "id": "E2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:26"] },
+    { "id": "G6", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:50"] },
+    { "id": "C4", "severity": "Minor", "deduction": 2, "locations": ["src/test/java/com/ex/order/OrderServiceTest.java:10"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/order/OrderService.java:42"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/refund/RefundService.java:17"] },
+    { "id": null, "severity": "Minor", "deduction": 2, "locations": [] },
+    { "id": "B4", "severity": "Nit", "deduction": 1, "locations": ["src/main/java/com/ex/order/OrderController.java:5"] }
+  ],
+  "upstream": [
+    { "type": "spec-gap", "subtype": "missing", "impact": "high", "severity": "Major", "deduction": 5, "reference": "退款 SD 規格書 v1.2 §4.2" }
+  ],
+  "rejectedComments": [
+    { "comment": "backend-code-review#2", "reason": "不在本次異動範圍內。" }
+  ],
+  "skippedChecks": [
+    { "id": "B9", "reason": "未提供相依套件弱點掃描結果" }
+  ]
+}
+### --findings invalid.txt --config none.ini --standards standards.ini
+note: no diff given, location checks skipped
+validation failed with 3 error(s). Fix findings.txt and run again:
+  - line 1: unknown check id Z1 (use - when no check covers the problem)
+  - line 4: A1: severity must be the default Major or Nit, not Critical
+  - line 7: A7: non-default severity Major needs the matching adjustment condition in column 5
+exit=1
+### --findings common.txt --config none.ini --standards standards.ini
+note: no diff given, location checks skipped
+grade B, total 78/100
+A 15/25  B 5/15  C 15/15  D 15/15  E 10/10  F 8/10  G 10/10  
+deductions: 4 (without a check id: 0), upstream: 0, rejected comments: 0, skipped checks: 0
+standard: legacy v1.0, common: common v0.1
+wrote OUT/score.tsv and OUT/score.json
+exit=0
+--- score.tsv
+total	78
+grade	B
+capped	0
+critical	1
+standard	legacy	v1.0	sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800
+common	common	v0.1	sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+dim	A	15	25
+dim	B	5	15
+dim	C	15	15
+dim	D	15	15
+dim	E	10	10
+dim	F	8	10
+dim	G	10	10
+finding	CM-B1	Critical	10	config/application.yml:8	2
+finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	4
+finding	CM-A1	Major	5	config/application.yml:3	1
+finding	CM-F1	Minor	2	README.md:10	3
+--- score.json
+{
+  "total": 78,
+  "grade": "B",
+  "hasCritical": true,
+  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800" },
+  "common": { "name": "common", "version": "v0.1", "hash": "sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df" },
+  "dimensions": { "A": 15, "B": 5, "C": 15, "D": 15, "E": 10, "F": 8, "G": 10 },
+  "otherDeduction": 0,
+  "upstreamDeduction": 0,
+  "findings": [
+    { "id": "CM-B1", "severity": "Critical", "deduction": 10, "locations": ["config/application.yml:8"] },
+    { "id": "A1", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:88"] },
+    { "id": "CM-A1", "severity": "Major", "deduction": 5, "locations": ["config/application.yml:3"] },
+    { "id": "CM-F1", "severity": "Minor", "deduction": 2, "locations": ["README.md:10"] }
+  ],
+  "upstream": [],
+  "rejectedComments": [],
+  "skippedChecks": []
+}
+### --findings common.txt --config none.ini --standards standards-points.ini
+note: no diff given, location checks skipped
+validation failed with 3 error(s). Fix findings.txt and run again:
+  - line 2: unknown check id CM-A1 (use - when no check covers the problem)
+  - line 5: unknown check id CM-B1 (use - when no check covers the problem)
+  - line 8: unknown check id CM-F1 (use - when no check covers the problem)
+exit=1
+### --findings findings.txt --config none.ini --standards standards-points.ini
+note: no diff given, location checks skipped
+grade D, total 41/100
+A 5/25  B 14/15  C 8/20  D 10/15  E 5/10  F 1/5  G 5/10  
+deductions: 12 (without a check id: 1), upstream: 1, rejected comments: 1, skipped checks: 1
+standard: legacy v1.0
+wrote OUT/score.tsv and OUT/score.json
+exit=0
+--- score.tsv
+total	41
+grade	D
+capped	0
+critical	1
+standard	legacy	v1.0	sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800
+dim	A	5	25
+dim	B	14	15
+dim	C	8	20
+dim	D	10	15
+dim	E	5	10
+dim	F	1	5
+dim	G	5	10
+finding	A2	Critical	10	src/main/java/com/ex/order/OrderService.java:90	2
+finding	C1	Critical	10	src/main/java/com/ex/order/OrderService.java:30	5
+finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	1
+finding	A7	Major	5	src/main/java/com/ex/order/OrderService.java:12	3
+finding	D2	Major	5	src/main/java/com/ex/order/OrderService.java:40	7
+finding	E2	Major	5	src/main/java/com/ex/order/OrderService.java:26	8
+finding	G6	Major	5	src/main/java/com/ex/order/OrderService.java:50	11
+finding	C4	Minor	2	src/test/java/com/ex/order/OrderServiceTest.java:10	6
+finding	F3	Minor	2	src/main/java/com/ex/order/OrderService.java:42	9
+finding	F3	Minor	2	src/main/java/com/ex/refund/RefundService.java:17	10
+finding	-	Minor	2	-	12
+finding	B4	Nit	1	src/main/java/com/ex/order/OrderController.java:5	4
+upstream	1	Major	5
+--- score.json
+{
+  "total": 41,
+  "grade": "D",
+  "hasCritical": true,
+  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800" },
+  "common": null,
+  "dimensions": { "A": 5, "B": 14, "C": 8, "D": 10, "E": 5, "F": 1, "G": 5 },
+  "otherDeduction": 2,
+  "upstreamDeduction": 5,
+  "findings": [
+    { "id": "A2", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:90"] },
+    { "id": "C1", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:30"] },
+    { "id": "A1", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:88"] },
+    { "id": "A7", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:12"] },
+    { "id": "D2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:40"] },
+    { "id": "E2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:26"] },
+    { "id": "G6", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:50"] },
+    { "id": "C4", "severity": "Minor", "deduction": 2, "locations": ["src/test/java/com/ex/order/OrderServiceTest.java:10"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/order/OrderService.java:42"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/refund/RefundService.java:17"] },
+    { "id": null, "severity": "Minor", "deduction": 2, "locations": [] },
+    { "id": "B4", "severity": "Nit", "deduction": 1, "locations": ["src/main/java/com/ex/order/OrderController.java:5"] }
+  ],
+  "upstream": [
+    { "type": "spec-gap", "subtype": "missing", "impact": "high", "severity": "Major", "deduction": 5, "reference": "退款 SD 規格書 v1.2 §4.2" }
+  ],
+  "rejectedComments": [
+    { "comment": "backend-code-review#2", "reason": "不在本次異動範圍內。" }
+  ],
+  "skippedChecks": [
+    { "id": "B9", "reason": "未提供相依套件弱點掃描結果" }
+  ]
+}
+### --findings findings.txt --config points.ini --standards standards-points.ini
+note: no diff given, location checks skipped
+grade D, total 41/100
+A 10/30  B 14/15  C 8/20  D 10/15  E 5/10  F 1/5  G 0/5  
+deductions: 12 (without a check id: 1), upstream: 1, rejected comments: 1, skipped checks: 1
+standard: legacy v1.0
+wrote OUT/score.tsv and OUT/score.json
+exit=0
+--- score.tsv
+total	41
+grade	D
+capped	0
+critical	1
+standard	legacy	v1.0	sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800
+dim	A	10	30
+dim	B	14	15
+dim	C	8	20
+dim	D	10	15
+dim	E	5	10
+dim	F	1	5
+dim	G	0	5
+finding	A2	Critical	10	src/main/java/com/ex/order/OrderService.java:90	2
+finding	C1	Critical	10	src/main/java/com/ex/order/OrderService.java:30	5
+finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	1
+finding	A7	Major	5	src/main/java/com/ex/order/OrderService.java:12	3
+finding	D2	Major	5	src/main/java/com/ex/order/OrderService.java:40	7
+finding	E2	Major	5	src/main/java/com/ex/order/OrderService.java:26	8
+finding	G6	Major	5	src/main/java/com/ex/order/OrderService.java:50	11
+finding	C4	Minor	2	src/test/java/com/ex/order/OrderServiceTest.java:10	6
+finding	F3	Minor	2	src/main/java/com/ex/order/OrderService.java:42	9
+finding	F3	Minor	2	src/main/java/com/ex/refund/RefundService.java:17	10
+finding	-	Minor	2	-	12
+finding	B4	Nit	1	src/main/java/com/ex/order/OrderController.java:5	4
+upstream	1	Major	5
+--- score.json
+{
+  "total": 41,
+  "grade": "D",
+  "hasCritical": true,
+  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800" },
+  "common": null,
+  "dimensions": { "A": 10, "B": 14, "C": 8, "D": 10, "E": 5, "F": 1, "G": 0 },
+  "otherDeduction": 2,
+  "upstreamDeduction": 5,
+  "findings": [
+    { "id": "A2", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:90"] },
+    { "id": "C1", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:30"] },
+    { "id": "A1", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:88"] },
+    { "id": "A7", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:12"] },
+    { "id": "D2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:40"] },
+    { "id": "E2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:26"] },
+    { "id": "G6", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:50"] },
+    { "id": "C4", "severity": "Minor", "deduction": 2, "locations": ["src/test/java/com/ex/order/OrderServiceTest.java:10"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/order/OrderService.java:42"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/refund/RefundService.java:17"] },
+    { "id": null, "severity": "Minor", "deduction": 2, "locations": [] },
+    { "id": "B4", "severity": "Nit", "deduction": 1, "locations": ["src/main/java/com/ex/order/OrderController.java:5"] }
+  ],
+  "upstream": [
+    { "type": "spec-gap", "subtype": "missing", "impact": "high", "severity": "Major", "deduction": 5, "reference": "退款 SD 規格書 v1.2 §4.2" }
+  ],
+  "rejectedComments": [
+    { "comment": "backend-code-review#2", "reason": "不在本次異動範圍內。" }
+  ],
+  "skippedChecks": [
+    { "id": "B9", "reason": "未提供相依套件弱點掃描結果" }
+  ]
+}
+### --findings findings.txt --config points-bad.ini --standards standards-points.ini
+error: standards-points.ini:5: [legacy] the seven dimensions must add up to 100 with the overrides, not 105; run standard lint first
+exit=2
+### --findings findings.txt --config none.ini --standards standards-two.ini
+error: standards-two.ini: several standards are registered (legacy, other); pick one by name
+exit=2
+### --findings findings.txt --config none.ini --standards standards-two.ini --standard legacy
+note: no diff given, location checks skipped
+grade D, total 41/100
+A 5/25  B 14/15  C 3/15  D 10/15  E 5/10  F 6/10  G 5/10  
+deductions: 12 (without a check id: 1), upstream: 1, rejected comments: 1, skipped checks: 1
+standard: legacy v1.0
+wrote OUT/score.tsv and OUT/score.json
+exit=0
+--- score.tsv
+total	41
+grade	D
+capped	0
+critical	1
+standard	legacy	v1.0	sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800
+dim	A	5	25
+dim	B	14	15
+dim	C	3	15
+dim	D	10	15
+dim	E	5	10
+dim	F	6	10
+dim	G	5	10
+finding	A2	Critical	10	src/main/java/com/ex/order/OrderService.java:90	2
+finding	C1	Critical	10	src/main/java/com/ex/order/OrderService.java:30	5
+finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	1
+finding	A7	Major	5	src/main/java/com/ex/order/OrderService.java:12	3
+finding	D2	Major	5	src/main/java/com/ex/order/OrderService.java:40	7
+finding	E2	Major	5	src/main/java/com/ex/order/OrderService.java:26	8
+finding	G6	Major	5	src/main/java/com/ex/order/OrderService.java:50	11
+finding	C4	Minor	2	src/test/java/com/ex/order/OrderServiceTest.java:10	6
+finding	F3	Minor	2	src/main/java/com/ex/order/OrderService.java:42	9
+finding	F3	Minor	2	src/main/java/com/ex/refund/RefundService.java:17	10
+finding	-	Minor	2	-	12
+finding	B4	Nit	1	src/main/java/com/ex/order/OrderController.java:5	4
+upstream	1	Major	5
+--- score.json
+{
+  "total": 41,
+  "grade": "D",
+  "hasCritical": true,
+  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800" },
+  "common": null,
+  "dimensions": { "A": 5, "B": 14, "C": 3, "D": 10, "E": 5, "F": 6, "G": 5 },
+  "otherDeduction": 2,
+  "upstreamDeduction": 5,
+  "findings": [
+    { "id": "A2", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:90"] },
+    { "id": "C1", "severity": "Critical", "deduction": 10, "locations": ["src/main/java/com/ex/order/OrderService.java:30"] },
+    { "id": "A1", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:88"] },
+    { "id": "A7", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:12"] },
+    { "id": "D2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:40"] },
+    { "id": "E2", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:26"] },
+    { "id": "G6", "severity": "Major", "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:50"] },
+    { "id": "C4", "severity": "Minor", "deduction": 2, "locations": ["src/test/java/com/ex/order/OrderServiceTest.java:10"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/order/OrderService.java:42"] },
+    { "id": "F3", "severity": "Minor", "deduction": 2, "locations": ["src/main/java/com/ex/refund/RefundService.java:17"] },
+    { "id": null, "severity": "Minor", "deduction": 2, "locations": [] },
+    { "id": "B4", "severity": "Nit", "deduction": 1, "locations": ["src/main/java/com/ex/order/OrderController.java:5"] }
+  ],
+  "upstream": [
+    { "type": "spec-gap", "subtype": "missing", "impact": "high", "severity": "Major", "deduction": 5, "reference": "退款 SD 規格書 v1.2 §4.2" }
+  ],
+  "rejectedComments": [
+    { "comment": "backend-code-review#2", "reason": "不在本次異動範圍內。" }
+  ],
+  "skippedChecks": [
+    { "id": "B9", "reason": "未提供相依套件弱點掃描結果" }
+  ]
+}
+### --findings findings.txt --config none.ini --standards standards.ini --standard nope
+error: standards.ini: [nope] is not registered
+exit=2
+### --findings findings.txt --config none.ini --standards missing.ini
+error: missing.ini: file not found; copy configs/standards.example.ini to configs/standards.ini
+exit=2
+### --findings diff-check.txt --diff pr.diff --config none.ini --standards standards.ini
+validation failed with 2 error(s). Fix findings.txt and run again:
+  - line 5: A1: a.java:9 is outside the diff hunks
+  - line 8: A3: file "b.java" is not in the diff (use the full path from the diff, no ...)
+exit=1

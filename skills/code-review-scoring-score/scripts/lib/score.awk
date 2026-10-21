@@ -1,5 +1,6 @@
 # Validator and calculator shared by score.sh and score.zsh (POSIX awk). Run with LC_ALL=C.
-# Variables: rules=rules.tsv  idxfile=output of diff-index.awk ("" = skip location checks)
+# Variables: rules=output of "standard resolve" (standard, common, points and check records)
+#            idxfile=output of diff-index.awk ("" = skip location checks)
 #            config=configs/settings.ini with the [points], [deductions] (incl. merge) and [grades] sections ("" or missing file = defaults)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = skip the code review comment checks)
 #            tsvout / jsonout = output files  checkonly=1: validate only, write nothing
@@ -79,9 +80,11 @@ function load_config(file,    l, sec, k, v, sum, i, g) {
         }
         close(file)
     }
+    # The [points] overrides of the standard in configs/standards.ini win over the settings.
+    for (k in ovr) dmax[k] = ovr[k]
     sum = 0
     for (i = 1; i <= 7; i++) sum += dmax[dims[i]]
-    if (sum != 100) cfgerr("[points] the seven dimensions must add up to 100, not " sum)
+    if (sum != 100) cfgerr("[points] the seven dimensions must add up to 100, not " sum (novr ? " (with the points overrides of [" stdname "] in standards.ini)" : ""))
     if (gmin["S"] > 100) cfgerr("[grades] S must be at most 100")
     split("S A B C", g, " ")
     for (i = 1; i < 4; i++) if (gmin[g[i]] <= gmin[g[i + 1]]) cfgerr("[grades] " g[i] " (" gmin[g[i]] ") must be higher than " g[i + 1] " (" gmin[g[i + 1]] ")")
@@ -94,22 +97,25 @@ BEGIN {
     dmax["A"] = 25; dmax["B"] = 15; dmax["C"] = 15; dmax["D"] = 15; dmax["E"] = 10; dmax["F"] = 10; dmax["G"] = 10
     pts["Critical"] = 10; pts["Major"] = 5; pts["Minor"] = 2; pts["Nit"] = 1
     gmin["S"] = 95; gmin["A"] = 85; gmin["B"] = 70; gmin["C"] = 55
+    # Check items of the standard and of the common standard, as printed by "standard resolve".
+    while ((getline l < rules) > 0) {
+        split(l, a, "\t")
+        if (a[1] == "check") { def[a[2]] = a[3]; adj[a[2]] = a[4] }
+        else if (a[1] == "points") { ovr[a[2]] = a[3] + 0; novr++ }
+        else if (a[1] == "standard") { stdname = a[2]; stdver = a[3]; stdhash = a[4] }
+        else if (a[1] == "common") { cmname = a[2]; cmver = a[3]; cmhash = a[4] }
+    }
+    close(rules)
     load_config(config)
     if (ncfg > 0) { printf "invalid scoring settings in %s:\n%s", config, cfgerrs > "/dev/stderr"; cfgfail = 1; exit 2 }
     load_comments()
     utype["spec-gap"] = "missing,wrong,ambiguous"
     utype["third-party"] = "spec-missing,spec-wrong,behavior-mismatch,not-delivered,bug"
     utype["ownership-change"] = "spec,interface,process"
-    while ((getline l < rules) > 0) {
-        if (l ~ /^#/ || l ~ /^[ \t]*$/) continue
-        split(l, a, "\t"); def[a[1]] = a[2]; adj[a[1]] = a[3]
-    }
-    close(rules)
     if (idxfile != "") {
         while ((getline l < idxfile) > 0) {
             split(l, a, "\t")
             if (a[1] == "L") { kind[a[2] SUBSEP a[3]] = a[4]; known[a[2]] = 1 }
-            else if (a[1] == "T") hastest = 1
         }
         close(idxfile)
     }
@@ -146,7 +152,6 @@ BEGIN {
             if (("," adj[id] ",") !~ ("," sev ",")) { err(id ": severity must be the default " def[id] (adj[id] != "-" ? ", the allowed adjustment " adj[id] : "") " or Nit, not " sev); next }
             if (reason == "") { err(id ": non-default severity " sev " needs the matching adjustment condition in column 5"); next }
         }
-        if (id == "C1" && sev == "Critical" && idxfile != "" && hastest) err("C1 Critical requires that the PR changes no test file, but the diff contains test files")
         if (locs == "") { err(id ": missing file:line location"); next }
         if (locs == "-" && !other) { err(id ": location - (whole PR) is only allowed when the check id is -; give file:line"); next }
         # merge=true: one F record per check id with all its locations, deducted once.
@@ -226,7 +231,7 @@ END {
         d = dims[k]; ded = 0
         for (i = 1; i <= nf_; i++) {
             x = forder[i]
-            if (substr(fid[x], 1, 1) != d) continue
+            if (dimof(fid[x]) != d) continue
             ded += pts[fsev[x]]
         }
         sc[d] = dmax[d] - ded; if (sc[d] < 0) sc[d] = 0
@@ -242,12 +247,17 @@ END {
     if (crit && (grade == "S" || grade == "A")) { grade = "B"; capped = 1 }
 
     printf "total\t%d\ngrade\t%s\ncapped\t%d\ncritical\t%d\n", total, grade, capped, crit ? 1 : 0 > tsvout
+    printf "standard\t%s\t%s\t%s\n", stdname, stdver, stdhash > tsvout
+    if (cmname != "") printf "common\t%s\t%s\t%s\n", cmname, cmver, cmhash > tsvout
     for (k = 1; k <= 7; k++) printf "dim\t%s\t%d\t%d\n", dims[k], sc[dims[k]], dmax[dims[k]] > tsvout
     for (i = 1; i <= nf_; i++) { x = forder[i]; printf "finding\t%s\t%s\t%d\t%s\t%d\n", fid[x], fsev[x], pts[fsev[x]], floc[x], x > tsvout }
     for (i = 1; i <= nu; i++) printf "upstream\t%d\t%s\t%d\n", i, usev[i], pts[usev[i]] > tsvout
     close(tsvout)
 
     printf "{\n  \"total\": %d,\n  \"grade\": \"%s\",\n  \"hasCritical\": %s,\n", total, grade, (crit ? "true" : "false") > jsonout
+    printf "  \"standard\": { \"name\": %s, \"version\": %s, \"hash\": %s },\n", jstr(stdname), jstr(stdver), jstr(stdhash) > jsonout
+    if (cmname != "") printf "  \"common\": { \"name\": %s, \"version\": %s, \"hash\": %s },\n", jstr(cmname), jstr(cmver), jstr(cmhash) > jsonout
+    else printf "  \"common\": null,\n" > jsonout
     printf "  \"dimensions\": { \"A\": %d, \"B\": %d, \"C\": %d, \"D\": %d, \"E\": %d, \"F\": %d, \"G\": %d },\n", sc["A"], sc["B"], sc["C"], sc["D"], sc["E"], sc["F"], sc["G"] > jsonout
     printf "  \"otherDeduction\": %d,\n  \"upstreamDeduction\": %d,\n", othded, upded > jsonout
     printf "  \"findings\": [" > jsonout
@@ -274,9 +284,12 @@ END {
     printf "grade %s, total %d/100%s\n", grade, total, (capped ? " (capped at B because of a Critical finding)" : "")
     for (k = 1; k <= 7; k++) printf "%s %d/%d  ", dims[k], sc[dims[k]], dmax[dims[k]]
     printf "\ndeductions: %d (without a check id: %d), upstream: %d, rejected comments: %d, skipped checks: %d\n", nf_, cnt_other(), nu, nx, ns
+    printf "standard: %s %s%s\n", stdname, stdver, (cmname != "" ? ", common: " cmname " " cmver : "")
     if (nwarn > 0) printf "warnings:\n%s", warns > "/dev/stderr"
 }
 
+# Dimension of a check id: its first letter, or the letter after CM- for the common standard.
+function dimof(id) { return substr(id, 1, 3) == "CM-" ? substr(id, 4, 1) : substr(id, 1, 1) }
 function cnt_other(    c, i) { c = 0; for (i = 1; i <= nf_; i++) if (fid[i] == "-") c++; return c }
 function after(a, b) {
     if (sevrank(fsev[a]) != sevrank(fsev[b])) return sevrank(fsev[a]) > sevrank(fsev[b])

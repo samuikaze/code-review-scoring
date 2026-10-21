@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Setup check for the code review scoring workflow: configs/plugins.ini and configs/settings.ini in the project root.
+# Setup check for the code review scoring workflow: configs/plugins.ini, configs/settings.ini and configs/standards.ini
+# in the project root.
 # "check" tells the agent what is missing; the missing files are created either by the user with the
 # interactive "wizard", or by the agent with "plugins --none", "plugin" and "review-state config".
 set -euo pipefail
@@ -12,7 +13,8 @@ Commands:
   check    [--platform NAME]
            report whether configs/plugins.ini exists, whether configs/settings.ini sets subagent=true|false
            and, when it is true and --platform is given, whether it has a [NAME] section (give --platform only
-           when the platform has a subagent tool). Prints the execution style. Exit 7 when something is missing,
+           when the platform has a subagent tool), and whether configs/standards.ini registers a scoring standard.
+           Prints the execution style. Exit 7 when something is missing,
            or when the old configs.ini / plugins.ini is still in the project root (all commands stop then)
   wizard   [--platform NAME]
            create what is missing by asking the user step by step; needs an interactive terminal,
@@ -25,6 +27,7 @@ Commands:
 
 Options: --plugins FILE (default: configs/plugins.ini in the project root)
          --config FILE  (default: configs/settings.ini in the project root)
+         --standards FILE (default: configs/standards.ini in the project root; check only)
 Settings in configs/settings.ini are saved with: review-state config --subagent true|false
                                    and review-state config --platform NAME --model TEXT --reasoning TEXT
 After the plugins change, run scripts/link-skills in the project root.
@@ -44,13 +47,14 @@ state_cmd=(bash "$script_dir/review-state.sh")
 [[ $# -eq 0 ]] && { usage; exit 2; }
 cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
-plugins_file="$project_root/configs/plugins.ini" config="$project_root/configs/settings.ini"
+plugins_file="$project_root/configs/plugins.ini" config="$project_root/configs/settings.ini" standards_file="$project_root/configs/standards.ini"
 platform="" name="" pdir="" applies="" mode="mapped" none=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --platform) platform="${2:?--platform needs a value}"; shift 2 ;;
     --plugins) plugins_file="${2:?--plugins needs a value}"; shift 2 ;;
     --config) config="${2:?--config needs a value}"; shift 2 ;;
+    --standards) standards_file="${2:?--standards needs a value}"; shift 2 ;;
     --name) name="${2:?--name needs a value}"; shift 2 ;;
     --path) pdir="${2:?--path needs a value}"; shift 2 ;;
     --applies) applies="${2:?--applies needs a value}"; shift 2 ;;
@@ -176,11 +180,22 @@ case "$cmd" in
       if platform_ok; then echo "configs/settings.ini [$platform]: ok $config"
       else echo "configs/settings.ini [$platform]: missing $config"; missing=1; fi
     fi
+    # Scoring needs at least one standard; the user registers them (the wizard does not create standards.ini).
+    nostd=0
+    stds="$( [[ -f "$standards_file" ]] && awk -F'[][]' '/^[ \t]*\[/ { print $2 }' "$standards_file" || true)"
+    if [[ -n "$stds" ]]; then echo "configs/standards.ini: ok ($(grep -c . <<<"$stds") standard(s): $(paste -sd ',' - <<<"$stds" | sed 's/,/, /g')) $standards_file"
+    elif [[ -f "$standards_file" ]]; then echo "configs/standards.ini: no standard registered $standards_file"; nostd=1
+    else echo "configs/standards.ini: missing $standards_file"; nostd=1; fi
+    if [[ $nostd -eq 1 ]]; then
+      echo "next: ask the user to register their scoring standards: copy configs/standards.example.ini to configs/standards.ini"
+      echo "      and add the standard documents (template: docs/templates/scoring-rule-template.md); never create them yourself"
+    fi
     if [[ $missing -eq 1 ]]; then
       echo "next: ask the user whether to create the missing settings with the wizard in a terminal"
       echo "      (bash \"$script_dir/setup.sh\" wizard${platform:+ --platform $platform}) or by answering your questions"
       exit 7
     fi
+    [[ $nostd -eq 0 ]] || exit 7
     if [[ "$sub" == "true" && -n "$platform" ]]; then echo "execution: subagent (each step runs in its own subagent with the [$platform] settings)"
     elif [[ "$sub" == "true" ]]; then echo "execution: inline (subagent=true, but no --platform was given, so the main agent runs every step)"
     else echo "execution: inline (subagent=false, so the main agent runs every step)"; fi
