@@ -20,7 +20,7 @@
 <!-- What the PR is meant to do, from the PR title and description. -->
 
 ## Requirements
-<!-- One line per requirement: - R1 | source (document, version, section; full/path:line when the document is a file) | requirement -->
+<!-- One line per requirement, summarized (never copied spec text): - R1 | source (document, version, section; full/path:line when the document is a file) | requirement -->
 
 ## Spec observations
 <!-- Possible gaps, errors or ambiguities: - document, version, section | missing / wrong / ambiguous | what is unclear -->
@@ -32,7 +32,7 @@
 <!-- Spec, interface or process changes: - date | what changed | before/after version | written or verbal only -->
 
 ## Severity facts
-<!-- Facts that change severities or whether a check applies:
+<!-- Facts that change severities or whether a check applies; ask in step 1 about those the documents do not settle:
 - cross-timezone business (A7):
 - tables that keep growing, with approximate row counts (E2):
 - project uses springdoc (G4):

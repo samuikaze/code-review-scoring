@@ -9,12 +9,20 @@ plugin (ROOT/step2-<plugin>-<state>). Outputs live in ROOT/stepN/ (step 2: ROOT/
 Uses the same GNU-style arguments as review-state.sh so subagent prompts work on every platform:
 
   review-state.ps1 init --git RANGE [--repo DIR] [--title TEXT] [--reset] [--root DIR]
+  review-state.ps1 next [--inline] [--retry] [--root DIR]
+  review-state.ps1 finish [--root DIR]
   review-state.ps1 show [--root DIR]
   review-state.ps1 cr-plan [--plugins FILE] [--root DIR]
-  review-state.ps1 prompt --step N [--plugin NAME] [--root DIR]
+  review-state.ps1 prompt --step 1|2|3 [--plugin NAME] [--inline] [--root DIR]
   review-state.ps1 set --step N [--plugin NAME] --state working|pending|success|failed [--message TEXT] [--root DIR]
   review-state.ps1 config [--subagent true|false] [--config FILE]
   review-state.ps1 config --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
+
+next prints the next action of the workflow: the prompt of the next step or plugin to run (it runs cr-plan first
+when step 2 has no plan yet), the questions to relay, a failure to report, "finish", or the result. --inline renders
+prompts for the main agent (default: from subagent= in configs.ini); --retry prints the prompt again for a failed
+step or plugin. finish runs step 4 (score) and step 5 (report) with their scripts, records both states and prints
+the result summary (exit 1 when one of them failed). prompt prints the prompt of step 1, 2 or 3.
 
 config reads and writes configs.ini in the project root unless --config is given. Without --subagent it prints
 subagent=true|false from the [workflow] section (true = each step runs in its own subagent, false = the main
@@ -28,10 +36,11 @@ Gates enforced by "set":
   working  the previous step must be success; clears the status of every later step
   pending  the unit must be working; its questions.md must be newer than answers.md; needs --message
   success  the unit must be working; its outputs must exist, be valid and be current
+           (step 3: findings.txt must pass the scoring checks of score -Check)
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
-Exit codes: 0 ok, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 setting not configured, 7 setup incomplete (no plugins.ini; see setup check).
+Exit codes: 0 ok, 1 finish: step 4 or 5 failed, 2 bad arguments, 4 previous review exists, 5 gate refused, 6 setting not configured, 7 setup incomplete (no plugins.ini; see setup check).
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -43,13 +52,14 @@ $projectRoot = Get-ProjectRoot $skillDir
 $isWin = ($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows
 $selfCmd = if ($isWin) { "powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" } else { "pwsh -NoProfile -File `"$PSCommandPath`"" }
 $states = @('pending', 'working', 'success', 'failed')
+$skillsDir = Split-Path -Parent $skillDir
 
 $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
 $opt = @{ root = (Join-Path $projectRoot 'tmp'); step = ''; plugin = ''; state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
     config = (Join-Path $projectRoot 'configs.ini'); subagent = ''; platform = ''; model = ''; reasoning = ''
-    plugins = (Join-Path $projectRoot 'plugins.ini') }
+    plugins = (Join-Path $projectRoot 'plugins.ini'); inline = $null; retry = $false }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
@@ -59,6 +69,8 @@ while ($i -lt $argv.Count) {
         $i += 2
     }
     elseif ($a -eq '--reset') { $opt.reset = $true; $i++ }
+    elseif ($a -eq '--inline') { $opt.inline = $true; $i++ }
+    elseif ($a -eq '--retry') { $opt.retry = $true; $i++ }
     else { Exit-WithError "unknown argument $a (see Get-Help)" }
 }
 $root = $opt.root
@@ -226,6 +238,66 @@ function Test-CrFile([string]$Path) {
     if ($summary -eq 0) { $problems.Add('  - an S line with the overall conclusion is required') }
     return $problems
 }
+# Runs a script in a child process (this script, or a script of a sibling skill) and returns its exit code and output.
+function Invoke-Child([string]$Path, [string[]]$ArgList) {
+    $exe = if ($isWin) { @('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File') } else { @('pwsh', '-NoProfile', '-File') }
+    $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $out = @(& $exe[0] $exe[1..($exe.Count - 1)] $Path @ArgList 2>&1 | ForEach-Object { "$_" }) }
+    finally { $ErrorActionPreference = $old }
+    return @{ Code = $LASTEXITCODE; Text = ($out -join "`n") }
+}
+function Invoke-Tool([string]$Skill, [string]$Script, [string[]]$ArgList) {
+    return Invoke-Child (Join-Path $skillsDir "$Skill/scripts/$Script.ps1") $ArgList
+}
+# Prompt of step $N (plugin $Plugin): the step template plus the shared status protocol. Lines marked "[sub] " are only
+# for subagents, lines marked "[inline] " only for the main agent.
+function Get-Prompt([int]$N, [string]$Plugin, [bool]$Inline) {
+    $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"
+    if ($N -eq $CR) { $pPath = Get-PlanField $Plugin 1; $pMode = Get-PlanField $Plugin 2; $unitArgs += " --plugin $Plugin"; $dir = P "step$CR/$Plugin" }
+    $tpl = (Read-Utf8Text (Join-Path $skillDir "assets/prompts/step$N.md")) + (Read-Utf8Text (Join-Path $skillDir 'assets/prompts/protocol.md'))
+    $lines = foreach ($l in ($tpl -split "`r?`n")) {
+        if ($l.StartsWith('[sub] ')) { if ($Inline) { continue }; $l = $l.Substring(6) }
+        elseif ($l.StartsWith('[inline] ')) { if (-not $Inline) { continue }; $l = $l.Substring(9) }
+        $l
+    }
+    $text = ($lines -join "`n")
+    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N")
+}
+# Writes the action "next" prints for a unit ("1", "3" or "2-<plugin>") in state $S; returns $false when it needs nothing.
+function Write-NextAction([string]$U, [string]$Label, [string]$S, [bool]$Inline, [bool]$Retry) {
+    if ($S -eq 'success') { return $false }
+    if ($U.StartsWith("$CR-")) { $n = $CR; $plugin = $U.Substring(2); $unitArgs = "--step $CR --plugin $plugin" } else { $n = [int]$U; $plugin = ''; $unitArgs = "--step $U" }
+    $d = P (Get-UnitDir $U)
+    $o = New-Object System.Collections.Generic.List[string]
+    if ($S -eq 'pending') {
+        $o.Add('action: ask')
+        $o.Add("$Label needs answers. Ask the user every question in $d/questions.md in one message, write the replies")
+        $o.Add("to $d/answers.md (keep their wording; mark unanswerable questions `"cannot provide`"), then run next.")
+    }
+    elseif ($S -eq 'failed' -and -not $Retry) {
+        $o.Add('action: failed')
+        $o.Add("$Label failed: $(Get-UnitField $U 'failed' 'message')")
+        $o.Add("details: $d/errors.log")
+        $o.Add('Tell the user the reason and ask whether to retry; to retry, run next --retry.')
+    }
+    elseif ($S -eq 'working' -and -not $Inline) {
+        $o.Add('action: interrupted')
+        $o.Add("$Label is still working although its subagent returned: run set $unitArgs --state failed")
+        $o.Add('--message "subagent exited without a final state", then run next.')
+    }
+    else {
+        $o.Add("action: run $Label")
+        if ($Inline) {
+            if ($S -eq 'working') { $o.Add("note: an earlier run stopped before it finished; reuse what is already in $d") }
+            $o.Add('Follow the prompt below yourself.')
+        }
+        else { $o.Add('Pass the prompt below unchanged to one new subagent with the saved model and reasoning, then run next.') }
+        $o.Add('')
+        $o.Add((Get-Prompt $n $plugin $Inline).TrimEnd("`n"))
+    }
+    [Console]::Out.Write(($o -join "`n") + "`n")
+    return $true
+}
 
 switch ($cmd) {
     'init' {
@@ -240,6 +312,7 @@ switch ($cmd) {
             }
             foreach ($n in 1..5) { if ([IO.Directory]::Exists((P "step$n"))) { [IO.Directory]::Delete((P "step$n"), $true) }; Clear-Step $n }
             if (Test-Exists 'request.md') { [IO.File]::Delete((P 'request.md')) }
+            if ([IO.Directory]::Exists((P 'inputs'))) { [IO.Directory]::Delete((P 'inputs'), $true) }
         }
         $repoAbs = Resolve-UserPath $opt.repo
         & git -C $repoAbs rev-parse --git-dir 2>$null | Out-Null
@@ -254,11 +327,10 @@ switch ($cmd) {
         $req = $tpl.Replace('{{TITLE}}', $opt.title).Replace('{{REPO}}', $repoAbs).Replace('{{RANGE}}', $opt.git).Replace('{{CREATED}}', (Get-Date -Format 'yyyy-MM-dd'))
         Write-Utf8File (P 'request.md') $req
         Write-Output "initialized $rootAbs"
-        Write-Output "next: list the documents the user provided in $(P 'request.md'), then dispatch step 1"
+        Write-Output "next: list the documents the user provided in $(P 'request.md'), then run next"
     }
     'show' {
         if (-not (Test-Exists 'request.md')) { Write-Output "no review in $root; run init first"; exit 0 }
-        $next = ''
         foreach ($n in 1..5) {
             $s = Get-StepState $n
             if ($n -eq $CR) {
@@ -268,34 +340,96 @@ switch ($cmd) {
                 foreach ($p in $names) {
                     $ps = Get-UnitState "$CR-$p"
                     Write-Output ("  - {0,-28} {1,-11} {2}  {3}" -f $p, $ps, (Get-UnitField "$CR-$p" $ps 'time'), (Get-UnitField "$CR-$p" $ps 'message'))
-                    if (-not $next -and $s -ne 'success') {
-                        $next = switch ($ps) {
-                            'not-started' { "dispatch step $CR plugin $p (get the prompt with: prompt --step $CR --plugin $p)" }
-                            'working' { "step $CR plugin $p is working. If its subagent has already returned, it stopped abnormally: run 'set --step $CR --plugin $p --state failed --message ...' and ask the user whether to retry" }
-                            'pending' { "relay $(P "step$CR/$p/questions.md") to the user in one message, save the replies to $(P "step$CR/$p/answers.md"), then dispatch step $CR plugin $p again" }
-                            'failed' { "tell the user why step $CR plugin $p failed (details: $(P "step$CR/$p/errors.log")) and ask whether to retry it" }
-                            default { '' }
-                        }
-                    }
                 }
-                if (-not $next -and $s -eq 'not-started' -and -not (Test-Exists "step$CR/plan.tsv")) { $next = "run cr-plan to choose the code review plugins for step $CR" }
                 continue
             }
             Write-Output ("step {0}  {1,-11} {2}  {3}" -f $n, $s, (Get-UnitField "$n" $s 'time'), (Get-UnitField "$n" $s 'message'))
-            if (-not $next -and $s -ne 'success') {
-                $next = switch ($s) {
-                    'not-started' { "dispatch step $n (get the prompt with: prompt --step $n)" }
-                    'working' { "step $n is working. If its subagent has already returned, it stopped abnormally: run 'set --step $n --state failed --message ...' and ask the user whether to retry" }
-                    'pending' { "relay $(P "step$n/questions.md") to the user in one message, save the replies to $(P "step$n/answers.md"), then dispatch step $n again" }
-                    'failed' { "tell the user why step $n failed (details: $(P "step$n/errors.log")) and ask whether to retry it" }
-                }
+        }
+        Write-Output 'next: run next'
+    }
+    'next' {
+        Assert-Review
+        $inline = if ($null -ne $opt.inline) { $true } else { (Get-IniValue (Resolve-UserPath $opt.config) 'workflow' 'subagent').ToLowerInvariant() -ne 'true' }
+        if ($inline) { Write-Output 'mode: inline' } else { Write-Output 'mode: subagent' }
+        if (Write-NextAction '1' 'step 1' (Get-UnitState '1') $inline $opt.retry) { exit 0 }
+        if (-not (Test-Exists "step$CR/plan.tsv")) {
+            $r = Invoke-Child $PSCommandPath @('cr-plan', '--root', $rootAbs, '--plugins', (Resolve-UserPath $opt.plugins))
+            $lines = @($r.Text -split "`n" | Where-Object { -not $_.StartsWith('next:') })
+            [Console]::Out.Write(($lines -join "`n") + "`n")
+            if ($r.Code -ne 0) { exit $r.Code }
+        }
+        foreach ($p in (Get-PlanNames)) {
+            if (Write-NextAction "$CR-$p" "step $CR plugin $p" (Get-UnitState "$CR-$p") $inline $opt.retry) { exit 0 }
+        }
+        if (Write-NextAction '3' 'step 3' (Get-UnitState '3') $inline $opt.retry) { exit 0 }
+        if ((Get-UnitState '4') -eq 'failed' -and (Get-UnitField '4' 'failed' 'message').StartsWith('findings.txt failed validation')) {
+            Write-Output "note: scoring rejected findings.txt (details: $(P 'step4/errors.log')); step 3 runs again"
+            [void](Write-NextAction '3' 'step 3' 'failed' $inline $true)
+            exit 0
+        }
+        foreach ($n in 4, 5) {
+            if ((Get-UnitState "$n") -eq 'failed' -and -not $opt.retry) {
+                Write-Output 'action: failed'
+                Write-Output "step $n failed: $(Get-UnitField "$n" 'failed' 'message')"
+                Write-Output "details: $(P "step$n/errors.log")"
+                Write-Output 'Tell the user the reason and ask whether to retry; to retry, run finish.'
+                exit 0
             }
         }
-        if (-not $next) {
-            $final = if (Test-NonEmpty 'step5/report-path.txt') { (Read-Utf8Lines (P 'step5/report-path.txt'))[0] } else { P 'step5/report.md' }
-            $next = "done: present $final to the user"
+        if ((Get-UnitState '5') -ne 'success') {
+            Write-Output 'action: finish'
+            Write-Output 'Run finish: it runs step 4 (score) and step 5 (report) with their scripts.'
+            exit 0
         }
-        Write-Output "next: $next"
+        Write-Output 'action: done'
+        $g = ''; $t = ''; $c = ''; $dims = ''
+        foreach ($l in (Read-Utf8Lines (P 'step4/score.tsv'))) {
+            $f = $l -split "`t"
+            switch ($f[0]) {
+                'grade' { $g = $f[1] }
+                'total' { $t = $f[1] }
+                'capped' { if ($f[1] -eq '1') { $c = ' (capped at B because of a Critical finding)' } }
+                'dim' { $dims += "$($f[1]) $($f[2])/$($f[3])  " }
+            }
+        }
+        Write-Output "result: grade $g, total $t/100$c"
+        Write-Output "dimensions: $dims"
+        Write-Output "report: $((Read-Utf8Lines (P 'step5/report-path.txt'))[0].Trim())"
+    }
+    'finish' {
+        Assert-Review
+        if ((Get-StepState 3) -ne 'success') { Stop-Refused 'step 3 has not succeeded; steps cannot be skipped' }
+        # Records the failure of step $N and stops
+        function Stop-Finish([int]$N, [string]$Message) {
+            [void](Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', "$N", '--state', 'failed', '--message', $Message))
+            Write-Output "step $N failed: $Message"
+            Write-Output "details: $(P "step$N/errors.log")"
+            Write-Output 'next: run next'
+            exit 1
+        }
+        [void](Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', '4', '--state', 'working'))
+        $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs)
+        if ($r.Code -ne 0) {
+            [IO.File]::AppendAllText((P 'step4/errors.log'), "[$(Get-Now)] score exited $($r.Code):`n$($r.Text)`n", $script:Utf8NoBom)
+            if ($r.Code -eq 1) { Stop-Finish 4 'findings.txt failed validation; redo step 3' }
+            Stop-Finish 4 "scoring exited $($r.Code): $(($r.Text -split "`n")[0])"
+        }
+        $grade = @($r.Text -split "`n" | Where-Object { $_.StartsWith('grade ') })[0]
+        [void](Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', '4', '--state', 'success', '--message', $grade))
+        [void](Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', '5', '--state', 'working'))
+        $rr = Invoke-Tool 'code-review-scoring-report' 'render-report' @('-Root', $rootAbs)
+        if ($rr.Code -ne 0) {
+            [IO.File]::AppendAllText((P 'step5/errors.log'), "[$(Get-Now)] render-report exited $($rr.Code):`n$($rr.Text)`n", $script:Utf8NoBom)
+            Stop-Finish 5 "render-report exited $($rr.Code): $(($rr.Text -split "`n")[0])"
+        }
+        $sr = Invoke-Child $PSCommandPath @('set', '--root', $rootAbs, '--step', '5', '--state', 'success', '--message', 'report published')
+        if ($sr.Code -ne 0) {
+            [IO.File]::AppendAllText((P 'step5/errors.log'), "[$(Get-Now)] $($sr.Text)`n", $script:Utf8NoBom)
+            Stop-Finish 5 (($sr.Text -split "`n")[0])
+        }
+        Write-Output 'steps 4 and 5: success'
+        $r.Text -split "`n" | Where-Object { $_ -and -not $_.StartsWith('wrote ') } | ForEach-Object { Write-Output $_ }
+        Write-Output "report: $((Read-Utf8Lines (P 'step5/report-path.txt'))[0].Trim())"
     }
     'cr-plan' {
         Assert-Review
@@ -344,18 +478,14 @@ switch ($cmd) {
             Write-Output 'skipped:'
             foreach ($l in ($skipped.ToString() -split "`n" | Where-Object { $_ })) { Write-Output ("  - " + ($l -replace "`t", '  no changed file matches: ')) }
         }
-        if ($names.Count -gt 0) { Write-Output "next: dispatch each plugin in order with prompt --step $CR --plugin NAME" }
-        else { Write-Output "next: step $CR has nothing to run and counts as success; dispatch step $($CR + 1)" }
+        Write-Output 'next: run next'
     }
     'prompt' {
-        $n = Test-Step; Assert-Review
+        $n = Test-Step
+        if ($n -gt 3) { Exit-WithError 'steps 4 and 5 have no prompt; run finish' }
+        Assert-Review
         Assert-Previous $n
-        $stateCmd = "$selfCmd set --root `"$rootAbs`""
-        $pPath = ''; $pMode = ''
-        if ($n -eq $CR) { $pPath = Get-PlanField $opt.plugin 1; $pMode = Get-PlanField $opt.plugin 2 }
-        $tpl = Read-Utf8Text (Join-Path $skillDir "assets/prompts/step$n.md")
-        $text = $tpl.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', $stateCmd).Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', (Split-Path -Parent $skillDir)).Replace('{{PLUGIN}}', $opt.plugin).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{MODE}}', $pMode)
-        [Console]::Out.Write($text)
+        [Console]::Out.Write((Get-Prompt $n $opt.plugin ($null -ne $opt.inline)))
     }
     'set' {
         $n = Test-Step; Assert-Review
@@ -400,6 +530,8 @@ switch ($cmd) {
                     3 {
                         foreach ($f in 'prepared.txt', 'findings.txt') { if (-not (Test-NonEmpty "$d/$f")) { Stop-Refused "missing $(P "$d/$f")" } }
                         if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
+                        $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Check')
+                        if ($r.Code -ne 0) { Stop-Refused "findings.txt does not pass the scoring checks; fix it, then set success again:`n$($r.Text)" }
                     }
                     4 {
                         foreach ($f in 'score.tsv', 'score.json') {

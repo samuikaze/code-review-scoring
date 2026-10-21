@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-score
-description: Step 4 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Validates tmp/step3/findings.txt (check ids, allowed severities, locations on added diff lines, merged or separate deductions per configs.ini, every code review comment deducted or rejected) and computes the seven dimension scores, the total and the S–D grade into tmp/step4/score.tsv and score.json. Use when dispatched by code-review-scoring, or when the user says 「打分數」、「計算 PR 分數」、「幫 PR 計分」、「重新計分」、「分數算一下」.
+description: Step 4 of code-review-scoring, usable on its own. Validates tmp/step3/findings.txt and computes the dimension scores, total and S–D grade into tmp/step4/score.tsv and score.json with a script. Use when the user says 「打分數」、「計算 PR 分數」、「幫 PR 計分」、「重新計分」、「分數算一下」.
 compatibility: Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "4/5"
@@ -16,7 +16,7 @@ Turn the findings into scores. **Never calculate scores or grades by hand**; the
 
 ## Modes
 
-- **Workflow mode:** you were dispatched by `code-review-scoring` with a prompt that contains a status command. Follow that prompt: do not edit `findings.txt` (it belongs to step 3); validation errors make the step fail.
+- **Workflow mode:** `code-review-scoring` runs this step's script itself with `review-state finish`; no agent is dispatched. Validation errors make the step fail and send the workflow back to step 3, which owns `findings.txt`.
 - **Standalone mode:** the user invoked this skill directly. First ask whether they want the full workflow (then switch to `code-review-scoring`) or only this step. For this step only: write no status files; you may fix `findings.txt` as described below, and when done suggest `code-review-scoring-report`. A findings file outside the `tmp` layout can be scored with `--findings <file> [--diff <file>]`.
 
 ## Script
@@ -27,12 +27,14 @@ Paths are relative to this skill's directory.
 | --- | --- | --- |
 | `bash scripts/score.sh` | `zsh scripts/score.zsh` | `powershell -ExecutionPolicy Bypass -File scripts/score.ps1` |
 
+`--check` (PowerShell `-Check`) only validates `findings.txt`, with the same rules and exit codes, and writes nothing; step 3 runs it before it reports success.
+
 ## Procedure
 
 1. Run `score`.
 2. Act on the exit code:
    - **0**: done. It prints the grade, the dimension scores and any warnings.
-   - **1**: validation failed. Each error names the line in `findings.txt`. Standalone: fix it and run again until it passes. Workflow: follow the dispatch prompt (step 3 is redone). When an error questions a judgment (a severity that is not allowed, a location outside the diff), recheck the code and the checklist of `code-review-scoring-code-analysis` instead of only reformatting.
+   - **1**: validation failed. Each error names the line in `findings.txt`. Standalone: fix it and run again until it passes. Workflow: `finish` records the failure and step 3 is redone. When an error questions a judgment (a severity that is not allowed, a location outside the diff), recheck the code and the checklist of `code-review-scoring-code-analysis` instead of only reformatting.
    - **3**: step 1 or step 3 still has unresolved inputs or unanswered questions. Standalone: ask the user in one round, record the replies, run again. Workflow: report failed.
    - **2**: wrong arguments, missing files, or invalid scoring settings in `configs.ini` (tell the user what the error says; do not edit the file yourself).
 3. Treat warnings seriously. "unchanged context line" means the location is not new code: move the finding to the added line or drop it.

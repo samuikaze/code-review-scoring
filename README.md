@@ -12,19 +12,23 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 
 | Skill | 角色 | 產出（本專案根目錄的 `tmp/` 下；最終報告在本專案的 `reports/`） |
 | --- | --- | --- |
-| `code-review-scoring` | 主 Agent：確認執行方式、依序派發 Sub-Agent、轉達問題、以狀態檔把關 | `request.md`、`answers.md` |
+| `code-review-scoring` | 主 Agent：確認執行方式、依序派發 Sub-Agent、轉達問題、以狀態檔把關 | `request.md`、`inputs/`、`answers.md` |
 | `code-review-scoring-spec-reading` | 步驟 1：閱讀規格書 | `step1/pr.diff`、`step1/spec-context.md` |
 | 外掛 CR Skill（`plugins.ini`） | 步驟 2：CR，依異動檔案決定要跑哪些外掛 | `step2/plan.tsv`、`step2/<外掛>/cr.txt` |
 | `code-review-scoring-code-analysis` | 步驟 3：分析程式碼（確認 CR 意見並轉為扣分項） | `step3/prepared.txt`、`step3/findings.txt` |
-| `code-review-scoring-score` | 步驟 4：打分數 | `step4/score.tsv`、`step4/score.json` |
-| `code-review-scoring-report` | 步驟 5：產出報告（CR 結果＋分數結果） | 最終報告 `reports/<日期>_<PR 標題>.md`，工作副本 `step5/report.md` |
+| `code-review-scoring-score` | 步驟 4：打分數（完整流程中由 `review-state finish` 直接執行腳本） | `step4/score.tsv`、`step4/score.json` |
+| `code-review-scoring-report` | 步驟 5：產出報告（CR 結果＋分數結果；完整流程中由 `review-state finish` 直接執行腳本） | 最終報告 `reports/<日期>_<PR 標題>.md`，工作副本 `step5/report.md` |
 
 ### 執行方式
 
 主 Agent 在開始前會先詢問使用者：
 
-- **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。是否派發 Sub-Agent 由 `configs.ini` 的 `[workflow]` `subagent` 決定：`true` 時由主 Agent 為每一步派發一個 Sub-Agent；`false` 時由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。平台不支援 Sub-Agent 時，即使設為 `true` 也會由主 Agent 逐步執行。
+- **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。是否派發 Sub-Agent 由 `configs.ini` 的 `[workflow]` `subagent` 決定：`true` 時由主 Agent 為步驟 1～3 與每個 CR 外掛各派發一個 Sub-Agent；`false` 時由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。平台不支援 Sub-Agent 時，即使設為 `true` 也會由主 Agent 逐步執行。步驟 4、5 只需要執行腳本，一律由主 Agent 以 `review-state finish` 直接完成，不派發 Sub-Agent。
 - **單一步驟**：直接在對話中執行某一個步驟 Skill，不使用狀態檔。
+
+主 Agent 每次只要執行 `review-state next`，腳本就會印出下一個動作：要執行的步驟 prompt、要轉達的問題、失敗原因、`finish`，或最後的結果摘要。完成後主 Agent 只回覆等級、總分、各面向分數與報告路徑，不會把報告全文貼回對話，完整內容請看 `reports/` 中的檔案。
+
+所有需要交接的內容都寫在 `tmp/`：你在對話中貼上的文件會存成 `tmp/inputs/` 中的檔案，各步驟在提問前會先把目前的成果存檔（例如步驟 3 的 `findings.draft.txt`），回覆後只套用答案，不會整步重做。評分中斷時，在新對話說「繼續評分」即可從 `tmp/` 接續。
 
 ### 設定檢查（完整流程每次執行前）
 
@@ -63,6 +67,7 @@ tmp/
   .gitkeep             保留目錄用
   .gitignore           只有 git 尚未忽略 tmp/ 時才自動產生（* 與 !.gitkeep）
   request.md           主 Agent 記錄 PR、diff 範圍與使用者提供的文件
+  inputs/              使用者在對話中貼上的文件，由主 Agent 存成檔案（--reset 時一併清除）
   stepN-working        Sub-Agent 開始執行
   stepN-pending        Sub-Agent 需要使用者回覆，問題寫在 stepN/questions.md
   stepN-success        步驟完成
@@ -70,13 +75,15 @@ tmp/
   step2-<外掛>-<狀態>   步驟 2 中每個 CR 外掛各自的狀態檔
   step1/ … step5/      各步驟產出；questions.md（步驟提出的問題）、answers.md（使用者回覆）、errors.log（失敗紀錄）
   step2/<外掛>/        files.txt 與 diff.patch（要審查的範圍）、raw/（外掛原始輸出）、cr.txt（整理後的 CR 結果）
+  step3/findings.draft.txt  步驟 3 提問前先存下的扣分項草稿，回覆後從這裡接續
 reports/
   <日期>_<PR 標題>.md   最終報告（CR 結果＋分數結果），步驟 5 成功前必須已發佈到這裡
 ```
 
 - 狀態檔由 Sub-Agent 透過 `review-state` 腳本產生；檔案不存在代表該步驟尚未開始。
-- 腳本會強制把關：前一步不是 `success` 時不能開始下一步；必要產出不存在或已過期時不能標記 `success`；重跑某一步時，後續步驟的狀態會被清除。
-- Sub-Agent 無法直接和使用者對話。需要詢問時寫入 `stepN/questions.md` 並標記 `pending`；主 Agent 詢問使用者、把回覆寫入 `stepN/answers.md` 後，再重新派發同一步。
+- 腳本會強制把關：前一步不是 `success` 時不能開始下一步；必要產出不存在或已過期時不能標記 `success`；重跑某一步時，後續步驟的狀態會被清除。步驟 3 標記 `success` 時會以 `score --check` 驗證 `findings.txt`，格式或位置有誤會當場退回，不必等到步驟 4 才失敗、再整步重做步驟 3。
+- Sub-Agent 無法直接和使用者對話。需要詢問時先把目前成果存檔，再寫入 `stepN/questions.md` 並標記 `pending`；主 Agent 詢問使用者、把回覆寫入 `stepN/answers.md` 後，再重新執行同一步，該步驟會從存檔接續。
+- 常見的嚴重度相關問題（是否跨時區、資料表是否持續成長、是否使用 springdoc）會在步驟 1 與缺少的文件一起詢問，減少步驟 3 再停下來提問的機會。
 - 步驟失敗時，詳細錯誤寫入該步驟目錄的 `errors.log`（例如 `tmp/step4/errors.log`），狀態腳本標記 `failed` 時也會追加一行摘要。
 - 支援的 Sub-Agent 工具：Claude Code 的 Agent 工具、GitHub Copilot（VS Code agent mode）的 `runSubagent`，或其他平台的同等工具。
 
@@ -119,8 +126,10 @@ skills/
   code-review-scoring/
     SKILL.md
     assets/request-template.md
-    assets/prompts/step1.md … step5.md   # 派給各 Sub-Agent 的指令模板（step2.md 為 CR 外掛用）
-    scripts/review-state.{sh,zsh,ps1}     # init / show / cr-plan / prompt / set / config（--help 列出用法）
+    assets/prompts/step1.md … step3.md   # 步驟 1～3 的指令模板（step2.md 為 CR 外掛用）
+    assets/prompts/protocol.md            # 各步驟共用的狀態協定（[sub] / [inline] 開頭的行只用於對應的執行方式）
+    references/setup.md                   # 設定檢查、平台設定、狀態指令與目錄說明（需要時才載入）
+    scripts/review-state.{sh,zsh,ps1}     # init / next / finish / show / cr-plan / prompt / set / config（--help 列出用法）
     scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 plugins.ini、configs.ini（check / wizard / plugins / plugin）
   code-review-scoring-spec-reading/
     SKILL.md
@@ -212,7 +221,7 @@ merge="true"
   - `merge="false"`（預設）：不合併，每一處問題各自是一筆扣分項，同一個檢查代碼出現在三處就扣三次。
   - `merge="true"`：合併，同一個檢查代碼只寫一筆並列出所有位置，只扣一次。
   - 分析程式碼步驟會從 `prepared.txt` 摘要的 `- deductions:` 一行得知目前的方式；面向得分最低為 0。
-- 修改後重新執行打分數（步驟 4）與產出報告（步驟 5）即可生效；範例見 `configs.example.ini`。第一次建立的 `configs.ini` 會從範本複製，配分區段預設為註解。
+- 修改後重新執行打分數（步驟 4）與產出報告（步驟 5）即可生效（完整流程中執行 `review-state finish`）；範例見 `configs.example.ini`。第一次建立的 `configs.ini` 會從範本複製，配分區段預設為註解。
 
 ## 調整報告
 
@@ -298,8 +307,8 @@ mode="advisory"
 
 ### 外掛在流程中的執行方式（步驟 2）
 
-1. 步驟 1 成功後，主 Agent 執行 `review-state cr-plan`：依 PR 實際異動的檔案（排除建置產物、自動產生檔與 lock 檔）比對每個外掛的 `applies`，決定要執行哪些外掛。各外掛要審查的檔案寫在 `tmp/step2/<外掛>/files.txt`，並切出只含這些檔案的 `diff.patch`。沒有任何外掛適用時，步驟 2 直接視為完成。
-2. 每個適用的外掛由一個 Sub-Agent 依序執行（不支援 Sub-Agent 的平台由主 Agent 自己執行），一樣遵守狀態協定，狀態檔為 `tmp/step2-<外掛>-<狀態>`。
+1. 步驟 1 成功後，執行 `review-state cr-plan`：依 PR 實際異動的檔案（排除建置產物、自動產生檔與 lock 檔）比對每個外掛的 `applies`，決定要執行哪些外掛。各外掛要審查的檔案寫在 `tmp/step2/<外掛>/files.txt`，並切出只含這些檔案的 `diff.patch`。沒有任何外掛適用時，步驟 2 直接視為完成。
+2. 每個適用的外掛由一個 Sub-Agent 依序執行（不支援 Sub-Agent 的平台由主 Agent 自己執行），一樣遵守狀態協定，狀態檔為 `tmp/step2-<外掛>-<狀態>`。`review-state next` 在步驟 2 尚未規劃時會自動執行 `cr-plan`。
 3. 外掛只讀自己的 `diff.patch`，依自己的規範審查，原始輸出放在 `tmp/step2/<外掛>/raw/`，再整理成統一格式的 `cr.txt`：
 
    ```text
@@ -361,10 +370,10 @@ mode="advisory"
 
 - `link-skills`：依 `skills/` 與 `plugins.ini` 同步各工具的 Skill 連結，並在變更前檢查名稱與設定。
 - `setup`：每次執行完整流程前檢查 `plugins.ini` 與 `configs.ini`，並以逐步詢問或指令的方式建立，登記外掛時先驗證，避免設定錯誤到 CR 步驟才發現。
-- `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生 Sub-Agent 指令，並強制依序執行。
+- `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
 - `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以規則表列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。
-- `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs.ini` 的配分計算分數與等級，避免 AI 計算錯誤。
+- `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs.ini` 的配分計算分數與等級，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
 
 腳本的提示、訊息與註解一律使用英文，避免主控台編碼不同時出現亂碼。報告中由腳本插入的中文用語（含全形括號、冒號等符號）都放在 `skills/code-review-scoring-report/assets/labels.tsv`。

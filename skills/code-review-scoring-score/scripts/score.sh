@@ -15,6 +15,8 @@ Usage: score.sh [--root DIR] [options]
   -g, --git RANGE      run git diff RANGE as the verification diff
   -r, --repo DIR       repository for --git
   -o, --out-dir DIR    where score.tsv / score.json are written (default: ROOT/step4 or the findings dir)
+      --check          validate findings.txt only (same checks, exit codes 0/1/2/3), write nothing; step 3 runs it
+                       before reporting success
       --config FILE    scoring settings: [points], [deductions] (incl. merge) and [grades] (default: configs.ini in the
                        project root; settings that are not given keep the defaults)
   -h, --help           show this help
@@ -27,7 +29,7 @@ USAGE
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Project root (two levels above the physical skill folder) holds tmp/, reports/ and configs.ini.
 project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
-root="" findings="" diff="" git_range="" repo="." out_dir="" config="$project_root/configs.ini" crdir=""
+root="" findings="" diff="" git_range="" repo="." out_dir="" config="$project_root/configs.ini" crdir="" check=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -37,6 +39,7 @@ while [[ $# -gt 0 ]]; do
     -r|--repo) repo="${2:?--repo needs a value}"; shift 2 ;;
     -o|--out-dir) out_dir="${2:?--out-dir needs a value}"; shift 2 ;;
     --config) config="${2:?--config needs a value}"; shift 2 ;;
+    --check) check=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
@@ -47,7 +50,7 @@ if [[ -n "$root" ]]; then
   [[ -z "$findings" ]] && findings="$root/step3/findings.txt"
   crdir="$root/step2"
   [[ -z "$diff" && -z "$git_range" && -f "$root/step1/pr.diff" ]] && diff="$root/step1/pr.diff"
-  [[ -z "$out_dir" ]] && { mkdir -p "$root/step4"; out_dir="$root/step4"; }
+  [[ -z "$out_dir" && $check -eq 0 ]] && { mkdir -p "$root/step4"; out_dir="$root/step4"; }
   # Scoring must wait until every input is resolved and every question is answered.
   ctx="$root/step1/spec-context.md"
   if [[ -f "$ctx" ]]; then
@@ -86,8 +89,8 @@ else
   echo "note: no diff given, location checks skipped" >&2
 fi
 
-rm -f "$out_dir/score.tsv" "$out_dir/score.json"
+[[ $check -eq 1 ]] || rm -f "$out_dir/score.tsv" "$out_dir/score.json"
 LC_ALL=C awk -v rules="$script_dir/rules.tsv" -v idxfile="$idx" -v config="$config" -v crdir="$crdir" \
-  -v tsvout="$out_dir/score.tsv" -v jsonout="$out_dir/score.json" \
+  -v tsvout="$out_dir/score.tsv" -v jsonout="$out_dir/score.json" -v checkonly="$check" \
   -f "$script_dir/lib/score.awk" "$findings"
-echo "wrote ${out_dir}/score.tsv and ${out_dir}/score.json"
+[[ $check -eq 1 ]] || echo "wrote ${out_dir}/score.tsv and ${out_dir}/score.json"

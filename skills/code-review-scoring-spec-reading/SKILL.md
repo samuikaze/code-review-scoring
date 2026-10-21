@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-spec-reading
-description: Step 1 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Saves the PR diff, inventories the inputs (PR description, SD spec, third-party core-system spec, change log, static analysis report, vulnerability scan), collects everything missing in one round of questions, and records requirements and severity facts from the specs in tmp/step1/spec-context.md. Use when dispatched by code-review-scoring, or when the user says 「閱讀規格書」、「先讀 SD 規格書」、「整理 PR 的規格需求」、「盤點評分資料」.
+description: Step 1 of code-review-scoring, usable on its own. Saves the PR diff, inventories the inputs, asks for everything missing in one round, and records requirements and severity facts in tmp/step1/spec-context.md. Use when dispatched by code-review-scoring, or when the user says 「閱讀規格書」、「先讀 SD 規格書」、「整理 PR 的規格需求」、「盤點評分資料」.
 compatibility: Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "1/5"
@@ -33,9 +33,9 @@ PowerShell parameters are `-Git`, `-Repo`, `-InputPath`, `-Root`, `-Title`, `-Fo
 
 - [ ] 1. If `tmp/step1/spec-context.md` does not exist, run `init-workspace --git <base>...<head> --repo <repo> --title "<PR title>"` (or `--input <diff file>`). Otherwise continue with the existing file.
 - [ ] 2. Fill **PR** and **Purpose of the change** from the PR title and description.
-- [ ] 3. Inventory the inputs in the **Inputs** section: set what you have to `provided`. Collect every missing item into **one** round of questions that says what each item is used for, and set those items to `pending`.
-- [ ] 4. Apply the replies: `provided` or `declined`. Only an explicit "cannot provide" counts as `declined`.
-- [ ] 5. Read the provided documents and fill **Requirements**, **Spec observations**, **Third-party notes**, **Change log** and **Severity facts**.
+- [ ] 3. Inventory the inputs in the **Inputs** section: set what you have to `provided`. Read the provided documents and fill **Requirements**, **Spec observations**, **Third-party notes**, **Change log** and **Severity facts**.
+- [ ] 4. Collect into **one** round of questions every missing input (set it to `pending`) and every severity fact that the documents and the diff do not settle (add it under **Open questions**), saying what each answer is used for. Asking the severity facts now spares step 3 its own round of questions.
+- [ ] 5. Apply the replies: `provided` or `declined`, and fill the severity facts. Only an explicit "cannot provide" counts as `declined`; record "unknown" for a fact the user cannot provide.
 - [ ] 6. Run `check-context`:
   - exit 0 `READY`: the step is complete.
   - exit 1 `NOT READY`: ask about every listed item in one round, record the replies, run again.
@@ -67,11 +67,13 @@ Example questions (written for the user, in their language):
 
 ## What to record from the specs
 
+Every later step reads `spec-context.md`, so keep it short: one line per item, a summary in your own words plus the `path:line` of the source, never copied spec text. Read only the parts of long documents that relate to the changed files and the PR's purpose.
+
 - **Requirements:** one line per requirement with its source (document, version, section). When the document is a file, also write its full path and line numbers (`path:line` or `path:start-end`); code review comments cite them as spec locations. A8 compares against these.
 - **Spec observations:** places where the spec is missing something, wrong or ambiguous, with the exact section. Do not judge them here.
 - **Third-party notes:** vendor spec versions, known vendor issues and ticket numbers.
 - **Change log:** spec, interface or process changes with date, before/after version, and whether they were written or verbal only. Compliance is judged against the version **in effect when development started**.
-- **Severity facts:** cross-timezone business (A7), tables that keep growing and their size (E2), whether the project uses springdoc (G4), issues the static analysis already reports, vulnerable dependencies (B9).
+- **Severity facts:** cross-timezone business (A7), tables that keep growing and their size (E2), whether the project uses springdoc (G4), issues the static analysis already reports, vulnerable dependencies (B9). Fill each one that the diff or the documents settle; ask about the others in the same round as the missing inputs (A7 and E2 only when the diff touches time handling or queries).
 
 ## Gotchas
 

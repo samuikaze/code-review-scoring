@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-report
-description: Step 5 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Renders one final report that combines the code review results and the score results to reports/ (working copy in tmp/step5/report.md) from the earlier steps (spec-context.md, findings.txt, score.tsv, score.json, step4 code review results) using an editable report template and label file, then presents it. Use when dispatched by code-review-scoring, or when the user says 「產出分數報告」、「產生評分報告」、「輸出 PR 評分結果」、「給我評分報告」、「調整報告模板」.
+description: Step 5 of code-review-scoring, usable on its own. Renders the final report (code review results and score results) to reports/ from the earlier steps' files with an editable template and label file. Use when the user says 「產出分數報告」、「產生評分報告」、「輸出 PR 評分結果」、「給我評分報告」、「調整報告模板」.
 compatibility: Requires bash or zsh with awk, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "5/5"
@@ -16,8 +16,8 @@ Render the review report: part one holds the code review results of every plugin
 
 ## Modes
 
-- **Workflow mode:** you were dispatched by `code-review-scoring` with a prompt that contains a status command. Follow that prompt; do not paste the report, the main agent presents it.
-- **Standalone mode:** the user invoked this skill directly. First ask whether they want the full workflow (then switch to `code-review-scoring`) or only this step. For this step only: write no status files and present the report yourself (procedure step 4).
+- **Workflow mode:** `code-review-scoring` runs this step's script itself with `review-state finish`; no agent is dispatched.
+- **Standalone mode:** the user invoked this skill directly. First ask whether they want the full workflow (then switch to `code-review-scoring`) or only this step. For this step only: write no status files and present the result yourself (procedure step 4).
 
 ## Script
 
@@ -36,7 +36,7 @@ The final report name is built from the render date and the PR title, with chara
 1. Run `render-report`.
 2. Exit 1 means the scores are missing or older than `findings.txt` (rerun `code-review-scoring-score`), or a planned code review plugin has no `cr.txt` yet (finish step 2). Then retry.
 3. A warning about an unknown placeholder means the template has a typo or a block placeholder that is not alone on its line; fix the template.
-4. Standalone mode: reply with the content of the published report (path in the `published` output line) exactly as rendered, followed by one line with its path.
+4. Standalone mode: reply with the grade, the total and the dimension scores (from `tmp/step4/score.tsv`) and the path of the published report (the `published` output line). Do not paste the report; show its content only when the user asks.
 
 ## Customizing the report
 

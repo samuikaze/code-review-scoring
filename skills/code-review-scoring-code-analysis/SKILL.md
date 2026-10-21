@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-code-analysis
-description: Step 3 of the code-review-scoring workflow (read specs → code review → analyze code → score → report), usable on its own. Reviews the added and changed lines of a PR against the built-in Java Spring Boot 3 checklist (A correctness, B security, C tests, D architecture, E performance, F readability, G maintainability), turns confirmed comments of the code review plugins into findings, separates suspected upstream causes (spec gaps, third-party issues, ownership changes), and writes tmp/step3/findings.txt for scoring. Use when dispatched by code-review-scoring, or when the user says 「分析 PR 程式碼」、「審查程式碼」、「Code Review 這個 PR」、「找出 PR 的問題」、「檢查 PR 程式碼品質」.
+description: Step 3 of code-review-scoring, usable on its own. Reviews the changed lines of a PR against the built-in Java Spring Boot 3 checklist (A–G), turns confirmed code review plugin comments into findings, separates suspected upstream causes, and writes tmp/step3/findings.txt. Use when dispatched by code-review-scoring, or when the user says 「分析 PR 程式碼」、「審查程式碼」、「Code Review 這個 PR」、「找出 PR 的問題」、「檢查 PR 程式碼品質」.
 compatibility: Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "3/5"
@@ -11,12 +11,12 @@ metadata:
 
 Find the problems in the PR and record them as findings. Do not calculate scores here.
 
-**Input:** `tmp/step1/pr.diff` and `tmp/step1/spec-context.md` from `code-review-scoring-spec-reading`, and the code review results of step 2: `tmp/step2/plan.tsv` and `tmp/step2/<plugin>/cr.txt` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one).
+**Input:** `tmp/step1/pr.diff` (read through `prepare-diff`) and `tmp/step1/spec-context.md` from `code-review-scoring-spec-reading`, and the code review results of step 2: `tmp/step2/plan.tsv` and `tmp/step2/<plugin>/cr.txt` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one).
 **Output:** `tmp/step3/prepared.txt` and `tmp/step3/findings.txt`.
 
 ## Modes
 
-- **Workflow mode:** you were dispatched by `code-review-scoring` with a prompt that contains a status command. Follow that prompt's status protocol. You cannot talk to the user: questions go to `tmp/step3/questions.md`, replies arrive in `tmp/step3/answers.md`.
+- **Workflow mode:** you were dispatched by `code-review-scoring` with a prompt that contains a status command. Follow that prompt's status protocol. You cannot talk to the user: questions go to `tmp/step3/questions.md`, replies arrive in `tmp/step3/answers.md`. The success gate runs `score --check`.
 - **Standalone mode:** the user invoked this skill directly. First ask whether they want the full workflow (then switch to `code-review-scoring`) or only this step. For this step only: ask the user directly, write no status files, and when done suggest `code-review-scoring-score`. Without step 1 output, use `prepare-diff --git <range>` or `--input <file>` and collect the PR description and documents from the user yourself. Without step 2 output, skip "Using code review results".
 
 Apply every rule literally. When no check covers a problem, record it with check id `-` (see the severity rules).
@@ -29,7 +29,9 @@ Apply every rule literally. When no check covers a problem, record it with check
 | --- | --- | --- |
 | `bash scripts/prepare-diff.sh` | `zsh scripts/prepare-diff.zsh` | `powershell -ExecutionPolicy Bypass -File scripts/prepare-diff.ps1` |
 
-It writes `tmp/step3/prepared.txt`: a summary, the candidates, and the compact diff. Read the file in parts when it is long. Use `--mode summary|scan|view` to print one part only.
+It writes `tmp/step3/prepared.txt`: a summary, the code review comments, the candidates, and the compact diff with new-file line numbers. It replaces `pr.diff`: do not read both. Read it in parts when it is long, or use `--mode summary|scan|view` to print one part only.
+
+`score --check` of `code-review-scoring-score` (`scripts/score.sh`, `.zsh` or `.ps1 -Check` in that skill) validates `findings.txt` with the same rules as scoring and writes nothing.
 
 ## Procedure
 
@@ -39,9 +41,9 @@ It writes `tmp/step3/prepared.txt`: a summary, the candidates, and the compact d
 - [ ] 4. Read [references/checks.md](references/checks.md) and go through **every** check against the added and changed lines. Checks already settled in step 3 only need the remaining locations.
 - [ ] 5. For each problem, decide whether the root cause is upstream. When you suspect it is, read [references/upstream.md](references/upstream.md). Suspected upstream problems are recorded as `U`, never as `F`.
 - [ ] 6. Choose each severity with the rules below.
-- [ ] 7. If you need information from the user (row counts, cross-timezone business, springdoc usage, …), note the questions while reading. After the whole diff is reviewed, ask all of them in **one** round (workflow mode: `tmp/step3/questions.md`) and apply the replies.
+- [ ] 7. If you need information from the user (row counts, cross-timezone business, springdoc usage, …), first look in **Severity facts** and **Open questions** of `spec-context.md`; step 1 usually asked already. Note only what is still missing. After the whole diff is reviewed, ask all of it in **one** round (workflow mode: save every finding so far to `tmp/step3/findings.draft.txt`, then `tmp/step3/questions.md`). On the rerun, start from the draft and change only the findings the answers affect.
 - [ ] 8. Write `tmp/step3/findings.txt` in the format of [references/findings-format.md](references/findings-format.md).
-- [ ] 9. Run the self-check at the end of this file.
+- [ ] 9. Run `score --check` and fix every error; then run the self-check at the end of this file.
 
 ## Using code review results
 
