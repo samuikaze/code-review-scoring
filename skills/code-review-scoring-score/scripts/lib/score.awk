@@ -2,7 +2,7 @@
 # Variables: rules=rules.tsv  idxfile=output of diff-index.awk ("" = skip location checks)
 #            config=configs.ini with the [points], [deductions] (incl. merge) and [grades] sections ("" or missing file = defaults)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = skip the code review comment checks)
-#            tsvout / jsonout = output files
+#            tsvout / jsonout = output files  checkonly=1: validate only, write nothing
 # Input: findings.txt (format: see references/findings-format.md of code-review-scoring-code-analysis).
 # On validation errors: errors go to stderr, nothing is written, exit 1.
 
@@ -208,6 +208,11 @@ END {
         printf "validation failed with %d error(s). Fix findings.txt and run again:\n%s", nerr, errs > "/dev/stderr"
         if (nwarn > 0) printf "warnings:\n%s", warns > "/dev/stderr"
         exit 1
+    }
+    if (checkonly) {
+        printf "findings.txt is valid (%d deductions, %d upstream, %d rejected comments)\n", nf_, nu, nx
+        if (nwarn > 0) printf "warnings:\n%s", warns > "/dev/stderr"
+        exit 0
     }
     # stable insertion sort by severity, then check id with records without one (-) last;
     # occurrences of one id keep their order in findings.txt

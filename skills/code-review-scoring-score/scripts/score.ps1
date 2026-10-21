@@ -10,6 +10,7 @@ With -Findings: standalone use without the root layout.
 Scoring settings come from the [points], [deductions] (incl. merge) and [grades] sections of -Config (default: configs.ini in
 the project root); settings that are not given keep the defaults. Works on Windows PowerShell 5.1 and PowerShell 7+.
 Saved as UTF-8 with BOM; keep that encoding.
+With -Check: validate findings.txt only (same checks and exit codes) and write nothing; step 3 runs it before reporting success.
 Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad arguments or invalid scoring settings,
 3 spec-context.md still has unresolved inputs or questions.
 
@@ -24,7 +25,8 @@ param(
     [Alias('g')][string]$Git,
     [Alias('r')][string]$Repo = '.',
     [Alias('o')][string]$OutDir,
-    [string]$Config
+    [string]$Config,
+    [switch]$Check
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,7 +40,7 @@ if ($Root) {
     if (-not [IO.Directory]::Exists((Resolve-UserPath $Root))) { Exit-WithError "review root not found: $Root" }
     if (-not $Findings) { $Findings = Join-Path $Root 'step3/findings.txt' }
     if (-not $Diff -and -not $Git -and (Test-UserFile (Join-Path $Root 'step1/pr.diff'))) { $Diff = Join-Path $Root 'step1/pr.diff' }
-    if (-not $OutDir) {
+    if (-not $OutDir -and -not $Check) {
         $OutDir = Join-Path $Root 'step4'
         [void][IO.Directory]::CreateDirectory((Resolve-UserPath $OutDir))
     }
@@ -291,13 +293,18 @@ foreach ($e in $commentMode.Keys) {
 }
 
 $tsvPath = Join-Path $OutDir 'score.tsv'; $jsonPath = Join-Path $OutDir 'score.json'
-foreach ($old in $tsvPath, $jsonPath) { if (Test-UserFile $old) { [IO.File]::Delete((Resolve-UserPath $old)) } }
+if (-not $Check) { foreach ($old in $tsvPath, $jsonPath) { if (Test-UserFile $old) { [IO.File]::Delete((Resolve-UserPath $old)) } } }
 
 if ($errors.Count -gt 0) {
     [Console]::Error.WriteLine("validation failed with $($errors.Count) error(s). Fix findings.txt and run again:")
     $errors | ForEach-Object { [Console]::Error.WriteLine($_) }
     if ($warnings.Count -gt 0) { [Console]::Error.WriteLine('warnings:'); $warnings | ForEach-Object { [Console]::Error.WriteLine($_) } }
     exit 1
+}
+if ($Check) {
+    [Console]::Out.Write("findings.txt is valid ($($found.Count) deductions, $($upstream.Count) upstream, $($rejected.Count) rejected comments)`n")
+    if ($warnings.Count -gt 0) { [Console]::Error.WriteLine('warnings:'); $warnings | ForEach-Object { [Console]::Error.WriteLine($_) } }
+    exit 0
 }
 
 function ConvertTo-JsonString([string]$s) {
