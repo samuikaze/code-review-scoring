@@ -133,6 +133,8 @@ skills/
     references/setup.md                   # 設定檢查、平台設定、狀態指令與目錄說明（需要時才載入）
     scripts/review-state.{sh,zsh,ps1}     # init / next / finish / show / cr-plan / prompt / set / config（--help 列出用法）
     scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 configs/plugins.ini、configs/settings.ini（check / wizard / plugins / plugin）
+    scripts/standard.{sh,zsh,ps1}         # 評分標準的 lint / parse / diff（lint 只在撰寫標準時執行）
+    scripts/lib/standard.{awk,ps1}        # 評分標準的解析器（awk 供 bash、zsh 共用，PowerShell 版規則與訊息相同）
   code-review-scoring-spec-reading/
     SKILL.md
     assets/spec-context-template.md
@@ -162,6 +164,9 @@ configs/                                  # 設定檔（只有 *.example.ini 進
   standards.example.ini                   # 評分標準清單範本（複製為 standards.ini 使用）
 docs/
   notices.md                              # 注意事項（GitHub Copilot 適用性）
+  templates/scoring-rule-template.md      # 評分標準文件的模板
+tests/
+  standards/                              # 評分標準 lint 的測試案例；compare.sh 比對三種 shell 的輸出與 expected.txt
 tmp/                                      # 評分過程的暫存檔（所有腳本的預設 review root，不進版控）
 reports/                                  # 最終版分數報告（tmp/ 旁的 reports/，不進版控）
 .gitattributes                            # 固定腳本與設定檔的換行格式
@@ -377,6 +382,7 @@ mode="advisory"
 - `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
 - `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以規則表列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。
+- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度拼字、代碼重複、面向是否齊全、`standards.ini` 的配分加總與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只呼叫 `parse`，格式正確時不輸出任何內容，不耗用 Token。
 - `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs/settings.ini` 的配分計算分數與等級，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
 
