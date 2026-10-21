@@ -1,0 +1,361 @@
+### --input pr.diff --config none.ini --standards standards.ini
+## Summary
+- standard: legacy v1.0; the files it does not cover ([common]) use the common standard common v0.1
+- deductions: not merged (merge=false): one F line per location; every occurrence is deducted
+- reviewable files: 9, excluded: 4; main code changed: 2, test files: 1, migrations: 1, common standard files: 4
+  - src/main/java/com/ex/order/OrderController.java [added +21 -0]
+  - src/main/java/com/ex/order/OrderService.java [modified +17 -1]
+  - src/test/java/com/ex/order/OrderControllerTest.java [added +8 -0] [test]
+  - src/main/resources/db/migration/V1__init.sql [modified +1 -0] [migration]
+  - (excluded: deleted file) src/main/resources/db/migration/V2__old.sql
+  - src/main/resources/application.yml [modified +5 -0]
+  - README.md [modified +3 -0] [common]
+  - .github/workflows/ci.yml [added +7 -0] [common]
+  - scripts/deploy.sh [added +4 -0] [common]
+  - Dockerfile [added +2 -0] [common]
+  - (excluded: lock file) package-lock.json
+  - (excluded: build output / generated) build/generated/Gen.java
+  - (excluded: marked as generated) src/main/java/com/ex/Mapper.java
+
+## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
+- G6: existing migration file modified
+  - src/main/resources/db/migration/V1__init.sql (modified)
+  - src/main/resources/db/migration/V2__old.sql (deleted)
+- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+  - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
+- A1 (1 hits) possible Optional.get() without check
+  - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
+- A2 (1 hits) money-like variable uses double/float
+  - src/main/java/com/ex/order/OrderService.java:16  double totalPrice = o.getQty() * 1.5;
+- A3 (1 hits) @Transactional on a private method
+  - src/main/java/com/ex/order/OrderService.java:15  private void save(Order o) throws IOException {
+- A4 (1 hits) @Transactional method throws without rollbackFor (check if checked exception)
+  - src/main/java/com/ex/order/OrderService.java:15  private void save(Order o) throws IOException {
+- A5 (2 hits) empty catch block
+  - src/main/java/com/ex/order/OrderService.java:27  } catch (Exception e) {}
+  - src/main/java/com/ex/order/OrderService.java:28  }
+- A7 (1 hits) Date/Calendar or no explicit time zone
+  - src/main/java/com/ex/order/OrderService.java:23  Date now = new Date();
+- B1 (1 hits) possible hard-coded password/token/key
+  - src/main/java/com/ex/order/OrderService.java:12  private static final String password = "s3cr3tvalue";
+- B2 (1 hits) possible SQL/JPQL built by string concatenation
+  - src/main/java/com/ex/order/OrderService.java:22  String q = "select * from orders where id = " + o.getId();
+- B4 (1 hits) @RequestBody without @Valid
+  - src/main/java/com/ex/order/OrderController.java:10  public Order create(@RequestBody Order order) {
+- B7 (1 hits) error response includes stack trace
+  - src/main/resources/application.yml:6  include-stacktrace: always
+- B8 (1 hits) CORS allows any origin; check whether credentials are allowed too
+  - src/main/resources/application.yml:8  allowed-origins: "*"
+- C3 (1 hits) assertNotNull only? check for meaningful assertions
+  - src/test/java/com/ex/order/OrderControllerTest.java:6  assertNotNull(controller);
+- C4 (1 hits) Controller/Repository test uses @SpringBootTest
+  - src/test/java/com/ex/order/OrderControllerTest.java:1  @SpringBootTest
+- C6 (1 hits) test order dependency or Thread.sleep
+  - src/test/java/com/ex/order/OrderControllerTest.java:5  Thread.sleep(100);
+- C7 (1 hits) test name does not state scenario and expectation
+  - src/test/java/com/ex/order/OrderControllerTest.java:4  void test1() throws Exception {
+- D1 (1 hits) Controller uses a Repository directly
+  - src/main/java/com/ex/order/OrderController.java:7  private final OrderRepository orderRepository;
+- D2 (1 hits) Controller imports an Entity; check if used as request/response
+  - src/main/java/com/ex/order/OrderController.java:3  import com.ex.order.entity.Order;
+- D4 (1 hits) field injection
+  - src/main/java/com/ex/order/OrderService.java:11  @Autowired private OrderRepository repo;
+- D5 (1 hits) exception handled inside Controller; check @RestControllerAdvice + ProblemDetail
+  - src/main/java/com/ex/order/OrderController.java:19  @ExceptionHandler(IllegalStateException.class)
+- E1 (1 hits) query inside a loop (N+1)
+  - src/main/java/com/ex/order/OrderService.java:20  repo.findByCustomer(a.getCustomer());
+- E2 (1 hits) unpaged query; check whether the table keeps growing
+  - src/main/java/com/ex/order/OrderService.java:18  List<Order> all = repo.findAll();
+- E4 (1 hits) external call; check timeout/retry/circuit breaker
+  - src/main/java/com/ex/order/OrderService.java:24  RestTemplate rt = new RestTemplate();
+- F3 (1 hits) possible magic number
+  - src/main/java/com/ex/order/OrderController.java:11  if (order.getQty() > 100) {
+- F5 (1 hits) System.out or commented-out code
+  - src/main/java/com/ex/order/OrderController.java:12  System.out.println("big order");
+- G2 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
+  - src/main/java/com/ex/order/OrderService.java:26  rt.getForObject("http://pay.example.com/api", String.class);
+- G3 (1 hits) log message built by concatenation
+  - src/main/java/com/ex/order/OrderController.java:15  log.info("created " + order.getId());
+- G5 (1 hits) TODO without issue number
+  - src/main/java/com/ex/order/OrderController.java:14  // TODO handle errors
+- CM-A1 (1 hits) unpinned base image
+  - Dockerfile:1  FROM eclipse-temurin:latest
+- CM-B1 (3 hits) downloaded script piped to a shell
+  - .github/workflows/ci.yml:6  - run: curl -s https://get.example.com | sh
+  - scripts/deploy.sh:3  curl -fsSL https://get.example.com/install | bash
+  - scripts/deploy.sh:4  echo "token=abcdef123456"
+
+## Compact diff (+ = added line; numbers are new-file line numbers, cite these in findings)
+
+=== src/main/java/com/ex/order/OrderController.java [added +21 -0]
+@@ -0,0 +1,21 @@
++    1  package com.ex.order;
++    2  
++    3  import com.ex.order.entity.Order;
++    4  
++    5  @RestController
++    6  public class OrderController {
++    7      private final OrderRepository orderRepository;
++    8  
++    9      @PostMapping("/orders")
++   10      public Order create(@RequestBody Order order) {
++   11          if (order.getQty() > 100) {
++   12              System.out.println("big order");
++   13          }
++   14          // TODO handle errors
++   15          log.info("created " + order.getId());
++   16          return orderRepository.save(order);
++   17      }
++   18  
++   19      @ExceptionHandler(IllegalStateException.class)
++   20      public String handle() { return "error"; }
++   21  }
+
+=== src/main/java/com/ex/order/OrderService.java [modified +17 -1]
+@@ -10,4 +10,20 @@ class
+    10  public class OrderService {
+-           private int unused;
++   11      @Autowired private OrderRepository repo;
++   12      private static final String password = "s3cr3tvalue";
+    13  
++   14      @Transactional
++   15      private void save(Order o) throws IOException {
++   16          double totalPrice = o.getQty() * 1.5;
++   17          Order x = repo.findById(o.getId()).get();
++   18          List<Order> all = repo.findAll();
++   19          for (Order a : all) {
++   20              repo.findByCustomer(a.getCustomer());
++   21          }
++   22          String q = "select * from orders where id = " + o.getId();
++   23          Date now = new Date();
++   24          RestTemplate rt = new RestTemplate();
++   25          try {
++   26              rt.getForObject("http://pay.example.com/api", String.class);
++   27          } catch (Exception e) {}
++   28      }
+    29  }
+
+=== src/test/java/com/ex/order/OrderControllerTest.java [added +8 -0]
+@@ -0,0 +1,8 @@
++    1  @SpringBootTest
++    2  class OrderControllerTest {
++    3      @Test
++    4      void test1() throws Exception {
++    5          Thread.sleep(100);
++    6          assertNotNull(controller);
++    7      }
++    8  }
+
+=== src/main/resources/db/migration/V1__init.sql [modified +1 -0]
+@@ -1,1 +1,2 @@ class
+     1  create table orders (id bigint primary key);
++    2  alter table orders add column qty int;
+
+=== src/main/resources/application.yml [modified +5 -0]
+@@ -3,1 +3,6 @@ class
+     3  server:
++    4    # password: notreal
++    5    error:
++    6      include-stacktrace: always
++    7  cors:
++    8    allowed-origins: "*"
+
+=== README.md [modified +3 -0]
+@@ -1,1 +1,4 @@ class
+     1  # Orders
++    2  
++    3  TODO: document the API
++    4  <!-- password: hidden1 -->
+
+=== .github/workflows/ci.yml [added +7 -0]
+@@ -0,0 +1,7 @@
++    1  on: push
++    2  jobs:
++    3    build:
++    4      runs-on: ubuntu-latest
++    5      steps:
++    6        - run: curl -s https://get.example.com | sh
++    7        # TODO pin the action versions
+
+=== scripts/deploy.sh [added +4 -0]
+@@ -0,0 +1,4 @@
++    1  #!/bin/bash
++    2  # TODO: add set -e
++    3  curl -fsSL https://get.example.com/install | bash
++    4  echo "token=abcdef123456"
+
+=== Dockerfile [added +2 -0]
+@@ -0,0 +1,2 @@
++    1  FROM eclipse-temurin:latest
++    2  COPY target/app.jar /app.jar
+exit=0
+### --input no-test.diff --mode scan --config none.ini --standards standards.ini
+## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
+- C1: main code changed but the PR touches no test file (meets the C1 Critical condition if the change is business logic)
+- G6: existing migration file modified
+  - src/main/resources/db/migration/V1__init.sql (modified)
+  - src/main/resources/db/migration/V2__old.sql (deleted)
+- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+  - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
+- A1 (1 hits) possible Optional.get() without check
+  - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
+- A2 (1 hits) money-like variable uses double/float
+  - src/main/java/com/ex/order/OrderService.java:16  double totalPrice = o.getQty() * 1.5;
+- A3 (1 hits) @Transactional on a private method
+  - src/main/java/com/ex/order/OrderService.java:15  private void save(Order o) throws IOException {
+- A4 (1 hits) @Transactional method throws without rollbackFor (check if checked exception)
+  - src/main/java/com/ex/order/OrderService.java:15  private void save(Order o) throws IOException {
+- A5 (2 hits) empty catch block
+  - src/main/java/com/ex/order/OrderService.java:27  } catch (Exception e) {}
+  - src/main/java/com/ex/order/OrderService.java:28  }
+- A7 (1 hits) Date/Calendar or no explicit time zone
+  - src/main/java/com/ex/order/OrderService.java:23  Date now = new Date();
+- B1 (1 hits) possible hard-coded password/token/key
+  - src/main/java/com/ex/order/OrderService.java:12  private static final String password = "s3cr3tvalue";
+- B2 (1 hits) possible SQL/JPQL built by string concatenation
+  - src/main/java/com/ex/order/OrderService.java:22  String q = "select * from orders where id = " + o.getId();
+- B4 (1 hits) @RequestBody without @Valid
+  - src/main/java/com/ex/order/OrderController.java:10  public Order create(@RequestBody Order order) {
+- B7 (1 hits) error response includes stack trace
+  - src/main/resources/application.yml:6  include-stacktrace: always
+- B8 (1 hits) CORS allows any origin; check whether credentials are allowed too
+  - src/main/resources/application.yml:8  allowed-origins: "*"
+- D1 (1 hits) Controller uses a Repository directly
+  - src/main/java/com/ex/order/OrderController.java:7  private final OrderRepository orderRepository;
+- D2 (1 hits) Controller imports an Entity; check if used as request/response
+  - src/main/java/com/ex/order/OrderController.java:3  import com.ex.order.entity.Order;
+- D4 (1 hits) field injection
+  - src/main/java/com/ex/order/OrderService.java:11  @Autowired private OrderRepository repo;
+- D5 (1 hits) exception handled inside Controller; check @RestControllerAdvice + ProblemDetail
+  - src/main/java/com/ex/order/OrderController.java:19  @ExceptionHandler(IllegalStateException.class)
+- E1 (1 hits) query inside a loop (N+1)
+  - src/main/java/com/ex/order/OrderService.java:20  repo.findByCustomer(a.getCustomer());
+- E2 (1 hits) unpaged query; check whether the table keeps growing
+  - src/main/java/com/ex/order/OrderService.java:18  List<Order> all = repo.findAll();
+- E4 (1 hits) external call; check timeout/retry/circuit breaker
+  - src/main/java/com/ex/order/OrderService.java:24  RestTemplate rt = new RestTemplate();
+- F3 (1 hits) possible magic number
+  - src/main/java/com/ex/order/OrderController.java:11  if (order.getQty() > 100) {
+- F5 (1 hits) System.out or commented-out code
+  - src/main/java/com/ex/order/OrderController.java:12  System.out.println("big order");
+- G2 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
+  - src/main/java/com/ex/order/OrderService.java:26  rt.getForObject("http://pay.example.com/api", String.class);
+- G3 (1 hits) log message built by concatenation
+  - src/main/java/com/ex/order/OrderController.java:15  log.info("created " + order.getId());
+- G5 (1 hits) TODO without issue number
+  - src/main/java/com/ex/order/OrderController.java:14  // TODO handle errors
+
+exit=0
+### --input pr.diff --mode scan --config none.ini --standards standards.ini --standard common
+## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
+- CM-A1 (1 hits) unpinned base image
+  - Dockerfile:1  FROM eclipse-temurin:latest
+- CM-B1 (4 hits) possible secret in a file
+  - src/main/java/com/ex/order/OrderService.java:12  private static final String password = "s3cr3tvalue";
+  - .github/workflows/ci.yml:6  - run: curl -s https://get.example.com | sh
+  - scripts/deploy.sh:3  curl -fsSL https://get.example.com/install | bash
+  - scripts/deploy.sh:4  echo "token=abcdef123456"
+
+exit=0
+### --input pr.diff --mode summary --config none.ini --standards standards-noscan.ini
+## Summary
+- standard: legacy v1.0; the files it does not cover are marked [no standard] and are not scored
+- deductions: not merged (merge=false): one F line per location; every occurrence is deducted
+- reviewable files: 9, excluded: 4; files without a standard: 6
+  - src/main/java/com/ex/order/OrderController.java [added +21 -0]
+  - src/main/java/com/ex/order/OrderService.java [modified +17 -1]
+  - src/test/java/com/ex/order/OrderControllerTest.java [added +8 -0]
+  - src/main/resources/db/migration/V1__init.sql [modified +1 -0] [no standard]
+  - (excluded: deleted file) src/main/resources/db/migration/V2__old.sql
+  - src/main/resources/application.yml [modified +5 -0] [no standard]
+  - README.md [modified +3 -0] [no standard]
+  - .github/workflows/ci.yml [added +7 -0] [no standard]
+  - scripts/deploy.sh [added +4 -0] [no standard]
+  - Dockerfile [added +2 -0] [no standard]
+  - (excluded: lock file) package-lock.json
+  - (excluded: build output / generated) build/generated/Gen.java
+  - (excluded: marked as generated) src/main/java/com/ex/Mapper.java
+
+exit=0
+### --input pr.diff --mode scan --config none.ini --standards standards-noscan.ini
+## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
+- none: the standard has no scan rules (scan= in configs/standards.ini)
+
+exit=0
+### --input pr.diff --mode scan --config none.ini --scan legacy.tsv
+## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
+- G6: existing migration file modified
+  - src/main/resources/db/migration/V1__init.sql (modified)
+  - src/main/resources/db/migration/V2__old.sql (deleted)
+- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+  - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
+- A1 (1 hits) possible Optional.get() without check
+  - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
+- A2 (1 hits) money-like variable uses double/float
+  - src/main/java/com/ex/order/OrderService.java:16  double totalPrice = o.getQty() * 1.5;
+- A3 (1 hits) @Transactional on a private method
+  - src/main/java/com/ex/order/OrderService.java:15  private void save(Order o) throws IOException {
+- A4 (1 hits) @Transactional method throws without rollbackFor (check if checked exception)
+  - src/main/java/com/ex/order/OrderService.java:15  private void save(Order o) throws IOException {
+- A5 (2 hits) empty catch block
+  - src/main/java/com/ex/order/OrderService.java:27  } catch (Exception e) {}
+  - src/main/java/com/ex/order/OrderService.java:28  }
+- A7 (1 hits) Date/Calendar or no explicit time zone
+  - src/main/java/com/ex/order/OrderService.java:23  Date now = new Date();
+- B1 (2 hits) possible hard-coded password/token/key
+  - src/main/java/com/ex/order/OrderService.java:12  private static final String password = "s3cr3tvalue";
+  - scripts/deploy.sh:4  echo "token=abcdef123456"
+- B2 (1 hits) possible SQL/JPQL built by string concatenation
+  - src/main/java/com/ex/order/OrderService.java:22  String q = "select * from orders where id = " + o.getId();
+- B4 (1 hits) @RequestBody without @Valid
+  - src/main/java/com/ex/order/OrderController.java:10  public Order create(@RequestBody Order order) {
+- B7 (1 hits) error response includes stack trace
+  - src/main/resources/application.yml:6  include-stacktrace: always
+- B8 (1 hits) CORS allows any origin; check whether credentials are allowed too
+  - src/main/resources/application.yml:8  allowed-origins: "*"
+- C3 (1 hits) assertNotNull only? check for meaningful assertions
+  - src/test/java/com/ex/order/OrderControllerTest.java:6  assertNotNull(controller);
+- C4 (1 hits) Controller/Repository test uses @SpringBootTest
+  - src/test/java/com/ex/order/OrderControllerTest.java:1  @SpringBootTest
+- C6 (1 hits) test order dependency or Thread.sleep
+  - src/test/java/com/ex/order/OrderControllerTest.java:5  Thread.sleep(100);
+- C7 (1 hits) test name does not state scenario and expectation
+  - src/test/java/com/ex/order/OrderControllerTest.java:4  void test1() throws Exception {
+- D1 (1 hits) Controller uses a Repository directly
+  - src/main/java/com/ex/order/OrderController.java:7  private final OrderRepository orderRepository;
+- D2 (1 hits) Controller imports an Entity; check if used as request/response
+  - src/main/java/com/ex/order/OrderController.java:3  import com.ex.order.entity.Order;
+- D4 (1 hits) field injection
+  - src/main/java/com/ex/order/OrderService.java:11  @Autowired private OrderRepository repo;
+- D5 (1 hits) exception handled inside Controller; check @RestControllerAdvice + ProblemDetail
+  - src/main/java/com/ex/order/OrderController.java:19  @ExceptionHandler(IllegalStateException.class)
+- E1 (1 hits) query inside a loop (N+1)
+  - src/main/java/com/ex/order/OrderService.java:20  repo.findByCustomer(a.getCustomer());
+- E2 (1 hits) unpaged query; check whether the table keeps growing
+  - src/main/java/com/ex/order/OrderService.java:18  List<Order> all = repo.findAll();
+- E4 (1 hits) external call; check timeout/retry/circuit breaker
+  - src/main/java/com/ex/order/OrderService.java:24  RestTemplate rt = new RestTemplate();
+- F3 (1 hits) possible magic number
+  - src/main/java/com/ex/order/OrderController.java:11  if (order.getQty() > 100) {
+- F5 (1 hits) System.out or commented-out code
+  - src/main/java/com/ex/order/OrderController.java:12  System.out.println("big order");
+- G2 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
+  - src/main/java/com/ex/order/OrderService.java:26  rt.getForObject("http://pay.example.com/api", String.class);
+- G3 (1 hits) log message built by concatenation
+  - src/main/java/com/ex/order/OrderController.java:15  log.info("created " + order.getId());
+- G5 (4 hits) TODO without issue number
+  - src/main/java/com/ex/order/OrderController.java:14  // TODO handle errors
+  - README.md:3  TODO: document the API
+  - .github/workflows/ci.yml:7  # TODO pin the action versions
+  - scripts/deploy.sh:2  # TODO: add set -e
+
+exit=0
+### --input pr.diff --mode scan --config none.ini --scan bad.tsv
+error: bad.tsv:2: not a valid scan rule line; run standard lint first
+exit=2
+### --input pr.diff --config none.ini --standards missing.ini
+error: missing.ini: file not found; copy configs/standards.example.ini to configs/standards.ini
+exit=2
+### --input pr.diff --config none.ini --standards standards.ini --standard nope
+error: standards.ini: [nope] is not registered
+exit=2

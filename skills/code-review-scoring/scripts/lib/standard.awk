@@ -342,10 +342,26 @@ function std_line(l,   k, v, x) {
     else diag("error", FNR, "unknown key " k " (path, scan, applies, role, points.A to points.G)")
 }
 
-function std_end(   i, j, s, n, p, a, x, sum, ncommon) {
+# The applies patterns as one regex for the path relative to the repository root (POSIX ERE and .NET read it the
+# same way): a pattern without / matches the file name, one with / the whole path; ** crosses directories.
+function glob_re(p,   i, n, c, r) {
+    r = (index(p, "/") ? "^" : "(^|/)"); sub(/^\//, "", p); n = length(p)
+    for (i = 1; i <= n; i++) {
+        c = substr(p, i, 1)
+        if (substr(p, i, 3) == "**/") { r = r "(.*/)?"; i += 2 }
+        else if (substr(p, i, 2) == "**") { r = r ".*"; i++ }
+        else if (c == "*") r = r "[^/]*"
+        else if (c == "?") r = r "[^/]"
+        else if (index(".+()^$|{}[]\\", c)) r = r "\\" c
+        else r = r c
+    }
+    return "(" r "$)"
+}
+
+function std_end(   i, j, s, n, p, a, x, sum, ncommon, re) {
     if (!nstd) { diag("error", "", "no standard is registered; add a [name] section with path=\"...\""); return }
     for (i = 1; i <= nstd; i++) {
-        s = order[i]
+        s = order[i]; re = ""
         if (val[s, "path"] == "") diag("error", stdl[s], "[" s "] has no path")
         if (val[s, "role"] != "" && val[s, "role"] != "common") diag("error", vall[s, "role"], "role is \"common\" or not set, not \"" val[s, "role"] "\"")
         if (val[s, "role"] == "common") {
@@ -357,6 +373,7 @@ function std_end(   i, j, s, n, p, a, x, sum, ncommon) {
             n = split(val[s, "applies"], a, ",")
             for (j = 1; j <= n; j++) {
                 p = trim(a[j]); if (p == "") continue
+                re = re (re == "" ? "" : "|") glob_re(p)
                 if ((p in owner) && owner[p] != s) diag("error", vall[s, "applies"], "the pattern " p " is also in [" owner[p] "]; a file may belong to one framework standard only")
                 else owner[p] = s
             }
@@ -368,6 +385,7 @@ function std_end(   i, j, s, n, p, a, x, sum, ncommon) {
         }
         # Empty values are written as - so that the shells can read the TAB-separated fields.
         print "std\t" s "\t" stdl[s] "\t" dash(val[s, "path"]) "\t" dash(val[s, "scan"]) "\t" dash(val[s, "role"])
+        if (val[s, "role"] != "common" && re != "") print "applies\t" s "\t" re
         for (j = 1; j <= 7; j++) if ((s SUBSEP LET[j]) in pts) print "points\t" s "\t" LET[j] "\t" pts[s, LET[j]]
     }
     if (!ncommon) diag("warn", "", "no common standard (role=\"common\"); files that no framework standard covers will not be scored")

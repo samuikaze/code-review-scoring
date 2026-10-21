@@ -5,8 +5,11 @@
 *.tsv  text eol=lf
 *.ini  text eol=lf
 *.md   text eol=lf
-# 評分標準 lint 測試的預期輸出，compare.sh 以 LF 比對
+# 測試的預期輸出，compare.sh 以 LF 比對
 tests/**/expected.txt  text eol=lf
+# 測試用的 diff 與 findings 也以 LF 保存，三種 shell 讀到相同的內容
+tests/**/*.diff  text eol=lf
+tests/**/*.txt   text eol=lf
 
 # PowerShell 腳本以 UTF-8 with BOM 儲存，換行交給 git 依平台處理
 *.ps1  text

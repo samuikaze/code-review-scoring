@@ -8,8 +8,12 @@ Prints a summary, the code review comments of ROOT/step2 with their ids (with -R
 The summary shows the [deductions] merge setting of -Config (default: configs/settings.ini in the project root; missing =
 false), which decides how findings.txt is written. With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
 -InputPath and -Git, ROOT is tmp in the project root. -InputPath - reads the diff from stdin.
+The scan rules come from -Standard (a section of -Standards, default: configs/standards.ini in the project root;
+default: the only framework standard, or the common standard when no framework standard is registered); files its
+applies does not cover are scanned with the rules of the common standard. -Scan FILE uses one scan rule file for
+every file instead.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
-Exit codes: 0 ok, 2 bad arguments or input.
+Exit codes: 0 ok, 2 bad arguments or input, or a missing or invalid standard or scan rule file (run standard lint).
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File prepare-diff.ps1
@@ -25,7 +29,10 @@ param(
     [Alias('m')][ValidateSet('all', 'summary', 'scan', 'view')][string]$Mode = 'all',
     [int]$Max = 15,
     [Alias('o')][string]$Out,
-    [string]$Config
+    [string]$Config,
+    [string]$Standard,
+    [string]$Standards,
+    [string]$Scan
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +45,7 @@ $projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
 if ($sources -eq 0) { $Root = Join-Path $projectRoot 'tmp' }
 # [deductions] merge decides how findings.txt is written; the scoring step validates it the same way.
 if (-not $Config) { $Config = Join-Path $projectRoot 'configs/settings.ini' }
+if (-not $Standards) { $Standards = Join-Path $projectRoot 'configs/standards.ini' }
 $merge = 'false'
 if (Test-UserFile $Config) {
     $sec = ''
@@ -56,44 +64,77 @@ if ($Root) {
 }
 $diffText = Get-DiffText -InputPath $InputPath -Git $Git -Repo $Repo
 
-# Load scan rules
+# Scan rules and file scopes of the standard (code-review-scoring/scripts/standard.ps1 resolve, run with the same
+# PowerShell; it prints its own errors). Owner 's' = the standard, 'c' = the common standard.
+if ($Scan) {
+    if ($Standard) { Exit-WithError 'use only one of -Standard, -Scan' }
+    if (-not (Test-UserFile $Scan)) { Exit-WithError "scan rule file not found: $Scan" }
+    $resolved = @("scan`t$(Resolve-UserPath $Scan)")
+}
+else {
+    $resolveArgs = @('resolve', '--standards', $Standards, '--settings', $Config)
+    if ($Standard) { $resolveArgs += $Standard }
+    $exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $prevPref = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $resolved = @(& $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'skills/code-review-scoring/scripts/standard.ps1') @resolveArgs) }
+    finally { $ErrorActionPreference = $prevPref }
+    if ($LASTEXITCODE -ne 0) { exit 2 }
+}
 $rules = New-Object System.Collections.Generic.List[object]
 $idOrder = New-Object System.Collections.Generic.List[string]
-foreach ($l in (Read-Utf8Lines (Join-Path $PSScriptRoot 'scan-rules.tsv'))) {
-    if ($l -match '^#' -or $l -match '^\s*$') { continue }
-    $a = $l -split "`t"
-    if ($a.Count -lt 7) { continue }
-    $opt = [Text.RegularExpressions.RegexOptions]::None
-    if ($a[2] -like '*i*') { $opt = [Text.RegularExpressions.RegexOptions]::IgnoreCase }
-    $rules.Add([pscustomobject]@{
-        Id = $a[0]; Scope = $a[1]; Comments = ($a[2] -like '*c*')
-        Re = [regex]::new($a[3], $opt)
-        Prev = $(if ($a[4] -ne '-') { [regex]::new($a[4], $opt) } else { $null })
-        Excl = $(if ($a[5] -ne '-') { [regex]::new($a[5], $opt) } else { $null })
-        Hint = $a[6]
-    })
-    if (-not $idOrder.Contains($a[0])) { $idOrder.Add($a[0]) }
+$scopes = @{ s = (New-Object System.Collections.Generic.List[object]); c = (New-Object System.Collections.Generic.List[object]) }
+$hints = New-Object System.Collections.Generic.List[object]
+$stdName = ''; $stdVer = ''; $commonName = ''; $commonVer = ''; $applies = $null; $owner = 's'
+foreach ($rl in $resolved) {
+    $a = ([string]$rl).Split("`t")
+    switch -CaseSensitive ($a[0]) {
+        'standard' { $owner = 's'; $stdName = $a[1]; $stdVer = $a[2] }
+        'common' { $owner = 'c'; $commonName = $a[1]; $commonVer = $a[2] }
+        'applies' { $applies = [regex]::new($a[1]) }
+        'scan' {
+            $file = $a[1]; $ln = 0
+            if (-not (Test-UserFile $file)) { Exit-WithError "cannot read scan rules $file" }
+            foreach ($l in (Read-Utf8Lines $file)) {
+                $ln++
+                if ($l -cmatch '^#' -or $l -cmatch '^[ \t]*$') { continue }
+                $f = $l.Split("`t")
+                if ($f[0] -ceq '@scope' -and $f.Count -eq 4) {
+                    $scopes[$owner].Add([pscustomobject]@{ Name = $f[1]; Within = $f[2]; Re = [regex]::new($f[3]) })
+                }
+                elseif ($f[0] -ceq '@pr' -and $f.Count -eq 4) { $hints.Add([pscustomobject]@{ Id = $f[1]; Owner = $owner; Cond = $f[2]; Hint = $f[3] }) }
+                elseif (-not $f[0].StartsWith('@') -and $f.Count -eq 7) {
+                    $opt = [Text.RegularExpressions.RegexOptions]::None
+                    if ($f[2].Contains('i')) { $opt = [Text.RegularExpressions.RegexOptions]::IgnoreCase }
+                    $rules.Add([pscustomobject]@{
+                        Id = $f[0]; Owner = $owner; Scope = $f[1]; Comments = $f[2].Contains('c')
+                        Re = [regex]::new($f[3], $opt)
+                        Prev = $(if ($f[4] -cne '-') { [regex]::new($f[4], $opt) } else { $null })
+                        Excl = $(if ($f[5] -cne '-') { [regex]::new($f[5], $opt) } else { $null })
+                        Hint = $f[6]
+                    })
+                    if (-not $idOrder.Contains($f[0])) { $idOrder.Add($f[0]) }
+                }
+                else { Exit-WithError "${file}:${ln}: not a valid scan rule line; run standard lint first" }
+            }
+        }
+    }
 }
 
 function Test-Comment([string]$s, [string]$path) {
     $t = $s.Trim()
-    if ($t -match '^(//|/\*|\*)') { return $true }
-    if ($path -match '\.(ya?ml|properties)$' -and $t.StartsWith('#')) { return $true }
-    if ($path -match '\.sql$' -and $t.StartsWith('--')) { return $true }
+    if ($path -cmatch '\.(md|markdown)$') { return $t.StartsWith('<!--') }
+    if ($t -cmatch '^(//|/\*|\*)') { return $true }
+    if ($t.StartsWith('#') -and ($path -cmatch '\.(ya?ml|properties|sh|bash|zsh|ps1|psm1|py|rb|toml|ini|conf|cfg|env|tf)$' -or $path -cmatch '(^|/)(Dockerfile[^/]*|Makefile|\.gitignore|\.dockerignore|\.gitattributes|\.editorconfig|\.env[^/]*)$')) { return $true }
+    if ($path -cmatch '\.ini$' -and $t.StartsWith(';')) { return $true }
+    if ($path -cmatch '\.sql$' -and $t.StartsWith('--')) { return $true }
+    if ($path -cmatch '\.(xml|html?|vue)$' -and $t.StartsWith('<!--')) { return $true }
     return $false
 }
 
-function Test-Scope([string]$scope, $f) {
-    switch ($scope) {
-        'any' { return $true }
-        'test' { return $f.IsTest }
-        'nontest' { return -not $f.IsTest }
-        'java' { return $f.Path -match '\.(java|kt)$' }
-        'main' { return $f.IsMain }
-        'controller' { return $f.IsMain -and $f.Path -cmatch 'Controller[A-Za-z0-9_]*\.(java|kt)$' }
-        'ctrltest' { return $f.IsTest -and $f.Path -cmatch '(Controller|Repository)[A-Za-z0-9_]*(Test|Tests|IT)\.(java|kt)$' }
-    }
-    return $false
+# A file is in a scope of its owner when its path matches and the within condition holds.
+function Test-Scope([string]$owner, [string]$scope, $f) {
+    if ($scope -ceq 'any') { return $f.Owner -ceq $owner }
+    return $f.Scopes.ContainsKey("$owner`t$scope")
 }
 
 function Get-Snippet([string]$s) {
@@ -109,7 +150,7 @@ $cur = $null; $inHunk = $false; $oLeft = 0; $nLeft = 0; $nNo = 0; $prev = ''
 
 function New-FileEntry([string]$p) {
     $f = [pscustomobject]@{ Path = ''; Status = 'modified'; Adds = 0; Dels = 0; Hunks = 0
-        View = New-Object System.Text.StringBuilder; Excl = ''; IsTest = $false; IsMain = $false; IsMig = $false }
+        View = New-Object System.Text.StringBuilder; Excl = ''; Owner = 's'; Scopes = @{} }
     Set-FilePath $f $p
     $script:files.Add($f)
     return $f
@@ -117,9 +158,20 @@ function New-FileEntry([string]$p) {
 
 function Set-FilePath($f, [string]$p) {
     $f.Path = $p
-    $f.IsTest = ($p -match '(^|/)src/test/' -or $p -cmatch '(Test|Tests|IT)\.(java|kt)$')
-    $f.IsMain = (-not $f.IsTest -and $p -match '(^|/)src/main/(java|kotlin)/.+\.(java|kt)$')
-    $f.IsMig = ($p -match '(^|/)(db/migration|db/changelog|liquibase|flyway)/' -or $p -match '(^|/)[VUR][0-9][0-9_.]*__[A-Za-z0-9_]+\.sql$')
+    # Files of the standard: those its applies covers (every file when there is no applies); the others go to the
+    # common standard.
+    $f.Owner = if ($null -eq $script:applies -or $script:applies.IsMatch($p)) { 's' } else { 'c' }
+    $f.Scopes = @{}
+    foreach ($o in 's', 'c') {
+        foreach ($sc in $script:scopes[$o]) {
+            $m = ($f.Owner -ceq $o -and $sc.Re.IsMatch($p))
+            if ($m -and $sc.Within -cne '-') {
+                if ($sc.Within.StartsWith('!')) { $m = -not $f.Scopes.ContainsKey("$o`t$($sc.Within.Substring(1))") }
+                else { $m = $f.Scopes.ContainsKey("$o`t$($sc.Within)") }
+            }
+            if ($m) { $f.Scopes["$o`t$($sc.Name)"] = $true }
+        }
+    }
     $f.Excl = ''
     if ($p -match '(^|/)(target|build|out|dist|\.gradle|node_modules)/' -or $p -match '(^|/)generated(-sources|-test-sources)?/') { $f.Excl = 'build output / generated' }
     elseif ($p -match '(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$' -or $p -match '\.lock$') { $f.Excl = 'lock file' }
@@ -130,7 +182,7 @@ function Invoke-Scan($f, [int]$ln, [string]$text) {
     if ($text -match '^\s*$') { return }
     $isComment = Test-Comment $text $f.Path
     foreach ($r in $script:rules) {
-        if (-not (Test-Scope $r.Scope $f)) { continue }
+        if (-not (Test-Scope $r.Owner $r.Scope $f)) { continue }
         if (-not $r.Comments -and $isComment) { continue }
         if (-not $r.Re.IsMatch($text)) { continue }
         if ($r.Prev -and -not $r.Prev.IsMatch($script:prev)) { continue }
@@ -194,24 +246,54 @@ foreach ($raw in ($diffText -split "`n")) {
 
 if ($files.Count -eq 0) { Exit-WithError 'no parsable diff in input' }
 
-$nk = 0; $nx = 0; $nTest = 0; $nMain = 0; $nMig = 0; $migMod = New-Object System.Text.StringBuilder
+$nk = 0; $nx = 0; $nTest = 0; $nMain = 0; $nMig = 0; $nCommon = 0
 foreach ($f in $files) {
     if (-not $f.Excl -and $f.Status -eq 'deleted') { $f.Excl = 'deleted file' }
     if (-not $f.Excl -and $f.Status -eq 'binary') { $f.Excl = 'binary file' }
     if ($f.Excl) { $nx++; continue }
     $nk++
-    if ($f.IsTest) { $nTest++ }
-    if ($f.IsMain -and $f.Adds -gt 0) { $nMain++ }
-    if ($f.IsMig) { $nMig++; if ($f.Status -ne 'added') { [void]$migMod.Append("  - $($f.Path) ($($f.Status))`n") } }
+    if ($f.Scopes.ContainsKey("s`ttest")) { $nTest++ }
+    if ($f.Scopes.ContainsKey("s`tmain") -and $f.Adds -gt 0) { $nMain++ }
+    if ($f.Scopes.ContainsKey("s`tmigration")) { $nMig++ }
+    if ($f.Owner -ceq 'c') { $nCommon++ }
+}
+
+# Whether every condition of a PR hint holds; returns $null or the files of its modified: conditions.
+function Get-PrHint($h) {
+    $mod = New-Object System.Text.StringBuilder
+    foreach ($c in $h.Cond.Split(',')) {
+        $s = $c.Trim(); $x = $s.Substring($s.IndexOf(':') + 1); $hit = $false
+        foreach ($f in $script:files) {
+            if (-not $f.Scopes.ContainsKey("$($h.Owner)`t$x")) { continue }
+            if ($s.StartsWith('has:') -and -not $f.Excl -and $f.Adds -gt 0) { $hit = $true }
+            elseif ($s.StartsWith('no:') -and -not $f.Excl) { $hit = $true }
+            elseif ($s.StartsWith('modified:') -and (-not $f.Excl -or $f.Excl -eq 'deleted file') -and $f.Status -ne 'added') {
+                $hit = $true; [void]$mod.Append("  - $($f.Path) ($($f.Status))`n")
+            }
+        }
+        if ($(if ($s.StartsWith('no:')) { $hit } else { -not $hit })) { return $null }
+    }
+    return $mod.ToString()
+}
+function Get-CountPart([string]$scope, [string]$label, [int]$n) {
+    foreach ($sc in $script:scopes['s']) { if ($sc.Name -ceq $scope) { return ", ${label}: $n" } }
+    return ''
 }
 
 $sb = New-Object System.Text.StringBuilder
 if ($Mode -in 'all', 'summary') {
     [void]$sb.Append("## Summary`n")
+    if ($stdName) {
+        $cover = if ($null -eq $applies) { '' } elseif ($commonName) { "; the files it does not cover ([common]) use the common standard $commonName $commonVer" } else { '; the files it does not cover are marked [no standard] and are not scored' }
+        [void]$sb.Append("- standard: $stdName $stdVer$cover`n")
+    }
     [void]$sb.Append("- deductions: $(if ($merge -eq 'true') { 'merged (merge=true): one F line per check id with all its locations; deducted once' } else { 'not merged (merge=false): one F line per location; every occurrence is deducted' })`n")
-    [void]$sb.Append("- reviewable files: $nk, excluded: $nx; main code changed: $nMain, test files: $nTest, migrations: $nMig`n")
+    $parts = (Get-CountPart 'main' 'main code changed' $nMain) + (Get-CountPart 'test' 'test files' $nTest) + (Get-CountPart 'migration' 'migrations' $nMig)
+    if ($nCommon -gt 0) { $parts += ", $(if ($commonName) { 'common standard files' } else { 'files without a standard' }): $nCommon" }
+    [void]$sb.Append("- reviewable files: $nk, excluded: $nx$(if ($parts) { '; ' + $parts.Substring(2) })`n")
     foreach ($f in $files) {
-        $tagv = if ($f.IsTest) { ' [test]' } elseif ($f.IsMig) { ' [migration]' } else { '' }
+        $tagv = if ($f.Scopes.ContainsKey("s`ttest")) { ' [test]' } elseif ($f.Scopes.ContainsKey("s`tmigration")) { ' [migration]' } else { '' }
+        if ($f.Owner -ceq 'c') { $tagv += $(if ($commonName) { ' [common]' } else { ' [no standard]' }) }
         if ($f.Excl) { [void]$sb.Append("  - (excluded: $($f.Excl)) $($f.Path)`n") }
         else { [void]$sb.Append("  - $($f.Path) [$($f.Status) +$($f.Adds) -$($f.Dels)]$tagv`n") }
     }
@@ -239,8 +321,11 @@ if ($Mode -in 'all', 'summary') {
 }
 if ($Mode -in 'all', 'scan') {
     [void]$sb.Append("## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)`n")
-    if ($nMain -gt 0 -and $nTest -eq 0) { [void]$sb.Append("- C1: main code changed but the PR touches no test file (meets the C1 Critical condition if the change is business logic)`n") }
-    if ($migMod.Length -gt 0) { [void]$sb.Append("- G6: existing migration file modified`n").Append($migMod.ToString()) }
+    if ($rules.Count -eq 0 -and $hints.Count -eq 0) { [void]$sb.Append("- none: the standard has no scan rules (scan= in configs/standards.ini)`n") }
+    foreach ($h in $hints) {
+        $mod = Get-PrHint $h
+        if ($null -ne $mod) { [void]$sb.Append("- $($h.Id): $($h.Hint)`n").Append($mod) }
+    }
     foreach ($id in $idOrder) {
         $hits = @($cands | Where-Object { $_.Id -eq $id -and -not $_.File.Excl })
         if ($hits.Count -eq 0) { continue }

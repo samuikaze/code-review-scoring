@@ -338,6 +338,23 @@ function Invoke-StdScan([string]$Path, [string[]]$DocLines) {
 
 # ---------------------------------------------------------------- configs/standards.ini
 
+# The applies patterns as one regex for the path relative to the repository root (POSIX ERE and .NET read it the
+# same way): a pattern without / matches the file name, one with / the whole path; ** crosses directories.
+function Get-StdGlobRe([string]$p) {
+    $r = if ($p.Contains('/')) { '^' } else { '(^|/)' }
+    if ($p.StartsWith('/')) { $p = $p.Substring(1) }
+    for ($i = 0; $i -lt $p.Length; $i++) {
+        $c = $p[$i]; $rest = $p.Substring($i)
+        if ($rest.StartsWith('**/')) { $r += '(.*/)?'; $i += 2 }
+        elseif ($rest.StartsWith('**')) { $r += '.*'; $i++ }
+        elseif ($c -eq '*') { $r += '[^/]*' }
+        elseif ($c -eq '?') { $r += '[^/]' }
+        elseif ('.+()^$|{}[]\'.IndexOf($c) -ge 0) { $r += '\' + $c }
+        else { $r += $c }
+    }
+    return "($r`$)"
+}
+
 function Invoke-StdIni([string]$Path, [string]$Settings) {
     $out = New-Object System.Collections.Generic.List[string]
     $diag = { param($k, $l, $m) $out.Add("!$k`t$l`t$m") }
@@ -384,6 +401,7 @@ function Invoke-StdIni([string]$Path, [string]$Settings) {
     $owner = New-StdMap; $ncommon = 0
     foreach ($s in $order) {
         $get = { param($key) $v = $val["$s`t$key"]; if ($null -eq $v) { '' } else { $v } }
+        $re = ''
         if ((& $get 'path') -eq '') { & $diag 'error' $stdl[$s] "[$s] has no path" }
         $srole = & $get 'role'
         if ($srole -ne '' -and $srole -cne 'common') { & $diag 'error' $vall["$s`trole"] "role is `"common`" or not set, not `"$srole`"" }
@@ -395,6 +413,7 @@ function Invoke-StdIni([string]$Path, [string]$Settings) {
         else {
             foreach ($a in (& $get 'applies').Split(',')) {
                 $p = Get-StdTrim $a; if ($p -eq '') { continue }
+                $re += $(if ($re -eq '') { '' } else { '|' }) + (Get-StdGlobRe $p)
                 if ($owner.ContainsKey($p) -and $owner[$p] -cne $s) { & $diag 'error' $vall["$s`tapplies"] "the pattern $p is also in [$($owner[$p])]; a file may belong to one framework standard only" }
                 else { $owner[$p] = $s }
             }
@@ -406,6 +425,7 @@ function Invoke-StdIni([string]$Path, [string]$Settings) {
         }
         # Empty values are written as - so that the shells can read the TAB-separated fields.
         $out.Add("std`t$s`t$($stdl[$s])`t$(Get-StdDash (& $get 'path'))`t$(Get-StdDash (& $get 'scan'))`t$(Get-StdDash $srole)")
+        if ($srole -cne 'common' -and $re -ne '') { $out.Add("applies`t$s`t$re") }
         foreach ($x in $Let) { if ($pts.ContainsKey("$s`t$x")) { $out.Add("points`t$s`t$x`t$($pts["$s`t$x"])") } }
     }
     if ($ncommon -eq 0) { & $diag 'warn' '' 'no common standard (role="common"); files that no framework standard covers will not be scored' }

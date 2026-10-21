@@ -209,6 +209,8 @@ error: diff needs OLD.md NEW.md
 exit=2
 ### resolve --standards good-standards.ini
 standard	springboot-3	v0.1	sha256:0aed7bc76d20fcc7cd89c7114fb366d09eb951b071f8e5f22750c3baddb41481	good-v1.md
+applies	((^|/)[^/]*/.java$)|((^|/)[^/]*/.kt$)
+scan	good-scan.tsv	sha256:725a551283124b46fb276988d2ffc7310851f576c37fdcc9b713a7e4f096a3f9
 points	C	20
 points	F	5
 check	A1	Minor	-	-	正常	22

@@ -23,7 +23,7 @@ Apply every rule literally. When no check covers a problem, record it with check
 
 ## Script
 
-`prepare-diff` drops files that are not scored (generated code, build output, lock files), numbers every new-file line, and lists heuristic candidates. Paths are relative to this skill's directory.
+`prepare-diff` drops files that are not scored (generated code, build output, lock files), numbers every new-file line, and lists heuristic candidates from the scan rules of the scoring standard (`scan=` in `configs/standards.ini`, read with `standard resolve` of `code-review-scoring`). Files that the framework standard's `applies` does not cover are marked `[common]` and scanned with the rules of the common standard. With several framework standards, name one with `--standard NAME` (PowerShell `-Standard`). Exit 2 with a standards error: tell the user, who fixes it with `standard lint`; never edit the standards yourself. Paths are relative to this skill's directory.
 
 | bash | zsh | PowerShell |
 | --- | --- | --- |

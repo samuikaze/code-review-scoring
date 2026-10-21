@@ -133,7 +133,7 @@ skills/
     references/setup.md                   # 設定檢查、平台設定、狀態指令與目錄說明（需要時才載入）
     scripts/review-state.{sh,zsh,ps1}     # init / next / finish / show / cr-plan / prompt / set / config（--help 列出用法）
     scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 configs/plugins.ini、configs/settings.ini（check / wizard / plugins / plugin）
-    scripts/standard.{sh,zsh,ps1}         # 評分標準的 lint / parse / diff / resolve（lint 只在撰寫標準時執行，resolve 供 score 使用）
+    scripts/standard.{sh,zsh,ps1}         # 評分標準的 lint / parse / diff / resolve（lint 只在撰寫標準時執行，resolve 供 score、prepare-diff 使用）
     scripts/lib/standard.{awk,ps1}        # 評分標準的解析器（awk 供 bash、zsh 共用，PowerShell 版規則與訊息相同）
   code-review-scoring-spec-reading/
     SKILL.md
@@ -145,8 +145,7 @@ skills/
     references/checks.md                  # A～G 檢查項
     references/upstream.md                # 上游因素判斷（懷疑上游因素時才載入）
     references/findings-format.md         # findings.txt 格式
-    scripts/prepare-diff.{sh,zsh,ps1}
-    scripts/scan-rules.tsv                # 啟發式掃描規則（三種腳本共用）
+    scripts/prepare-diff.{sh,zsh,ps1}     # 掃描規則讀自 configs/standards.ini 登錄的掃描規則檔（scan）
   code-review-scoring-score/
     SKILL.md
     scripts/score.{sh,zsh,ps1}            # 檢查項與嚴重度讀自 configs/standards.ini 登錄的評分標準
@@ -167,6 +166,7 @@ docs/
 tests/
   standards/                              # 評分標準 lint 的測試案例；compare.sh 比對三種 shell 的輸出與 expected.txt
   score/                                  # score 的測試案例（legacy.md 的檢查項與舊 rules.tsv 相同，確保分數不變）
+  prepare/                                # prepare-diff 的測試案例（legacy.tsv 為舊 scan-rules.tsv 的規則，另含通用標準的掃描規則）
 tmp/                                      # 評分過程的暫存檔（所有腳本的預設 review root，不進版控）
 reports/                                  # 最終版分數報告（tmp/ 旁的 reports/，不進版控）
 .gitattributes                            # 固定腳本與設定檔的換行格式
@@ -382,8 +382,8 @@ mode="advisory"
 - `setup`：每次執行完整流程前檢查 `configs/plugins.ini` 與 `configs/settings.ini`，並以逐步詢問或指令的方式建立，登記外掛時先驗證，避免設定錯誤到 CR 步驟才發現。
 - `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
-- `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以規則表列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。
-- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），以及挑出要評分的標準與通用標準、輸出檢查項與配分覆寫給 `score`（`resolve`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度拼字、代碼重複、面向是否齊全、`standards.ini` 的配分加總與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `score` 呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時 `score` 直接停止（結束碼 2），請先執行 `lint` 修正。
+- `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以評分標準的掃描規則檔列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。框架標準的 `applies` 沒有涵蓋的檔案標上 `[common]`，改用通用標準的掃描規則；檔案分類（`@scope`）與 PR 層級的提示（`@pr`，例如主程式有異動卻沒有測試檔）也寫在掃描規則檔中，腳本不含任何框架的判斷。
+- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），以及挑出要評分的標準與通用標準、輸出檢查項、配分覆寫、適用檔案與掃描規則檔給 `score` 與 `prepare-diff`（`resolve`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度拼字、代碼重複、面向是否齊全、`standards.ini` 的配分加總與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `score`、`prepare-diff` 呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時 `score`、`prepare-diff` 直接停止（結束碼 2），請先執行 `lint` 修正。
 - `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs/settings.ini` 的配分（評分標準在 `configs/standards.ini` 設定的 `points.*` 優先）計算分數與等級；檢查代碼與可用的嚴重度讀自評分標準文件，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
 

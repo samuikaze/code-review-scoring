@@ -20,7 +20,8 @@ Uses the same GNU-style arguments as standard.sh:
   standard.ps1 resolve [--standards FILE] [--settings FILE] [NAME]
       for score: the standard NAME (default: the only framework standard, or the common one when there is
       none) and the common standard, as TAB-separated records: "standard" / "common" (name, version,
-      sha256, path), "points" (the overrides of NAME) and the "check" records of each document.
+      sha256, path), "applies" (the regex of the files of NAME), "scan" (path, sha256 of the scan rules),
+      "points" (the overrides of NAME) and the "check" records of each document.
       Stops when standards.ini or a document has a format error (exit 3)
 
 Options: --standards FILE  (default: configs/standards.ini in the project root)
@@ -248,6 +249,14 @@ switch ($cmd) {
             $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $dpath).Hash.ToLowerInvariant()
             $kind = if ($r[1] -ceq $want) { 'standard' } else { 'common' }
             [void]$sb.Append("$kind`t$($r[1])`t$(Get-Field $out 'version')`tsha256:$h`t$dpath`n")
+            if ($r[1] -ceq $want) {
+                foreach ($l in $ini) { $a = $l.Split("`t"); if ($a[0] -ceq 'applies' -and $a[1] -ceq $want) { [void]$sb.Append("applies`t$($a[2])`n") } }
+            }
+            if ($r[4] -cne '-') {
+                $spath = Resolve-StdPath $r[4] $base
+                if (-not [IO.File]::Exists($spath)) { [Console]::Error.WriteLine("error: ${spath}: file not found; run standard lint first"); exit 3 }
+                [void]$sb.Append("scan`t$spath`tsha256:$((Get-FileHash -Algorithm SHA256 -LiteralPath $spath).Hash.ToLowerInvariant())`n")
+            }
             if ($r[1] -ceq $want) {
                 foreach ($l in $ini) { $a = $l.Split("`t"); if ($a[0] -ceq 'points' -and $a[1] -ceq $want) { [void]$sb.Append("points`t$($a[2])`t$($a[3])`n") } }
             }

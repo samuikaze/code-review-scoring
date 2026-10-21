@@ -1,5 +1,6 @@
 # Diff preprocessor shared by prepare-diff.sh and prepare-diff.zsh (POSIX awk).
-# Variables: rules=scan rule file  mode=all|summary|scan|view  maxper=max locations listed per check
+# Variables: std=output of "standard resolve" (standard, common, applies and scan records; a "scan" record before any
+#            standard record is a scan rule file given on its own)  mode=all|summary|scan|view  maxper=max locations listed per check
 #            merge=true|false ([deductions] merge of configs/settings.ini, shown in the summary for writing findings.txt)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = no code review comments section)
 # Run with LC_ALL=C; strings are handled as bytes.
@@ -18,29 +19,60 @@ function snippet(s) {
 
 function is_comment(s, path) {
     s = trim(s)
+    if (path ~ /\.(md|markdown)$/) return s ~ /^<!--/
     if (s ~ /^(\/\/|\/\*|\*)/) return 1
-    if (path ~ /\.(ya?ml|properties)$/ && s ~ /^#/) return 1
+    if (s ~ /^#/ && (path ~ /\.(ya?ml|properties|sh|bash|zsh|ps1|psm1|py|rb|toml|ini|conf|cfg|env|tf)$/ || path ~ /(^|\/)(Dockerfile[^\/]*|Makefile|\.gitignore|\.dockerignore|\.gitattributes|\.editorconfig|\.env[^\/]*)$/)) return 1
+    if (path ~ /\.ini$/ && s ~ /^;/) return 1
     if (path ~ /\.sql$/ && s ~ /^--/) return 1
+    if (path ~ /\.(xml|html?|vue)$/ && s ~ /^<!--/) return 1
     return 0
 }
 
-function in_scope(scope, f,    p) {
-    p = path[f]
-    if (scope == "any") return 1
-    if (scope == "test") return is_test[f]
-    if (scope == "nontest") return !is_test[f]
-    if (scope == "java") return p ~ /\.(java|kt)$/
-    if (scope == "main") return is_main[f]
-    if (scope == "controller") return is_main[f] && p ~ /Controller[A-Za-z0-9_]*\.(java|kt)$/
-    if (scope == "ctrltest") return is_test[f] && p ~ /(Controller|Repository)[A-Za-z0-9_]*(Test|Tests|IT)\.(java|kt)$/
-    return 0
+function fail(msg) { print "error: " msg > "/dev/stderr"; failed = 1; exit 2 }
+
+# Reads a scan rule file; o = "s" for the rules of the standard, "c" for those of the common standard.
+# The scopes of each file are separate: a scope only holds the files of its owner (see classify).
+function load_rules(file, o,    l, ln, n, a, r) {
+    ln = 0
+    while ((r = (getline l < file)) > 0) {
+        ln++; sub(/\r$/, "", l)
+        if (ln == 1 && substr(l, 1, 3) == BOM) l = substr(l, 4)
+        if (l ~ /^#/ || l ~ /^[ \t]*$/) continue
+        n = split(l, a, "\t")
+        if (a[1] == "@scope" && n == 4) {
+            nsc[o]++; scname[o, nsc[o]] = a[2]; scwithin[o, nsc[o]] = a[3]; scre[o, nsc[o]] = a[4]; hasscope[o, a[2]] = 1
+        } else if (a[1] == "@pr" && n == 4) {
+            np++; pid[np] = a[2]; pown[np] = o; pcond[np] = a[3]; phint[np] = a[4]
+        } else if (a[1] !~ /^@/ && n == 7) {
+            nr++
+            rown[nr] = o; rid[nr] = a[1]; rscope[nr] = a[2]; rflags[nr] = a[3]
+            rre[nr] = (a[3] ~ /i/) ? tolower(a[4]) : a[4]
+            rprev[nr] = (a[3] ~ /i/ && a[5] != "-") ? tolower(a[5]) : a[5]
+            rexcl[nr] = (a[3] ~ /i/ && a[6] != "-") ? tolower(a[6]) : a[6]
+            rhint[nr] = a[7]
+            if (!(a[1] in idorder)) { nid++; idlist[nid] = a[1]; idorder[a[1]] = nid }
+        } else fail(file ":" ln ": not a valid scan rule line; run standard lint first")
+    }
+    if (r < 0) fail("cannot read scan rules " file)
+    close(file)
 }
 
-function classify(f,    p) {
+function in_scope(o, scope, f) { return (scope == "any") ? (fown[f] == o) : ((o SUBSEP scope SUBSEP f) in insc) }
+
+function classify(f,    p, o, k, w, m, oi) {
     p = path[f]
-    is_test[f] = (p ~ /(^|\/)src\/test\// || p ~ /(Test|Tests|IT)\.(java|kt)$/)
-    is_main[f] = (!is_test[f] && p ~ /(^|\/)src\/main\/(java|kotlin)\/.+\.(java|kt)$/)
-    is_mig[f] = (p ~ /(^|\/)(db\/migration|db\/changelog|liquibase|flyway)\// || p ~ /(^|\/)[VUR][0-9][0-9_.]*__[A-Za-z0-9_]+\.sql$/)
+    # Files of the standard: those its applies covers (every file when there is no applies); the others go to the
+    # common standard. A file is in a scope of its owner when its path matches and the within condition holds.
+    fown[f] = (applies == "" || p ~ applies) ? "s" : "c"
+    for (oi = 1; oi <= 2; oi++) {
+        o = (oi == 1) ? "s" : "c"
+        for (k = 1; k <= nsc[o]; k++) {
+            delete insc[o, scname[o, k], f]
+            m = (fown[f] == o && p ~ scre[o, k]); w = scwithin[o, k]
+            if (m && w != "-") m = (substr(w, 1, 1) == "!") ? !((o SUBSEP substr(w, 2) SUBSEP f) in insc) : ((o SUBSEP w SUBSEP f) in insc)
+            if (m) insc[o, scname[o, k], f] = 1
+        }
+    }
     excl[f] = ""
     if (p ~ /(^|\/)(target|build|out|dist|\.gradle|node_modules)\// || p ~ /(^|\/)generated(-sources|-test-sources)?\//) excl[f] = "build output / generated"
     else if (p ~ /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$/ || p ~ /\.lock$/) excl[f] = "lock file"
@@ -77,7 +109,7 @@ function new_file(p) {
 function scan(f, ln, text,    i, t, lt, lp, both) {
     if (text ~ /^[ \t]*$/) return
     for (i = 1; i <= nr; i++) {
-        if (!in_scope(rscope[i], f)) continue
+        if (!in_scope(rown[i], rscope[i], f)) continue
         if (rflags[i] !~ /c/ && is_comment(text, path[f])) continue
         t = text; lp = prev
         if (rflags[i] ~ /i/) { t = tolower(t); lp = tolower(lp) }
@@ -94,22 +126,18 @@ function scan(f, ln, text,    i, t, lt, lp, both) {
 
 BEGIN {
     FS = "\n"
+    BOM = sprintf("%c%c%c", 239, 187, 191)
     if (maxper == "") maxper = 15
     if (mode == "") mode = "all"
-    while ((getline l < rules) > 0) {
-        if (l ~ /^#/ || l ~ /^[ \t]*$/) continue
-        n = split(l, a, "\t")
-        if (n < 7) continue
-        nr++
-        rid[nr] = a[1]; rscope[nr] = a[2]; rflags[nr] = a[3]
-        rre[nr] = (a[3] ~ /i/) ? tolower(a[4]) : a[4]
-        rprev[nr] = (a[3] ~ /i/ && a[5] != "-") ? tolower(a[5]) : a[5]
-        rexcl[nr] = (a[3] ~ /i/ && a[6] != "-") ? tolower(a[6]) : a[6]
-        rhint[nr] = a[7]
-        if (!(a[1] in idorder)) { nid++; idlist[nid] = a[1]; idorder[a[1]] = nid }
+    own = "s"
+    while ((getline l < std) > 0) {
+        split(l, a, "\t")
+        if (a[1] == "standard") { own = "s"; sname = a[2]; sver = a[3] }
+        else if (a[1] == "common") { own = "c"; cname = a[2]; cver = a[3] }
+        else if (a[1] == "applies") applies = a[2]
+        else if (a[1] == "scan") load_rules(a[2], own)
     }
-    close(rules)
-    if (nr == 0) { print "error: cannot read scan rules " rules > "/dev/stderr"; exit 2 }
+    close(std)
 }
 
 {
@@ -173,24 +201,50 @@ nf == 0 { next }
     next
 }
 
+# Whether every condition of PR hint k holds; the files of its modified: conditions go to pmod[k].
+function pr_hint(k,    n, c, i, j, o, s, x, hit) {
+    o = pown[k]; n = split(pcond[k], c, ","); pmod[k] = ""
+    for (i = 1; i <= n; i++) {
+        s = trim(c[i]); x = substr(s, index(s, ":") + 1); hit = 0
+        for (j = 1; j <= nf; j++) {
+            if (!((o SUBSEP x SUBSEP j) in insc)) continue
+            if (s ~ /^has:/ && excl[j] == "" && adds[j] > 0) hit = 1
+            else if (s ~ /^no:/ && excl[j] == "") hit = 1
+            else if (s ~ /^modified:/ && (excl[j] == "" || excl[j] == "deleted file") && status[j] != "added") {
+                hit = 1; pmod[k] = pmod[k] "  - " path[j] " (" status[j] ")\n"
+            }
+        }
+        if (s ~ /^no:/ ? hit : !hit) return 0
+    }
+    return 1
+}
+
+function count_part(scope, label, n) { return (("s" SUBSEP scope) in hasscope) ? ", " label ": " n : "" }
+
 END {
+    if (failed) exit 2
     if (nf == 0) { print "error: no parsable diff in input" > "/dev/stderr"; exit 2 }
     for (f = 1; f <= nf; f++) {
         if (excl[f] == "" && status[f] == "deleted") excl[f] = "deleted file"
         if (excl[f] == "" && status[f] == "binary") excl[f] = "binary file"
         if (excl[f] != "") { nx++; continue }
         nk++
-        if (is_test[f]) ntest++
-        if (is_main[f] && adds[f] > 0) nmain++
-        if (is_mig[f]) { nmig++; if (status[f] != "added") migmod = migmod "  - " path[f] " (" status[f] ")\n" }
+        if (("s" SUBSEP "test" SUBSEP f) in insc) ntest++
+        if ((("s" SUBSEP "main" SUBSEP f) in insc) && adds[f] > 0) nmain++
+        if (("s" SUBSEP "migration" SUBSEP f) in insc) nmig++
+        if (fown[f] == "c") ncf++
     }
 
     if (mode == "all" || mode == "summary") {
         print "## Summary"
+        if (sname != "") print "- standard: " sname " " sver (applies == "" ? "" : (cname != "" ? "; the files it does not cover ([common]) use the common standard " cname " " cver : "; the files it does not cover are marked [no standard] and are not scored"))
         print "- deductions: " (merge == "true" ? "merged (merge=true): one F line per check id with all its locations; deducted once" : "not merged (merge=false): one F line per location; every occurrence is deducted")
-        printf "- reviewable files: %d, excluded: %d; main code changed: %d, test files: %d, migrations: %d\n", nk, nx, nmain, ntest, nmig
+        parts = count_part("main", "main code changed", nmain + 0) count_part("test", "test files", ntest + 0) count_part("migration", "migrations", nmig + 0)
+        if (ncf > 0) parts = parts ", " (cname != "" ? "common standard files: " : "files without a standard: ") ncf
+        printf "- reviewable files: %d, excluded: %d%s\n", nk, nx, (parts == "" ? "" : "; " substr(parts, 3))
         for (f = 1; f <= nf; f++) {
-            tagv = is_test[f] ? " [test]" : (is_mig[f] ? " [migration]" : "")
+            tagv = (("s" SUBSEP "test" SUBSEP f) in insc) ? " [test]" : ((("s" SUBSEP "migration" SUBSEP f) in insc) ? " [migration]" : "")
+            if (fown[f] == "c") tagv = tagv (cname != "" ? " [common]" : " [no standard]")
             if (excl[f] != "") printf "  - (excluded: %s) %s\n", excl[f], path[f]
             else printf "  - %s [%s +%d -%d]%s\n", path[f], status[f], adds[f], dels[f], tagv
         }
@@ -200,8 +254,8 @@ END {
 
     if (mode == "all" || mode == "scan") {
         print "## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)"
-        if (nmain > 0 && ntest == 0) print "- C1: main code changed but the PR touches no test file (meets the C1 Critical condition if the change is business logic)"
-        if (migmod != "") printf "- G6: existing migration file modified\n%s", migmod
+        if (nr == 0 && np == 0) print "- none: the standard has no scan rules (scan= in configs/standards.ini)"
+        for (k = 1; k <= np; k++) if (pr_hint(k)) printf "- %s: %s\n%s", pid[k], phint[k], pmod[k]
         for (k = 1; k <= nid; k++) {
             id = idlist[k]; cnt = 0; out = ""
             for (c = 1; c <= nc; c++) {

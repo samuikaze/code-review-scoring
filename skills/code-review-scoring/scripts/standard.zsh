@@ -22,7 +22,8 @@ Commands:
   diff     list the dimensions, check items and confirmations that differ between two versions of a document
   resolve  for score: the standard NAME (default: the only framework standard, or the common one when there is
            none) and the common standard, as TAB-separated records: "standard" / "common" (name, version,
-           sha256, path), "points" (the overrides of NAME) and the "check" records of each document.
+           sha256, path), "applies" (the regex of the files of NAME), "scan" (path, sha256 of the scan rules),
+           "points" (the overrides of NAME) and the "check" records of each document.
            Stops when standards.ini or a document has a format error (exit 3)
 
 Options: --standards FILE  (default: configs/standards.ini in the project root)
@@ -202,13 +203,19 @@ case "$cmd" in
     fi
     awk -F'\t' -v n="$want" '$1 == "std" && $2 == n { f = 1 } END { exit !f }' "$tmpd/ini" || { echo "error: $standards: [$want] is not registered" >&2; exit 2; }
     # The standard itself first, then the common standard (when it is another one); each with its check items.
-    while IFS=$'\t' read -r -u 3 k1 name k2 dpath k3 role; do
+    while IFS=$'\t' read -r -u 3 k1 name k2 dpath spath role; do
       dpath="$(resolve "$dpath")"
       [[ -f "$dpath" ]] || { echo "error: $dpath: file not found; run standard lint first" >&2; exit 3; }
       run_awk -v mode=doc -v role="${role#-}" "$dpath" > "$tmpd/doc"
       e="$(awk -F'\t' '$1 == "!error" { print ($2 != "" ? ":" $2 : "") ": " $3; exit }' "$tmpd/doc")"
       [[ -z "$e" ]] || { echo "error: $dpath$e; run standard lint first" >&2; exit 3; }
       printf '%s\t%s\t%s\tsha256:%s\t%s\n' "$([[ "$name" == "$want" ]] && echo standard || echo common)" "$name" "$(field version "$tmpd/doc")" "$(sha "$dpath")" "$dpath"
+      if [[ "$name" == "$want" ]]; then awk -F'\t' -v n="$name" '$1 == "applies" && $2 == n { print "applies\t" $3 }' "$tmpd/ini"; fi
+      if [[ "$spath" != "-" ]]; then
+        spath="$(resolve "$spath")"
+        [[ -f "$spath" ]] || { echo "error: $spath: file not found; run standard lint first" >&2; exit 3; }
+        printf 'scan\t%s\tsha256:%s\n' "$spath" "$(sha "$spath")"
+      fi
       if [[ "$name" == "$want" ]]; then awk -F'\t' -v n="$name" '$1 == "points" && $2 == n { print "points\t" $3 "\t" $4 }' "$tmpd/ini"; fi
       awk -F'\t' '$1 == "check"' "$tmpd/doc"
     done 3< <(awk -F'\t' -v n="$want" '$1 == "std" && $2 == n { print } $1 == "std" && $6 == "common" && $2 != n { c = $0 } END { if (c != "") print c }' "$tmpd/ini")
