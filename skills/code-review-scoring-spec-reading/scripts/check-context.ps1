@@ -37,6 +37,8 @@ foreach ($line in (Read-Utf8Lines $ctx)) {
         continue
     }
     if ($section -eq 'Open questions' -and $line.StartsWith('- [ ] ')) { $wait += "  - open question: $($line.Substring(6))" }
+    # A confirmation of a scoring standard (- <check ids> (<standard>) <what to confirm>:) without an answer.
+    if ($section -eq 'Severity facts' -and $line -cmatch '^- (.+ \([a-z0-9-]+\) .+):\s*$') { $wait += "  - confirmation not answered: $($Matches[1])" }
 }
 if (-not $seen.ContainsKey('diff') -or -not $seen.ContainsKey('pr-description')) { $bad += '  - the Inputs section must list diff and pr-description' }
 

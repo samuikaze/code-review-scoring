@@ -167,7 +167,7 @@ BEGIN {
     if (t == "F") {
         id = $2; sev = $3; locs = $4; reason = $5
         rec = "skip"; recid = id; recline = NR
-        # Check id "-": no check of the checklist covers the problem; deducted from the total by its severity.
+        # Check id "-": no check item of the standard covers the problem; deducted from the total by its severity.
         other = (id == "-")
         if (!other && !(id in def)) { err("unknown check id " id " (use - when no check covers the problem)"); next }
         if (!(sev in pts)) { err(id ": severity \"" sev "\" is not Critical/Major/Minor/Nit"); next }

@@ -4,7 +4,6 @@ description: Step 5 of code-review-scoring, usable on its own. Renders the final
 compatibility: Requires bash or zsh with awk, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "5/5"
-  rules-version: "v0.5"
 ---
 
 # Code Review Scoring – Report

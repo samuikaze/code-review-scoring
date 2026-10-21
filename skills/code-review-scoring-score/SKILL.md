@@ -4,7 +4,6 @@ description: Step 4 of code-review-scoring, usable on its own. Validates tmp/ste
 compatibility: Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "4/5"
-  rules-version: "v0.5"
 ---
 
 # Code Review Scoring – Score
@@ -38,7 +37,7 @@ The check ids, their severities and the points overrides come from the scoring s
 1. Run `score`.
 2. Act on the exit code:
    - **0**: done. It prints the grade, the dimension scores and any warnings.
-   - **1**: validation failed. Each error names the line in `findings.txt`. Standalone: fix it and run again until it passes. Workflow: `finish` records the failure and step 3 is redone. When an error questions a judgment (a severity that is not allowed, a location outside the diff), recheck the code and the checklist of `code-review-scoring-code-analysis` instead of only reformatting.
+   - **1**: validation failed. Each error names the line in `findings.txt`. Standalone: fix it and run again until it passes. Workflow: `finish` records the failure and step 3 is redone. When an error questions a judgment (a severity that is not allowed, a location outside the diff), recheck the code and the check items of the scoring standard instead of only reformatting.
    - **3**: step 1 or step 3 still has unresolved inputs or unanswered questions. Standalone: ask the user in one round, record the replies, run again. Workflow: report failed.
    - **2**: wrong arguments, missing files, invalid scoring settings in `configs/settings.ini`, or a missing or invalid `configs/standards.ini` or standard document (tell the user what the error says and, for the standards, that `standard lint` lists every problem; do not edit these files yourself).
 3. Treat warnings seriously. "unchanged context line" means the location is not new code: move the finding to the added line or drop it.

@@ -2,7 +2,7 @@
 
 PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，遵循 [Agent Skills](https://agentskills.io) 規格，可用於 Claude Code、GitHub Copilot、Codex 等支援 Skill 的工具。
 
-- **評分**：內建依團隊「Spring Boot 3 PR 程式碼品質評分標準（v0.5 試行版）」與 AI 評分指引建立的檢查項與計分規則，目前適用 Java／Spring Boot 3。
+- **評分**：依 `configs/standards.ini` 登錄的評分標準文件評分，不綁定任何技術。每套框架標準（例如 Spring Boot 3、Angular）各產出一份報告，不屬於任何框架的檔案（README、CI 設定、Dockerfile 等）以通用標準評分。標準文件以 Markdown 撰寫，可以放在專案以外，見「評分標準」。
 - **CR**：其他技術（例如前端）或其他團隊的 CR 規範，以外掛 Skill 的方式掛進流程，不受技術限制。
 - **報告**：CR 結果與評分結果合併成一份報告。
 
@@ -148,16 +148,15 @@ skills/
     references/setup.md                   # 設定檢查、平台設定、狀態指令與目錄說明（需要時才載入）
     scripts/review-state.{sh,zsh,ps1}     # init / next / finish / show / cr-plan / prompt / set / config（--help 列出用法）
     scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 configs/plugins.ini、configs/settings.ini（check / wizard / plugins / plugin）
-    scripts/standard.{sh,zsh,ps1}         # 評分標準的 lint / parse / diff / resolve（lint 只在撰寫標準時執行，resolve 供 score、prepare-diff 使用）
+    scripts/standard.{sh,zsh,ps1}         # 評分標準的 lint / parse / diff / resolve / plan（lint 只在撰寫標準時執行，plan 供步驟 1 規劃評分）
     scripts/lib/standard.{awk,ps1}        # 評分標準的解析器（awk 供 bash、zsh 共用，PowerShell 版規則與訊息相同）
   code-review-scoring-spec-reading/
     SKILL.md
     assets/spec-context-template.md
     scripts/init-workspace.{sh,zsh,ps1}   # 儲存 diff、建立 spec-context.md
-    scripts/check-context.{sh,zsh,ps1}    # 輸入資料與待確認問題是否都已處理
+    scripts/check-context.{sh,zsh,ps1}    # 輸入資料、待確認問題與評分標準的事先確認事項是否都已處理
   code-review-scoring-code-analysis/
     SKILL.md
-    references/checks.md                  # A～G 檢查項
     references/upstream.md                # 上游因素判斷（懷疑上游因素時才載入）
     references/findings-format.md         # findings.txt 格式
     scripts/prepare-diff.{sh,zsh,ps1}     # 掃描規則讀自 configs/standards.ini 登錄的掃描規則檔（scan）
@@ -176,12 +175,14 @@ configs/                                  # 設定檔（只有 *.example.ini 進
   plugins.example.ini                     # 外掛 Skill 清單範本（複製為 plugins.ini 使用）
   standards.example.ini                   # 評分標準清單範本（複製為 standards.ini 使用）
 docs/
-  notices.md                              # 注意事項（GitHub Copilot 適用性）
+  notices.md                              # 注意事項（評分標準、GitHub Copilot 適用性）
   templates/scoring-rule-template.md      # 評分標準文件的模板
 tests/
   standards/                              # 評分標準 lint 的測試案例；compare.sh 比對三種 shell 的輸出與 expected.txt
   score/                                  # score 的測試案例（legacy.md 的檢查項與舊 rules.tsv 相同，確保分數不變）
   prepare/                                # prepare-diff 的測試案例（legacy.tsv 為舊 scan-rules.tsv 的規則，另含通用標準的掃描規則）
+  plan/                                   # standard plan 的測試案例（兩套框架標準與通用標準、各層目錄的通用檔案）
+  workflow/                               # 完整流程的端對端測試（暫存 git 儲存庫、兩份報告、CR 意見分流、標準被修改時拒絕繼續）
 tmp/                                      # 評分過程的暫存檔（所有腳本的預設 review root，不進版控）
 reports/                                  # 最終版分數報告（tmp/ 旁的 reports/，不進版控）
 .gitattributes                            # 固定腳本與設定檔的換行格式
@@ -208,6 +209,27 @@ git add --renormalize .
 ```
 
 每個 Skill 的 `scripts/lib/` 放 awk 核心（bash/zsh 共用）與 PowerShell 共用函式。為了讓每個 Skill 都能單獨安裝，`lib/common.ps1` 在各 Skill 中各有一份相同的副本，修改時請一併更新。
+
+## 評分標準
+
+評分標準是一份 Markdown 文件，評分流程中的 AI 與腳本讀取同一份文件：
+
+- 依 `docs/templates/scoring-rule-template.md` 撰寫。「面向」「檢查項」「事先確認事項」三個章節由腳本解析，格式固定；「特例規則」「判斷提示」只給 AI 參考，可以自由撰寫。
+- 在專案根目錄複製 `configs/standards.example.ini` 為 `configs/standards.ini`，每套標準一個區段，設定標準文件路徑（`path`）、適用的檔案（`applies`，框架標準必填）、掃描規則檔（`scan`，選填）與配分覆寫（`points.A`～`points.G`，選填）；通用標準設定 `role="common"`，檢查代碼以 `CM-` 開頭。各欄位的說明見範本中的註解。
+- 標準文件與掃描規則檔可以放在專案以外，例如團隊共用的文件庫；路徑依各人環境而不同，所以 `standards.ini` 不進版控，換電腦或換人時請各自設定。
+- 寫好或修改標準後，執行 `standard lint` 檢查格式、`applies` 是否重疊、配分加總與掃描規則：
+
+  ```bash
+  bash skills/code-review-scoring/scripts/standard.sh lint
+  ```
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File skills\code-review-scoring\scripts\standard.ps1 lint
+  ```
+
+- 評分流程不執行 lint。標準格式有誤時，評分腳本會停止並提示先執行 lint。
+- 掃描規則檔（TSV）列出可以用正規表示式找出的候選線索，只是提示，不會直接扣分；格式與 `@scope`、`@pr` 記錄見範本與 `tests/prepare/` 的例子。
+- 評分途中不要修改標準：步驟 1 會記錄當下的標準，之後被修改時流程會拒絕繼續（見「依評分標準拆分報告」）。
 
 ## 調整配分
 
@@ -309,7 +331,7 @@ mode="advisory"
 | `applies` | 否 | 適用的檔案範圍（以逗號分隔的萬用字元）；未填表示全部異動檔案 |
 | `mode` | 否 | `mapped`（預設）：步驟 3 確認 CR 意見，確認屬實的一律扣分，不成立的需說明原因；`advisory`：CR 意見只呈現在報告中，不影響分數 |
 
-內建的評分檢查項目前只適用 Java／Spring Boot 3。其他技術的 CR 外掛（例如前端）設為 `mapped` 時，對應不到檢查項的意見會歸入「其他」，依外掛給的嚴重度從總分扣分；不希望這類外掛影響分數時，請設為 `advisory`。
+CR 外掛設為 `mapped` 時，對應不到評分標準檢查項的意見會歸入「其他」，依外掛給的嚴重度從總分扣分；外掛審查的技術沒有對應的評分標準，或不希望外掛影響分數時，請設為 `advisory`。每份報告只列出落在該標準檔案上的意見。
 
 ### 同步規則
 
@@ -398,7 +420,7 @@ mode="advisory"
 - `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
 - `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以評分標準的掃描規則檔列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。框架標準的 `applies` 沒有涵蓋的檔案標上 `[common]`，改用通用標準的掃描規則；檔案分類（`@scope`）與 PR 層級的提示（`@pr`，例如主程式有異動卻沒有測試檔）也寫在掃描規則檔中，腳本不含任何框架的判斷。
-- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），以及挑出要評分的標準與通用標準、輸出檢查項、配分覆寫、適用檔案與掃描規則檔給 `score` 與 `prepare-diff`（`resolve`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度拼字、代碼重複、面向是否齊全、`standards.ini` 的配分加總與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `score`、`prepare-diff` 呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時 `score`、`prepare-diff` 直接停止（結束碼 2），請先執行 `lint` 修正。
+- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），挑出要評分的標準與通用標準、輸出檢查項、配分覆寫、適用檔案與掃描規則檔給 `score` 與 `prepare-diff`（`resolve`），以及在步驟 1 依異動檔案決定要產出哪幾份報告、切出各報告的 diff（`plan`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度拼字、代碼重複、面向是否齊全、`standards.ini` 的配分加總與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `plan` 與 `review-state` 的檢查呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時直接停止（結束碼 2 或 3），請先執行 `lint` 修正。
 - `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs/settings.ini` 的配分（評分標準在 `configs/standards.ini` 設定的 `points.*` 優先）計算分數與等級；檢查代碼與可用的嚴重度讀自評分標準文件，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
 

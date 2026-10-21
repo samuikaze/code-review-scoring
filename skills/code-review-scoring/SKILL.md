@@ -1,9 +1,7 @@
 ---
 name: code-review-scoring
-description: Runs the full PR code review scoring workflow (read specs → code review with the plugin skills of configs/plugins.ini → analyze code → score → report; built-in checklist for Java Spring Boot 3) gated by status files in tmp/, with one subagent per step or inline, and resumes an earlier review. Use when the user says 「評分 PR」、「幫我評分這個 PR」、「PR 程式碼品質評分」、「Code Review 評分」、「CR 並評分」、「跑完整評分流程」、「繼續評分」.
+description: Runs the full PR code review scoring workflow (read specs → code review with the plugin skills of configs/plugins.ini → analyze code → score → report, one report per scoring standard of configs/standards.ini) gated by status files in tmp/, with one subagent per step or inline, and resumes an earlier review. Use when the user says 「評分 PR」、「幫我評分這個 PR」、「PR 程式碼品質評分」、「Code Review 評分」、「CR 並評分」、「跑完整評分流程」、「繼續評分」.
 compatibility: Works with or without a subagent tool (Claude Code Agent tool, GitHub Copilot runSubagent, or equivalent). Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
-metadata:
-  rules-version: "v0.5"
 ---
 
 # Code Review Scoring – Workflow Controller

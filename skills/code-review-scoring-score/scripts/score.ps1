@@ -254,7 +254,7 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
         'F' {
             $id = $c[1]; $sev = $c[2]; $locs = $c[3]; $reason = $c[4]
             $rec = 'skip'; $recId = $id; $recLine = $no
-            # Check id "-": no check of the checklist covers the problem; deducted from the total by its severity.
+            # Check id "-": no check item of the standard covers the problem; deducted from the total by its severity.
             $other = ($id -eq '-')
             if (-not $other -and -not $def.ContainsKey($id)) { Add-Error $no "unknown check id $id (use - when no check covers the problem)"; break }
             if ($sev -cnotin 'Critical', 'Major', 'Minor', 'Nit') { Add-Error $no "${id}: severity `"$sev`" is not Critical/Major/Minor/Nit"; break }
