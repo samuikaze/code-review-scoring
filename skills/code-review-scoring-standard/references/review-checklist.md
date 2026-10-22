@@ -8,7 +8,7 @@ For every rule (`@scope`, `@pr` and line rules):
 
 1. **Matches the check item.** What the regex finds is what the check item describes, not something nearby. Read the regex as code: alternatives, anchors, escaped characters, case.
 2. **Hint is faithful.** The hint says what to confirm in the words of the check item. It does not change the meaning, add a condition, name a severity, or promise a deduction.
-3. **Conditions are reminded.** For a check item with an applicability or severity condition (in the item itself, in 特例規則 or in 事先確認事項), the hint reminds step 3 to confirm the condition first (for example: `only when the project uses springdoc`).
+3. **Conditions are reminded.** For a check item with an applicability or severity condition (in the item itself, in 特例規則 / Special rules or in 事先確認事項 / Confirmations), the hint reminds step 3 to confirm the condition first (for example: `only when the project uses springdoc`).
 4. **Scope is right.** The scope covers the files the check item is about and no more (test checks only on test files, configuration checks only on configuration files). Scope regexes match real paths of the technology (try two or three typical paths of a real project in your head).
 5. **False positives and misses.** Name the obvious ones: comments, strings, constants, test fixtures, generated code, the same word in another construct. Ask for an `exclude-regex`, a narrower pattern or a narrower scope when a false positive would be common; accept a rare miss rather than a noisy rule.
 6. **`@pr` hints** use conditions that the set of changed files really shows (`has:`, `no:`, `modified:`), and the hint lists what to confirm.

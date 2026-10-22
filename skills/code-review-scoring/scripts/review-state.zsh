@@ -296,11 +296,29 @@ validate_cr() {  # checks the normalized code review result
     }
   ' "$1"
 }
+# The language the agents write report text in: the language label of the report template folder (templates/ in the
+# project root; with several languages, the one [language] report of the settings names, default zh-tw).
+report_language() {
+  local t="$project_root/templates" d want="" i dir="" v
+  local -a dirs names
+  [[ -f "$t/report-template.md" ]] && { dirs+=("$t"); names+=("templates/"); }
+  for d in "$t"/*(N/); do [[ -f "$d/report-template.md" ]] && { dirs+=("$d"); names+=("${d:t}"); }; done
+  (( ${#dirs} > 0 )) || { echo "error: no report template (report-template.md) in $t" >&2; exit 2; }
+  if (( ${#dirs} == 1 )); then dir="${dirs[1]}"
+  else
+    want="$(ini_get language report)"; [[ -n "$want" ]] || want="zh-tw"
+    for (( i = 1; i <= ${#dirs}; i++ )); do [[ "${names[i]}" == "$want" ]] && dir="${dirs[i]}"; done
+    [[ -n "$dir" ]] || { echo "error: no report template for the language \"$want\" ([language] report of $config); available: ${names[*]}" >&2; exit 2; }
+  fi
+  v="$([[ -f "$dir/labels.tsv" ]] && awk -F'\t' '$1 == "language" { print $2; exit }' "$dir/labels.tsv" | tr -d '\r')"
+  printf '%s\n' "${v:-the language of the report template in $dir}"
+}
 # Prompt of step $step (plugin $plugin): the step template plus the shared status protocol. Lines marked
 # "[sub] " are only for subagents, lines marked "[inline] " only for the main agent ($1 = 1 for inline).
 render_prompt() {
-  local root_abs p_path="" p_mode="" unit_args="--step $step" dir s_doc="" c_doc="none"
+  local root_abs p_path="" p_mode="" unit_args="--step $step" dir s_doc="" c_doc="none" lang=""
   root_abs="$(abs_root)"
+  [[ "$step" -lt "$CR" ]] || lang="$(report_language)"
   dir="$root_abs/step$step"
   if [[ "$step" == "$CR" ]]; then
     p_path="$(awk -F'\t' -v n="$plugin" '$1 == n { print $2 }' "$root/step$CR/plan.tsv")"
@@ -315,7 +333,7 @@ render_prompt() {
     LC_ALL=C awk -v inline="$1" -v root="$root_abs" -v sc="$self_cmd set --root \"$root_abs\"" -v repo="$(req_field Repository)" \
       -v range="$(req_field 'Diff range')" -v title="$(req_field Title)" -v skills="$skills_dir" -v plugin="$plugin" \
       -v ppath="$p_path" -v pmode="$p_mode" -v unit="$unit_args" -v dir="$dir" -v step="$step" \
-      -v std="$standard" -v sdoc="$s_doc" -v cdoc="${c_doc:-none}" '
+      -v std="$standard" -v sdoc="$s_doc" -v cdoc="${c_doc:-none}" -v lang="$lang" '
       function rep(s, a, b,    i, o) { o = ""; while ((i = index(s, a)) > 0) { o = o substr(s, 1, i - 1) b; s = substr(s, i + length(a)) } return o s }
       /^\[sub\] / { if (inline) next; sub(/^\[sub\] /, "") }
       /^\[inline\] / { if (!inline) next; sub(/^\[inline\] /, "") }
@@ -323,6 +341,7 @@ render_prompt() {
         l = rep(l, "{{SKILLS_DIR}}", skills); l = rep(l, "{{PLUGIN_PATH}}", ppath); l = rep(l, "{{PLUGIN}}", plugin); l = rep(l, "{{MODE}}", pmode)
         l = rep(l, "{{UNIT}}", unit); l = rep(l, "{{DIR}}", dir); l = rep(l, "{{STEP}}", step)
         l = rep(l, "{{STANDARD}}", std); l = rep(l, "{{STANDARD_DOC}}", sdoc); l = rep(l, "{{COMMON_DOC}}", cdoc)
+        l = rep(l, "{{REPORT_LANGUAGE}}", lang)
         print rep(l, "{{TITLE}}", title) }'
 }
 # The action "next" prints for unit $1 (label $2) in state $3; returns 1 when the unit needs nothing.
@@ -482,7 +501,7 @@ case "$cmd" in
     for n in $(std_names); do
       [[ "$(unit_state "5-$n")" != "success" ]] || continue
       "${self[@]}" set --root "$root_abs" --standards "$standards" --step 4 --standard "$n" --state working > /dev/null
-      rc=0; out="$(run_tool code-review-scoring-score score --root "$root_abs" --standards "$standards" --standard "$n" 2>&1)" || rc=$?
+      rc=0; out="$(run_tool code-review-scoring-score score --root "$root_abs" --standards "$standards" --standard "$n" --config "$config" 2>&1)" || rc=$?
       if [[ $rc -ne 0 ]]; then
         printf '[%s] score exited %d:\n%s\n' "$(now)" "$rc" "$out" >> "$root/step4/$n/errors.log"
         [[ $rc -eq 1 ]] && finish_failed 4 "$n" "findings.txt failed validation; redo step 3"
@@ -491,7 +510,7 @@ case "$cmd" in
       grade="$(printf '%s\n' "$out" | grep '^grade ' | head -1)"
       "${self[@]}" set --root "$root_abs" --standards "$standards" --step 4 --standard "$n" --state success --message "$grade" > /dev/null
       "${self[@]}" set --root "$root_abs" --standards "$standards" --step 5 --standard "$n" --state working > /dev/null
-      rc=0; rout="$(run_tool code-review-scoring-report render-report --root "$root_abs" --standard "$n" 2>&1)" || rc=$?
+      rc=0; rout="$(run_tool code-review-scoring-report render-report --root "$root_abs" --standard "$n" --config "$config" 2>&1)" || rc=$?
       if [[ $rc -ne 0 ]]; then
         printf '[%s] render-report exited %d:\n%s\n' "$(now)" "$rc" "$rout" >> "$root/step5/$n/errors.log"
         finish_failed 5 "$n" "render-report exited $rc: $(printf '%s\n' "$rout" | head -1)"
@@ -613,7 +632,7 @@ case "$cmd" in
           3)
             for f in prepared.txt findings.txt; do [[ -s "$d/$f" ]] || refuse "missing $d/$f"; done
             unanswered "$unit" && refuse "$d/questions.md has not been answered"
-            if ! out="$(run_tool code-review-scoring-score score --root "$root" --standards "$standards" --standard "$standard" --check 2>&1)"; then
+            if ! out="$(run_tool code-review-scoring-score score --root "$root" --standards "$standards" --standard "$standard" --config "$config" --check 2>&1)"; then
               refuse "findings.txt does not pass the scoring checks; fix it, then set success again:"$'\n'"$out"
             fi
             ;;
@@ -656,7 +675,7 @@ case "$cmd" in
       echo "subagent=$v"
     else
       [[ "$platform" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "error: --platform may only contain letters, digits, - and _" >&2; exit 2; }
-      [[ "$(printf '%s' "$platform" | tr '[:upper:]' '[:lower:]')" != "workflow" ]] || { echo "error: workflow is reserved and cannot be a platform name" >&2; exit 2; }
+      case "$(printf '%s' "$platform" | tr '[:upper:]' '[:lower:]')" in workflow|language) echo "error: $platform is reserved and cannot be a platform name" >&2; exit 2 ;; esac
       if [[ -z "$model" && -z "$reasoning" ]]; then
         m="$(ini_get "$platform" model)"
         r="$(ini_get "$platform" reasoning)"

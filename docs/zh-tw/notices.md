@@ -1,5 +1,10 @@
 # 注意事項
 
+<!-- markdownlint-disable MD028 -->
+<!-- markdownlint-disable MD033 -->
+
+[English](../en/notices.md) | 繁體中文
+
 - [評分標準](#評分標準)
 - [GitHub Copilot 的適用性](#github-copilot-的適用性)
 

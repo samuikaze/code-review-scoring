@@ -1,4 +1,6 @@
 # Display labels used by render-report. Columns: key<TAB>text. Edit the text to change the report wording.
+# language: the language the AI writes the narrative text of the report in (steps 2 and 3).
+language	Traditional Chinese with Taiwan usage
 none	無
 title.missing	（未提供）
 capped_note	（有 Critical 扣分項，等級上限為 B）

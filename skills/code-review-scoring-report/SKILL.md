@@ -28,7 +28,7 @@ Paths are relative to this skill's directory.
 | --- | --- | --- |
 | `bash scripts/render-report.sh` | `zsh scripts/render-report.zsh` | `powershell -ExecutionPolicy Bypass -File scripts/render-report.ps1` |
 
-Options: `--template <file>` and `--labels <file>` use another template or label file, `--title <text>` overrides the PR title, `--reports <dir>` changes the publish directory (default `reports`, relative to the current directory), `--no-publish` writes only the working copy, `--out -` prints to stdout without writing anything.
+Options: `--template <file>` and `--labels <file>` use another template or label file, `--config <file>` other settings for the report language, `--title <text>` overrides the PR title, `--reports <dir>` changes the publish directory (default `reports`, relative to the current directory), `--no-publish` writes only the working copy, `--out -` prints to stdout without writing anything.
 
 The final report name is built from the render date and the PR title, with characters that are unsafe in file names replaced by `-`. Rendering the same PR again on the same day overwrites that file.
 
@@ -39,13 +39,22 @@ The final report name is built from the render date and the PR title, with chara
 3. A warning about an unknown placeholder means the template has a typo or a block placeholder that is not alone on its line; fix the template.
 4. Standalone mode: reply with the grade, the total and the dimension scores (from `tmp/step4/score.tsv`) and the path of the published report (the `published` output line). Do not paste the report; show its content only when the user asks.
 
+## Report language
+
+The template and the labels live in `templates/` in the project root (two levels above this skill's physical folder), one folder per language, for example `templates/zh-tw/` and `templates/en/`:
+
+- When only one folder holds a `report-template.md` (or `templates/` holds it directly), that template is always used and the setting is ignored.
+- With several, `report` in the `[language]` section of `configs/settings.ini` names the folder (default `zh-tw`); a name without a folder stops the script with exit 2 and lists the available languages.
+- The `language` line of the folder's `labels.tsv` tells the agents of steps 2 and 3 which language to write the narrative text in, so the whole report is in one language.
+
 ## Customizing the report
 
-- `assets/report-template.md`: layout and wording of the report. Move, rename or remove sections freely.
-- `assets/labels.tsv`: wording the script inserts (dimension names, field names, upstream categories, "none" text, separators).
+- `report-template.md`: layout and wording of the report. Move, rename or remove sections freely.
+- `labels.tsv`: wording the script inserts (dimension names, field names, upstream categories, "none" text, separators) and the `language` line.
+- To add a language, copy a language folder under `templates/` to a new name, translate both files, and set `report` in `[language]`.
 - Placeholders are listed in [references/placeholders.md](references/placeholders.md).
 
 ## Gotchas
 
 - The report contains only what the earlier steps recorded. If something is missing or wrong in the content, fix `tmp/step3/findings.txt` (step 3), rerun scoring (step 4), then render again.
-- Empty sections render as the `none` label (無) automatically; do not delete the placeholders to hide them.
+- Empty sections render as the `none` label (無, None) automatically; do not delete the placeholders to hide them.

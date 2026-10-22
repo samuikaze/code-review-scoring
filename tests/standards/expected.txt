@@ -14,23 +14,23 @@ error: bad.md:35: A7 has no condition for the adjustment
 error: bad.md:36: B1 is under ### A; the letter of a check code must match its dimension
 error: bad.md:37: the CM prefix is reserved for the common standard (role="common"): CM-A8
 error: bad.md:38: a check item is - code｜content｜severity, or - code｜content｜severity｜adjustable to｜condition
-error: bad.md:48: unexpected text under a dimension heading; write check items (- code｜content｜severity), 無, or an HTML comment
+error: bad.md:48: unexpected text under a dimension heading; write check items (- code｜content｜severity), 無 (None), or an HTML comment
 error: bad.md:52: B2 has no content
-error: bad.md:54: headings under ## 檢查項 are ### X. name, with X from A to G
-error: bad.md:56: headings under ## 檢查項 are ### X. name, with X from A to G
+error: bad.md:54: headings under ## 檢查項 (Check items) are ### X. name, with X from A to G
+error: bad.md:56: headings under ## 檢查項 (Check items) are ### X. name, with X from A to G
 error: bad.md:71: a confirmation needs the thing to confirm
 error: bad.md:72: a confirmation is - codes｜what to confirm (separate with the full-width ｜, not |)
 error: bad.md:74: section ## 檢查項 appears more than once
 error: bad.md:76: this HTML comment is not closed
 error: bad.md:2: name may only contain lowercase letters, digits and -
 error: bad.md:1: the front matter has no version
-error: bad.md:14: dimension B must be named 安全性 (dimension codes and names cannot be changed)
-error: bad.md:9: dimension G (可維護性) is missing from the ## 面向 table
-warning: bad.md:50: the heading should be ### B. 安全性
-warning: bad.md:50: ### B has no check item; write 無 if that is intended
-warning: bad.md:58: ### C has no check item; write 無 if that is intended
-warning: bad.md:22: ### F. 可讀性 is missing (keep the heading and write 無 when it has no check item)
-warning: bad.md:22: ### G. 可維護性 is missing (keep the heading and write 無 when it has no check item)
+error: bad.md:14: dimension B must be named 安全性 or Security (dimension codes and names cannot be changed)
+error: bad.md:9: dimension G (可維護性) is missing from the ## 面向 (Dimensions) table
+warning: bad.md:50: the heading should be ### B. 安全性 or ### B. Security
+warning: bad.md:50: ### B has no check item; write 無 or None if that is intended
+warning: bad.md:58: ### C has no check item; write 無 or None if that is intended
+warning: bad.md:22: ### F. 可讀性 is missing (keep the heading and write 無 or None when it has no check item)
+warning: bad.md:22: ### G. 可維護性 is missing (keep the heading and write 無 or None when it has no check item)
 error: bad.md:70: the confirmation refers to Z9, which is not a check item
 
 result: 24 error(s), 8 warning(s)
@@ -158,8 +158,18 @@ error: missing.ini: file not found; copy configs/standards.example.ini to config
 
 result: 1 error(s), 0 warning(s)
 exit=1
-### lint --file ../../docs/templates/scoring-rule-template.md
+### lint --file ../../templates/zh-tw/scoring-rule-template.md
 document: example-standard v1.0, 8 check items (A 2, B 1, C 1, D 1, E 1, F 1, G 1), 1 adjustable, 2 confirmations
+
+result: 0 error(s), 0 warning(s)
+exit=0
+### lint --file ../../templates/en/scoring-rule-template.md
+document: example-standard v1.0, 8 check items (A 2, B 1, C 1, D 1, E 1, F 1, G 1), 1 adjustable, 2 confirmations
+
+result: 0 error(s), 0 warning(s)
+exit=0
+### lint --file good-en.md
+document: english v1.0, 7 check items (A 2, B 1, C 1, D 1, E 1, F 1, G 0), 1 adjustable, 2 confirmations
 
 result: 0 error(s), 0 warning(s)
 exit=0

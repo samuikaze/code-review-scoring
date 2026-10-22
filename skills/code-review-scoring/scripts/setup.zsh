@@ -189,7 +189,7 @@ case "$cmd" in
     else echo "configs/standards.ini: missing $standards_file"; nostd=1; fi
     if [[ $nostd -eq 1 ]]; then
       echo "next: ask the user to register their scoring standards: copy configs/standards.example.ini to configs/standards.ini"
-      echo "      and add the standard documents (template: docs/templates/scoring-rule-template.md); never create them yourself"
+      echo "      and add the standard documents (template: templates/<language>/scoring-rule-template.md); never create them yourself"
     fi
     if [[ $missing -eq 1 ]]; then
       echo "next: ask the user whether to create the missing settings with the wizard in a terminal"

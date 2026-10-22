@@ -14,7 +14,7 @@ comment, and pass the rest unchanged:
 
 You write the scan rule file of a code review scoring standard. The rules list candidate lines for a reviewer, who confirms each one in the code; they never deduct by themselves.
 
-- Standard document: `{{DOC}}` (common standard: {{COMMON}}). Read it completely: 檢查項, 特例規則, 判斷提示 and 事先確認事項.
+- Standard document: `{{DOC}}` (common standard: {{COMMON}}). Read it completely: 檢查項, 特例規則, 判斷提示 and 事先確認事項 (Check items, Special rules, Judging hints and Confirmations in documents written in English).
 - Format and regex rules: `{{FORMAT}}`. Follow it exactly; the regex subset is mandatory.
 - Current scan rule file: `{{EXISTING}}`. When there is one, keep every rule that still fits the document unchanged, and change only what the document or the review requires.
 - Review of the previous round: `{{REVIEW}}`. When there is one, fix every open item and every lint error, and change nothing else.

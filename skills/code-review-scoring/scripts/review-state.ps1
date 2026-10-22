@@ -325,10 +325,23 @@ function Get-StdDoc([string]$Name, [string]$Kind) {
     foreach ($l in (Read-Utf8Lines (P "step1/standards/$Name.resolve"))) { $f = $l.Split("`t"); if ($f[0] -ceq $Kind) { return $f[4] } }
     return ''
 }
+# The language the agents write report text in: the language label of the report template folder (templates/ in the
+# project root; with several languages, the one [language] report of the settings names, default zh-tw).
+function Get-ReportLanguage {
+    $dir = Get-ReportTemplateDir $projectRoot $opt.config
+    $v = ''
+    $lf = Join-Path $dir 'labels.tsv'
+    if (Test-Path -LiteralPath $lf -PathType Leaf) {
+        foreach ($l in (Read-Utf8Lines $lf)) { $a = $l.Split("`t"); if ($a.Count -ge 2 -and $a[0] -ceq 'language') { $v = $a[1].TrimEnd("`r"); break } }
+    }
+    if ($v) { return $v }
+    return "the language of the report template in $dir"
+}
 # Prompt of step $N (plugin $Plugin): the step template plus the shared status protocol. Lines marked "[sub] " are only
 # for subagents, lines marked "[inline] " only for the main agent.
 function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
-    $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"; $sDoc = ''; $cDoc = 'none'
+    $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"; $sDoc = ''; $cDoc = 'none'; $lang = ''
+    if ($N -ge $CR) { $lang = Get-ReportLanguage }
     if ($N -eq $CR) { $pPath = Get-PlanField $Plugin 1; $pMode = Get-PlanField $Plugin 2; $unitArgs += " --plugin $Plugin"; $dir = P "step$CR/$Plugin" }
     elseif ($N -gt $CR) {
         $sDoc = Get-StdDoc $Std 'standard'; $cDoc = Get-StdDoc $Std 'common'; if (-not $cDoc) { $cDoc = 'none' }
@@ -341,7 +354,7 @@ function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
         $l
     }
     $text = ($lines -join "`n")
-    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{COMMON_DOC}}', $cDoc)
+    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{COMMON_DOC}}', $cDoc).Replace('{{REPORT_LANGUAGE}}', $lang)
 }
 # Writes the action "next" prints for a unit ("1", "2-<plugin>" or "3-<standard>") in state $S; returns $false when it
 # needs nothing.
@@ -515,7 +528,7 @@ switch ($cmd) {
         foreach ($n in $stds) {
             if ((Get-UnitState "5-$n") -eq 'success') { continue }
             [void](Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', '4', '--standard', $n, '--state', 'working')))
-            $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standards', (Resolve-UserPath $opt.standards), '-Standard', $n)
+            $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standards', (Resolve-UserPath $opt.standards), '-Standard', $n, '-Config', $opt.config)
             if ($r.Code -ne 0) {
                 [IO.File]::AppendAllText((P "step4/$n/errors.log"), "[$(Get-Now)] score exited $($r.Code):`n$($r.Text)`n", $script:Utf8NoBom)
                 if ($r.Code -eq 1) { Stop-Finish 4 $n 'findings.txt failed validation; redo step 3' }
@@ -524,7 +537,7 @@ switch ($cmd) {
             $grade = @($r.Text -split "`n" | Where-Object { $_.StartsWith('grade ') })[0]
             [void](Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', '4', '--standard', $n, '--state', 'success', '--message', $grade)))
             [void](Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', '5', '--standard', $n, '--state', 'working')))
-            $rr = Invoke-Tool 'code-review-scoring-report' 'render-report' @('-Root', $rootAbs, '-Standard', $n)
+            $rr = Invoke-Tool 'code-review-scoring-report' 'render-report' @('-Root', $rootAbs, '-Standard', $n, '-Config', $opt.config)
             if ($rr.Code -ne 0) {
                 [IO.File]::AppendAllText((P "step5/$n/errors.log"), "[$(Get-Now)] render-report exited $($rr.Code):`n$($rr.Text)`n", $script:Utf8NoBom)
                 Stop-Finish 5 $n "render-report exited $($rr.Code): $(($rr.Text -split "`n")[0])"
@@ -647,7 +660,7 @@ switch ($cmd) {
                     3 {
                         foreach ($f in 'prepared.txt', 'findings.txt') { if (-not (Test-NonEmpty "$d/$f")) { Stop-Refused "missing $(P "$d/$f")" } }
                         if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
-                        $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standards', (Resolve-UserPath $opt.standards), '-Standard', $std, '-Check')
+                        $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standards', (Resolve-UserPath $opt.standards), '-Standard', $std, '-Config', $opt.config, '-Check')
                         if ($r.Code -ne 0) { Stop-Refused "findings.txt does not pass the scoring checks; fix it, then set success again:`n$($r.Text)" }
                     }
                     4 {
@@ -691,7 +704,7 @@ switch ($cmd) {
         }
         else {
             if ($platform -notmatch '^[A-Za-z0-9_-]+$') { Exit-WithError '--platform may only contain letters, digits, - and _' }
-            if ($platform -eq 'workflow') { Exit-WithError 'workflow is reserved and cannot be a platform name' }
+            if (@('workflow', 'language') -contains $platform) { Exit-WithError "$platform is reserved and cannot be a platform name" }
             if (-not $opt.model -and -not $opt.reasoning) {
                 $m = Get-IniValue $cfg $platform 'model'
                 $r = Get-IniValue $cfg $platform 'reasoning'

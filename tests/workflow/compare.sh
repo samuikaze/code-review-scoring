@@ -28,6 +28,9 @@ setup() {
   cp standards.ini "$work/configs/standards.ini"
   printf -- '---\nname: fake-review\ndescription: test plugin\n---\n' > "$work/plugin/SKILL.md"
   printf '[fake-review]\npath="../plugin"\napplies="*.java, *.ts, *.md"\nmode="mapped"\n' > "$work/configs/plugins.ini"
+  printf '[language]\nreport="zh-tw"\n' > "$work/configs/settings.ini"
+  printf '[language]\nreport="en"\n' > "$work/configs/settings-en.ini"
+  printf '[language]\nreport="xx"\n' > "$work/configs/settings-xx.ini"
   ( cd "$work/repo" && git init -q && git config user.email t@example.com && git config user.name t && git config core.autocrlf false && git config commit.gpgsign false
     printf '# demo\n' > README.md && git add . && git commit -qm base
     mkdir -p backend/src/main/java frontend/src
@@ -38,14 +41,20 @@ setup() {
 }
 
 run_all() {  # $sh = bash, zsh or powershell
-  local w="$work_w" R="$work_w/review" S="$work_w/configs/standards.ini" P="$work_w/configs/plugins.ini" n f rc
+  local w="$work_w" R="$work_w/review" S="$work_w/configs/standards.ini" P="$work_w/configs/plugins.ini" C="$work_w/configs/settings.ini" n f rc
   setup
   rs() { case "$sh" in
       bash) bash "$skills/code-review-scoring/scripts/review-state.sh" "$@" ;;
       zsh) zsh "$skills/code-review-scoring/scripts/review-state.zsh" "$@" ;;
       *) "$ps" -NoProfile -ExecutionPolicy Bypass -File "$skills/code-review-scoring/scripts/review-state.ps1" "$@" ;;
     esac; }
-  step() { echo "### $*" | norm; rs "$@" --root "$R" --standards "$S" 2>&1 | norm; echo "exit=${PIPESTATUS[0]}"; }
+  step() { echo "### $*" | norm; rs "$@" --root "$R" --standards "$S" --config "$C" 2>&1 | norm; echo "exit=${PIPESTATUS[0]}"; }
+  report() {  # $1 = settings file; renders the angular report to stdout
+    case "$sh" in
+      bash) bash "$skills/code-review-scoring-report/scripts/render-report.sh" --root "$R" --standard angular --config "$1" --out - ;;
+      zsh) zsh "$skills/code-review-scoring-report/scripts/render-report.zsh" --root "$R" --standard angular --config "$1" --out - ;;
+      *) "$ps" -NoProfile -ExecutionPolicy Bypass -File "$skills/code-review-scoring-report/scripts/render-report.ps1" -Root "$R" -Standard angular -Config "$1" -Out - ;;
+    esac; }
 
   step init --git HEAD~1..HEAD --repo "$w/repo" --title "Demo PR" --plugins "$P"
   step set --step 1 --state working
@@ -65,7 +74,7 @@ run_all() {  # $sh = bash, zsh or powershell
   printf 'C|Major|backend/src/main/java/A.java:1\nproblem: java\nC|Minor|frontend/src/app.ts:1\nproblem: ts\nC|Minor|README.md:3\nproblem: readme\nS|done\n' \
     > "$work/review/step2/fake-review/cr.txt"
   step set --step 2 --plugin fake-review --state success
-  echo "### next (step 3 prompt)"; rs next --inline --root "$R" --standards "$S" 2>&1 | norm | grep -E '^(action|# Step|- Scoring standard|2\. )'
+  echo "### next (step 3 prompt)"; rs next --inline --root "$R" --standards "$S" --config "$C" 2>&1 | norm | grep -E '^(action|# Step|- Scoring standard|- Report language|2\. )'
   step set --step 4 --standard angular --state working
   for n in angular springboot-3; do
     step set --step 3 --standard "$n" --state working
@@ -90,6 +99,9 @@ run_all() {  # $sh = bash, zsh or powershell
   for f in "$work"/reports/*.md; do
     echo "--- ${f##*/}" | norm; grep -E '評分標準|fake-review' "$f" | norm
   done
+  # The report language: [language] report picks one of the folders under templates/.
+  echo "### render-report (report=\"en\")"; report "$w/configs/settings-en.ini" 2>&1 | norm | grep -E '^(# |- \*\*(Scoring standard|Grade)|## |\| (Dimension|A ))'
+  echo "### render-report (report=\"xx\")"; report "$w/configs/settings-xx.ini" 2>&1 | norm; echo "exit=${PIPESTATUS[0]}"
   step show
   step next --inline | grep -vE '^(Load|- |[0-9]. |Tasks|Status|## |# |Follow|$)'
   # A standard that changes after step 1 stops the review.
