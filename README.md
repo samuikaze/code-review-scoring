@@ -2,7 +2,7 @@
 
 PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，遵循 [Agent Skills](https://agentskills.io) 規格，可用於 Claude Code、GitHub Copilot、Codex 等支援 Skill 的工具。
 
-- **評分**：依 `configs/standards.ini` 登錄的評分標準文件評分，不綁定任何技術。每套框架標準（例如 Spring Boot 3、Angular）各產出一份報告，不屬於任何框架的檔案（README、CI 設定、Dockerfile 等）以通用標準評分。標準文件以 Markdown 撰寫，可以放在專案以外，見「評分標準」。
+- **評分**：依 `configs/standards.ini` 登錄的評分標準文件評分，不綁定任何技術。每套框架標準（例如 Spring Boot 3、Angular）各產出一份報告，不屬於任何框架的檔案（README、CI 設定、Dockerfile 等）以通用標準評分。標準文件以 Markdown 撰寫，存放在獨立的 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules) 儲存庫，見「評分標準」。
 - **CR**：其他技術（例如前端）或其他團隊的 CR 規範，以外掛 Skill 的方式掛進流程，不受技術限制。
 - **報告**：CR 結果與評分結果合併成一份報告。
 
@@ -221,7 +221,7 @@ git add --renormalize .
 
 - 依 `docs/templates/scoring-rule-template.md` 撰寫。「面向」「檢查項」「事先確認事項」三個章節由腳本解析，格式固定；「特例規則」「判斷提示」只給 AI 參考，可以自由撰寫。
 - 在專案根目錄複製 `configs/standards.example.ini` 為 `configs/standards.ini`，每套標準一個區段，設定標準文件路徑（`path`）、適用的檔案（`applies`，框架標準必填）、掃描規則檔（`scan`，選填）與配分覆寫（`points.A`～`points.G`，選填）；通用標準設定 `role="common"`，檢查代碼以 `CM-` 開頭。各欄位的說明見範本中的註解。
-- 標準文件與掃描規則檔可以放在專案以外，例如團隊共用的文件庫；路徑依各人環境而不同，所以 `standards.ini` 不進版控，換電腦或換人時請各自設定。
+- 標準文件與掃描規則檔不放在本專案，而是放在 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules) 等外部儲存庫；路徑依各人環境而不同，所以 `standards.ini` 不進版控，換電腦或換人時請各自設定。
 - 寫好或修改標準後，執行 `standard lint` 檢查格式、`applies` 是否重疊、配分加總與掃描規則：
 
   ```bash
@@ -235,6 +235,42 @@ git add --renormalize .
 - 評分流程不執行 lint。標準格式有誤時，評分腳本會停止並提示先執行 lint。
 - 掃描規則檔（TSV）列出可以用正規表示式找出的候選線索，只是提示，不會直接扣分；格式與 `@scope`、`@pr` 記錄見範本與 `tests/prepare/` 的例子。
 - 評分途中不要修改標準：步驟 1 會記錄當下的標準，之後被修改時流程會拒絕繼續（見「依評分標準拆分報告」）。
+
+### 使用現有的評分標準
+
+[code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
+目前提供下列標準，每套都包含標準文件（`.md`）與掃描規則檔（`.tsv`）：
+
+| 標準代號 | 類型 | 適用範圍 | 目錄 |
+| --- | --- | --- | --- |
+| `springboot-3` | 框架標準 | Java／Spring Boot 3 專案 | `springboot3-rule/` |
+| `common` | 通用標準 | 其他檔案，例如 README、CI、Dockerfile | `common-rule/` |
+
+1. 把評分標準儲存庫 clone 到本機，位置不限：
+
+   ```bash
+   git clone https://github.com/samuikaze/code-review-scoring-rules.git
+   ```
+
+2. 在本專案根目錄複製 `configs/standards.example.ini` 為
+   `configs/standards.ini`，`path` 與 `scan` 指向 clone 下來的檔案。
+   相對路徑以 `configs/` 為準，Windows 請使用斜線：
+
+   ```ini
+   [springboot-3]
+   path="/path/to/code-review-scoring-rules/springboot3-rule/springboot-3-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/springboot3-rule/springboot-3-cr-scoring-rule.tsv"
+   applies="*.java, *.kt, *.sql, *.xml, *.yml, *.yaml, *.properties, *.gradle, *.kts"
+
+   [common]
+   path="/path/to/code-review-scoring-rules/common-rule/common-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/common-rule/common-cr-scoring-rule.tsv"
+   role="common"
+   ```
+
+3. 執行 `standard lint` 確認設定與標準都沒有問題。
+
+標準更新時在評分標準儲存庫 `git pull` 即可，不需要修改本專案。不要在評分途中更新，理由同上。新增或修改標準的方式見評分標準儲存庫的 README。
 
 ### 維護評分標準
 
