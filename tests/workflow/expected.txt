@@ -15,6 +15,16 @@ WORK/review/step1
 --- confirmations
 - A2 (springboot-3) 資料量多大:
 - A1 (angular) 是否支援舊版瀏覽器:
+### set --step 1 --state pending --message 1 question
+step 1: pending
+exit=0
+action: ask
+exit=0
+action: run step 1
+exit=0
+### set --step 1 --state working
+step 1: working
+exit=0
 ### set --step 1 --state success
 step 1: success
 exit=0
@@ -71,7 +81,7 @@ H|做得好的地方（選填）
 
 ## Status protocol (mandatory)
 
-Status command: `STATE_CMD set --root "WORK/review" --step 2 --plugin fake-review`
+Status command: `STATE_CMD set --root "WORK/review" --standards "WORK/configs/standards.ini" --config "WORK/configs/settings.ini" --step 2 --plugin fake-review`
 
 1. First run `<status command> --state working`. If it is refused, stop and report the refusal.
 2. Write every file you produce under `WORK/review/step2/fake-review/`; never modify files of other steps or plugins.
@@ -93,7 +103,7 @@ action: run step 3 (springboot-3)
 # Step 3 of 5: Analyze code (springboot-3)
 - Scoring standard: `springboot-3`, document `WORK/std/good-v2.md`; common standard for the files no framework standard covers: `WORK/std/good-common.md`. Use only the check items of these documents (their codes, rules and severities); when several standards score this PR, the other standards' files are reviewed in their own step 3.
 - Report language: write all narrative text of `findings.txt` in Traditional Chinese with Taiwan usage
-2. Otherwise run `prepare-diff --root "WORK/review" --standard springboot-3`, settle every code review comment (skill section "Using code review results"), then review the remaining check items of the standard documents without re-deriving what the code review already found.
+2. Otherwise run `prepare-diff --root "WORK/review" --standard springboot-3 --config "WORK/configs/settings.ini"`, settle every code review comment (skill section "Using code review results"), then review the remaining check items of the standard documents without re-deriving what the code review already found.
 2. Write every file you produce under `WORK/review/step3/springboot-3/`; never modify files of other steps or plugins.
 ### set --step 4 --standard angular --state working
 refused: step 3 (angular) has not succeeded; steps cannot be skipped

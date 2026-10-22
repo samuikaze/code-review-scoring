@@ -12,7 +12,7 @@ Load the `code-review-scoring-code-analysis` skill and follow its workflow mode 
 Tasks:
 
 1. If `{{DIR}}/findings.draft.txt` exists with `answers.md`, this is a rerun after questions: start from the draft, apply the answers to the findings they affect, and do not review the diff again.
-2. Otherwise run `prepare-diff --root "{{ROOT}}" --standard {{STANDARD}}`, settle every code review comment (skill section "Using code review results"), then review the remaining check items of the standard documents without re-deriving what the code review already found.
+2. Otherwise run `prepare-diff --root "{{ROOT}}" --standard {{STANDARD}}{{CONFIG_OPT}}`, settle every code review comment (skill section "Using code review results"), then review the remaining check items of the standard documents without re-deriving what the code review already found.
 3. Questions (only facts that `spec-context.md` does not already answer) go to `questions.md` after the whole diff has been reviewed; save every finding so far to `{{DIR}}/findings.draft.txt` before reporting pending.
-4. Write `findings.txt` in the skill's format, run `score --check --root "{{ROOT}}" --standard {{STANDARD}}` from the `code-review-scoring-score` skill (`{{SKILLS_DIR}}/code-review-scoring-score/scripts/`) and fix every error it reports; the success gate runs the same check.
+4. Write `findings.txt` in the skill's format, run `score --check --root "{{ROOT}}" --standard {{STANDARD}}{{CONFIG_OPT}}` from the `code-review-scoring-score` skill (`{{SKILLS_DIR}}/code-review-scoring-score/scripts/`) and fix every error it reports; the success gate runs the same check.
 5. If `{{ROOT}}/step4/{{STANDARD}}/errors.log` is newer than `findings.txt`, scoring rejected the findings: fix every listed error (recheck the code and the check items, not only the format).

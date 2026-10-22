@@ -325,6 +325,12 @@ function Get-StdDoc([string]$Name, [string]$Kind) {
     foreach ($l in (Read-Utf8Lines (P "step1/standards/$Name.resolve"))) { $f = $l.Split("`t"); if ($f[0] -ceq $Kind) { return $f[4] } }
     return ''
 }
+# Options that the prompts pass on to the scripts: --standards and --config when they are not the defaults.
+function Get-FileOpt([string]$Name, [string]$File, [string]$Default) {
+    $f = Resolve-UserPath $File
+    if ($f -ceq (Resolve-UserPath $Default)) { return '' }
+    return " $Name `"$f`""
+}
 # The language the agents write report text in: the language label of the report template folder (templates/ in the
 # project root; with several languages, the one [language] report of the settings names, default zh-tw).
 function Get-ReportLanguage {
@@ -342,6 +348,8 @@ function Get-ReportLanguage {
 function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
     $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"; $sDoc = ''; $cDoc = 'none'; $lang = ''
     if ($N -ge $CR) { $lang = Get-ReportLanguage }
+    $sOpt = Get-FileOpt '--standards' $opt.standards (Join-Path $projectRoot 'configs/standards.ini')
+    $cOpt = Get-FileOpt '--config' $opt.config (Join-Path $projectRoot 'configs/settings.ini')
     if ($N -eq $CR) { $pPath = Get-PlanField $Plugin 1; $pMode = Get-PlanField $Plugin 2; $unitArgs += " --plugin $Plugin"; $dir = P "step$CR/$Plugin" }
     elseif ($N -gt $CR) {
         $sDoc = Get-StdDoc $Std 'standard'; $cDoc = Get-StdDoc $Std 'common'; if (-not $cDoc) { $cDoc = 'none' }
@@ -354,7 +362,7 @@ function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
         $l
     }
     $text = ($lines -join "`n")
-    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{COMMON_DOC}}', $cDoc).Replace('{{REPORT_LANGUAGE}}', $lang)
+    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"$sOpt$cOpt").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{COMMON_DOC}}', $cDoc).Replace('{{REPORT_LANGUAGE}}', $lang).Replace('{{STANDARDS_OPT}}', $sOpt).Replace('{{CONFIG_OPT}}', $cOpt)
 }
 # Writes the action "next" prints for a unit ("1", "2-<plugin>" or "3-<standard>") in state $S; returns $false when it
 # needs nothing.
@@ -369,6 +377,9 @@ function Write-NextAction([string]$U, [string]$Label, [string]$S, [bool]$Inline,
     else { $n = [int]$U; $plugin = ''; $unitArgs = "--step $U" }
     $d = P (Get-UnitDir $U)
     $o = New-Object System.Collections.Generic.List[string]
+    # Once the replies are written (answers.md newer than questions.md), the step runs again and applies them.
+    $ans = Join-Path $d 'answers.md'; $qs = Join-Path $d 'questions.md'
+    if ($S -eq 'pending' -and (Test-Path -LiteralPath $ans) -and ((-not (Test-Path -LiteralPath $qs)) -or (Get-Item -LiteralPath $ans).LastWriteTimeUtc -gt (Get-Item -LiteralPath $qs).LastWriteTimeUtc)) { $S = 'answered' }
     if ($S -eq 'pending') {
         $o.Add('action: ask')
         $o.Add("$Label needs answers. Ask the user every question in $d/questions.md in one message, write the replies")
