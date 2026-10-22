@@ -9,6 +9,9 @@ ROOT defaults to tmp in the project root. Without ROOT/step2/plan.tsv the code r
 The final report is published as REPORTS/<YYYY-MM-DD>_<PR title>.md (REPORTS defaults to reports next to ROOT; the same
 name is overwritten when the same PR is rendered again on the same day) and its path is recorded in
 ROOT/step5/report-path.txt. Use -NoPublish to write only the working copy; -Out - prints to stdout only.
+With the review plan ROOT/step1/standards/plan.tsv the report is that of the standard -Standard (default: the only
+one): it reads ROOT/step3/NAME/ and ROOT/step4/NAME/, shows only the code review comments on its files, writes
+ROOT/step5/NAME/ and is published as REPORTS/<YYYY-MM-DD>_<PR title>_<standard>.md.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 1 inputs missing or inconsistent (rerun the scoring skill), 2 bad arguments.
 
@@ -23,7 +26,8 @@ param(
     [string]$Title,
     [Alias('o')][string]$Out,
     [string]$Reports,
-    [switch]$NoPublish
+    [switch]$NoPublish,
+    [string]$Standard
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,18 +40,23 @@ if (-not $Reports) { $Reports = Join-Path (Split-Path -Parent (Resolve-UserPath 
 $skillDir = Split-Path -Parent $PSScriptRoot
 if (-not $Template) { $Template = Join-Path $skillDir 'assets/report-template.md' }
 if (-not $Labels) { $Labels = Join-Path $skillDir 'assets/labels.tsv' }
-$findingsPath = Join-Path $Root 'step3/findings.txt'
+# With a review plan (step 1 of the workflow), each standard has its own step folders.
+$cplan = ''; $sub = ''
+$cstd = Get-PlanStandard $Root $Standard
+if ($cstd) { $cplan = Join-Path $Root 'step1/standards/plan.tsv'; $sub = "/$cstd" }
+$step4 = Join-Path $Root "step4$sub"
+$findingsPath = Join-Path $Root "step3$sub/findings.txt"
 foreach ($f in $findingsPath, $Template, $Labels) { if (-not (Test-UserFile $f)) { Exit-WithError "file not found: $f" } }
 foreach ($name in 'score.tsv', 'score.json') {
-    $p = Join-Path $Root "step4/$name"
+    $p = Join-Path $step4 $name
     if (-not (Test-UserFile $p)) { Exit-WithError "$p not found; run the scoring skill first" 1 }
     if ((Get-Item -LiteralPath (Resolve-UserPath $findingsPath)).LastWriteTimeUtc -gt (Get-Item -LiteralPath (Resolve-UserPath $p)).LastWriteTimeUtc) {
         Exit-WithError "findings.txt changed after $name was written; rerun the scoring skill" 1
     }
 }
 if (-not $Out) {
-    [void][IO.Directory]::CreateDirectory((Resolve-UserPath (Join-Path $Root 'step5')))
-    $Out = Join-Path $Root 'step5/report.md'
+    [void][IO.Directory]::CreateDirectory((Resolve-UserPath (Join-Path $Root "step5$sub")))
+    $Out = Join-Path $Root "step5$sub/report.md"
 }
 $planFile = Join-Path $Root 'step2/plan.tsv'
 if (Test-UserFile $planFile) {
@@ -97,10 +106,10 @@ foreach ($raw in (Read-Utf8Lines $findingsPath)) {
 }
 
 # score.tsv / score.json
-$total = ''; $grade = ''; $capped = '0'; $upCount = 0
+$total = ''; $grade = ''; $capped = '0'; $upCount = 0; $stdLabel = ''; $commonLabel = ''
 $dims = New-Object System.Collections.Generic.List[object]
 $scored = New-Object System.Collections.Generic.List[object]
-foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step4/score.tsv'))) {
+foreach ($l in (Read-Utf8Lines (Join-Path $step4 'score.tsv'))) {
     $a = $l -split "`t"
     switch ($a[0]) {
         'total' { $total = $a[1] }
@@ -109,12 +118,14 @@ foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step4/score.tsv'))) {
         'dim' { $dims.Add([pscustomobject]@{ Code = $a[1]; Score = $a[2]; Max = $a[3] }) }
         'finding' { $scored.Add([pscustomobject]@{ Id = $a[1]; Sev = $a[2]; Pts = $a[3]; Locs = $a[4]; Seq = [int]$a[5] }) }
         'upstream' { $upCount++; if ([int]$a[1] -le $ups.Count) { $ups[[int]$a[1] - 1].Pts = $a[3] } }
+        'standard' { $stdLabel = "$($a[1]) $($a[2])" }
+        'common' { $commonLabel = "$($a[1]) $($a[2])" }
     }
 }
 if ($dims.Count -ne 7 -or -not $grade) { Exit-WithError 'score.tsv is missing or incomplete; run the scoring skill first' 1 }
 if ($scored.Count -ne $fIds.Count -or $upCount -ne $ups.Count) { Exit-WithError 'findings.txt and score.tsv list different records; rerun the scoring skill' 1 }
 foreach ($s in $scored) { if ($s.Seq -lt 1 -or $s.Seq -gt $fIds.Count -or $fIds[$s.Seq - 1] -cne $s.Id) { Exit-WithError "finding $($s.Id) of score.tsv does not match findings.txt; rerun the scoring skill" 1 } }
-$json = (Read-Utf8Text (Join-Path $Root 'step4/score.json')).TrimEnd("`r", "`n")
+$json = (Read-Utf8Text (Join-Path $step4 'score.json')).TrimEnd("`r", "`n")
 if (-not $json) { Exit-WithError 'score.json is missing or empty; run the scoring skill first' 1 }
 
 if (-not $Title) {
@@ -132,7 +143,8 @@ $b = L 'sep.bracket'; $c = L 'sep.colon'
 $blk = @{}
 $sb = New-Object System.Text.StringBuilder
 foreach ($d in $dims) {
-    $items = @($scored | Where-Object { $_.Id.StartsWith($d.Code) } | ForEach-Object { "$($_.Id) $($_.Sev) -$($_.Pts)" }) -join (L 'sep.list')
+    # Dimension of a check id: its first letter, or the letter after CM- for the common standard (CM-B1 is B).
+    $items = @($scored | Where-Object { $(if ($_.Id.StartsWith('CM-')) { $_.Id.Substring(3, 1) } else { $_.Id.Substring(0, 1) }) -ceq $d.Code } | ForEach-Object { "$($_.Id) $($_.Sev) -$($_.Pts)" }) -join (L 'sep.list')
     if (-not $items) { $items = L 'none' }
     [void]$sb.Append("| $($d.Code) $(L "dim.$($d.Code)") | $($d.Score)/$($d.Max) | $items |`n")
 }
@@ -205,8 +217,11 @@ else {
                     'S' { $r.Summary = (@($r.Summary, $a[1]) | Where-Object { $_ }) -join ' ' }
                     'H' { $r.Highlights += $a[1] }
                     'C' {
-                        $curC = [pscustomobject]@{ Sev = $a[1]; Locs = $a[2]; Rule = $(if ($a[3]) { $a[3] } else { '-' }); Fields = @{}; Index = $r.Comments.Count; Links = New-Object System.Collections.Generic.List[string]; Reject = $null }
-                        $r.Comments.Add($curC); $r.Count[$a[1]]++; $crTotals[$a[1]]++
+                        # Comments of other standards keep their number but are hidden.
+                        $curC = [pscustomobject]@{ Sev = $a[1]; Locs = $a[2]; Rule = $(if ($a[3]) { $a[3] } else { '-' }); Fields = @{}; Index = $r.Comments.Count; Links = New-Object System.Collections.Generic.List[string]; Reject = $null
+                            Hidden = -not (Test-CommentOwner $cplan $cstd $a[2]) }
+                        $r.Comments.Add($curC)
+                        if (-not $curC.Hidden) { $r.Count[$a[1]]++; $crTotals[$a[1]]++ }
                     }
                 }
             }
@@ -251,7 +266,7 @@ else {
             if (-not $r.Ok) { [void]$sb.Append((L 'cr.missing') + "`n"); continue }
             [void]$sb.Append("**$(L 'cr.summary')**$c$($r.Summary)`n`n")
             # comments sorted by severity, keeping the plugin's order within a severity
-            $sorted = @($r.Comments | Sort-Object @{ Expression = { [array]::IndexOf($sevOrder, $_.Sev) } }, @{ Expression = { $_.Index } })
+            $sorted = @($r.Comments | Where-Object { -not $_.Hidden } | Sort-Object @{ Expression = { [array]::IndexOf($sevOrder, $_.Sev) } }, @{ Expression = { $_.Index } })
             if ($sorted.Count -eq 0) { [void]$sb.Append((L 'cr.no_comments') + "`n") }
             $j = 0
             foreach ($cm in $sorted) {
@@ -283,7 +298,8 @@ else {
 }
 
 $inl = [ordered]@{ PR_TITLE = $Title; REVIEW_DATE = (Get-Date -Format 'yyyy-MM-dd'); GRADE = $grade; TOTAL = $total
-    CAPPED_NOTE = $(if ($capped -eq '1') { L 'capped_note' } else { '' }); CR_TOTALS = $crTotalsText }
+    CAPPED_NOTE = $(if ($capped -eq '1') { L 'capped_note' } else { '' }); CR_TOTALS = $crTotalsText
+    STANDARD = $(if ($stdLabel) { $stdLabel } else { L 'none' }) + $(if ($commonLabel) { (L 'standard.common').Replace('{common}', $commonLabel) } else { '' }) }
 
 $outSb = New-Object System.Text.StringBuilder
 $unknown = @{}
@@ -313,9 +329,9 @@ $name = ($rawTitle -replace '[\[\]\\/:*?"<>|#%{}\s\p{Cc}]+', '-').Trim('-', '.')
 if (-not $name) { $name = 'pr-review' }
 $reportsAbs = Resolve-UserPath $Reports
 [void][IO.Directory]::CreateDirectory($reportsAbs)
-$final = Join-Path $reportsAbs ("$(Get-Date -Format 'yyyy-MM-dd')_$name.md")
+$final = Join-Path $reportsAbs ("$(Get-Date -Format 'yyyy-MM-dd')_$name$(if ($cstd) { "_$cstd" }).md")
 Write-Utf8File $final $outSb.ToString()
-if ((Resolve-UserPath $Out) -eq (Resolve-UserPath (Join-Path $Root 'step5/report.md'))) {
-    Write-Utf8File (Join-Path $Root 'step5/report-path.txt') "$final`n"
+if ((Resolve-UserPath $Out) -eq (Resolve-UserPath (Join-Path $Root "step5$sub/report.md"))) {
+    Write-Utf8File (Join-Path $Root "step5$sub/report-path.txt") "$final`n"
 }
 Write-Output "published $final"

@@ -1,0 +1,12 @@
+diff --git a/src/main/java/A.java b/src/main/java/A.java
+new file mode 100644
+--- /dev/null
++++ b/src/main/java/A.java
+@@ -0,0 +1 @@
++// src/main/java/A.java
+diff --git a/docs/guide.md b/docs/guide.md
+new file mode 100644
+--- /dev/null
++++ b/docs/guide.md
+@@ -0,0 +1 @@
++// docs/guide.md

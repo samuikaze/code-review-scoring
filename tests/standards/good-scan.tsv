@@ -1,0 +1,7 @@
+# Scan rules of good-v1.md (test fixture).
+# source: good-v1.md v0.1 sha256:0aed7bc76d20fcc7cd89c7114fb366d09eb951b071f8e5f22750c3baddb41481
+@scope	test	-	(^|/)src/test/
+@scope	main	!test	(^|/)src/main/
+@pr	C1	has:main,no:test	main code changed without tests
+A1	main	i	null	-	-	possible null handling
+API	main	-	@GetMapping	-	-	endpoint

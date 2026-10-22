@@ -1,7 +1,9 @@
 # Validator and calculator shared by score.sh and score.zsh (POSIX awk). Run with LC_ALL=C.
-# Variables: rules=rules.tsv  idxfile=output of diff-index.awk ("" = skip location checks)
-#            config=configs.ini with the [points], [deductions] (incl. merge) and [grades] sections ("" or missing file = defaults)
+# Variables: rules=output of "standard resolve" (standard, common, points and check records)
+#            idxfile=output of diff-index.awk ("" = skip location checks)
+#            config=configs/settings.ini with the [points], [deductions] (incl. merge) and [grades] sections ("" or missing file = defaults)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = skip the code review comment checks)
+#            cplan=the review plan (ROOT/step1/standards/plan.tsv) and cstd=the standard: check only its comments
 #            tsvout / jsonout = output files  checkonly=1: validate only, write nothing
 # Input: findings.txt (format: see references/findings-format.md of code-review-scoring-code-analysis).
 # On validation errors: errors go to stderr, nothing is written, exit 1.
@@ -26,13 +28,35 @@ function err2(ln, msg) { nerr++; errs = errs "  - line " ln ": " msg "\n" }
 function err0(msg) { nerr++; errs = errs "  - " msg "\n" }
 
 # Comment ids are <plugin>#<n>: the n-th C record of the plugin's cr.txt (prepare-diff lists them in prepared.txt).
-function load_comments(    l, x, a, f, c) {
+# Whether a code review comment with these locations belongs to the standard cstd of the review plan cplan: one of its
+# files is a file of cstd, or none of its files is in the plan (a comment on the whole PR, location -) and cstd is the
+# first report. Without cstd every comment belongs to it.
+function cm_mine(loc,    l, a, n, p, i, f, any) {
+    if (cstd == "") return 1
+    if (!plload) {
+        plload = 1
+        while ((getline l < cplan) > 0) {
+            split(l, a, "\t")
+            if (a[1] == "report" && plfirst == "") plfirst = a[2]
+            else if (a[1] == "file") { plany[a[2]] = 1; if (a[3] == cstd) plmine[a[2]] = 1 }
+        }
+        close(cplan)
+    }
+    n = split(loc, p, ","); any = 0
+    for (i = 1; i <= n; i++) { f = trim(p[i]); sub(/:[0-9][-0-9]*$/, "", f); if (f in plmine) return 1; if (f in plany) any = 1 }
+    return !any && cstd == plfirst
+}
+
+function load_comments(    l, x, a, f, c, t) {
     if (crdir == "" || (getline l < (crdir "/plan.tsv")) <= 0) return
     hascr = 1
     do {
         if (l == "") continue
         split(l, a, "\t"); f = crdir "/" a[1] "/cr.txt"; c = 0
-        while ((getline x < f) > 0) if (x ~ /^[ \t]*C[ \t]*\|/) { c++; ncm++; cmid[ncm] = a[1] "#" c; cmode[a[1] "#" c] = a[3] }
+        while ((getline x < f) > 0) if (x ~ /^[ \t]*C[ \t]*\|/) {
+            c++; split(x, t, "|")
+            if (cm_mine(trim(t[3]))) { ncm++; cmid[ncm] = a[1] "#" c; cmode[a[1] "#" c] = a[3] }
+        }
         close(f)
     } while ((getline l < (crdir "/plan.tsv")) > 0)
     close(crdir "/plan.tsv")
@@ -53,7 +77,7 @@ function use_sources(val,    n, s, i, e) {
 }
 function cfgerr(msg) { ncfg++; cfgerrs = cfgerrs "  - " msg "\n" }
 
-# Reads the scoring settings of configs.ini; keys that are not set keep their defaults.
+# Reads the scoring settings of configs/settings.ini; keys that are not set keep their defaults.
 function load_config(file,    l, sec, k, v, sum, i, g) {
     if (file != "") {
         while ((getline l < file) > 0) {
@@ -79,9 +103,11 @@ function load_config(file,    l, sec, k, v, sum, i, g) {
         }
         close(file)
     }
+    # The [points] overrides of the standard in configs/standards.ini win over the settings.
+    for (k in ovr) dmax[k] = ovr[k]
     sum = 0
     for (i = 1; i <= 7; i++) sum += dmax[dims[i]]
-    if (sum != 100) cfgerr("[points] the seven dimensions must add up to 100, not " sum)
+    if (sum != 100) cfgerr("[points] the seven dimensions must add up to 100, not " sum (novr ? " (with the points overrides of [" stdname "] in standards.ini)" : ""))
     if (gmin["S"] > 100) cfgerr("[grades] S must be at most 100")
     split("S A B C", g, " ")
     for (i = 1; i < 4; i++) if (gmin[g[i]] <= gmin[g[i + 1]]) cfgerr("[grades] " g[i] " (" gmin[g[i]] ") must be higher than " g[i + 1] " (" gmin[g[i + 1]] ")")
@@ -90,26 +116,29 @@ function load_config(file,    l, sec, k, v, sum, i, g) {
 BEGIN {
     FS = "|"
     split("A B C D E F G", dims, " ")
-    # Defaults; configs.ini can change them
+    # Defaults; configs/settings.ini can change them
     dmax["A"] = 25; dmax["B"] = 15; dmax["C"] = 15; dmax["D"] = 15; dmax["E"] = 10; dmax["F"] = 10; dmax["G"] = 10
     pts["Critical"] = 10; pts["Major"] = 5; pts["Minor"] = 2; pts["Nit"] = 1
     gmin["S"] = 95; gmin["A"] = 85; gmin["B"] = 70; gmin["C"] = 55
+    # Check items of the standard and of the common standard, as printed by "standard resolve".
+    while ((getline l < rules) > 0) {
+        split(l, a, "\t")
+        if (a[1] == "check") { def[a[2]] = a[3]; adj[a[2]] = a[4] }
+        else if (a[1] == "points") { ovr[a[2]] = a[3] + 0; novr++ }
+        else if (a[1] == "standard") { stdname = a[2]; stdver = a[3]; stdhash = a[4] }
+        else if (a[1] == "common") { cmname = a[2]; cmver = a[3]; cmhash = a[4] }
+    }
+    close(rules)
     load_config(config)
     if (ncfg > 0) { printf "invalid scoring settings in %s:\n%s", config, cfgerrs > "/dev/stderr"; cfgfail = 1; exit 2 }
     load_comments()
     utype["spec-gap"] = "missing,wrong,ambiguous"
     utype["third-party"] = "spec-missing,spec-wrong,behavior-mismatch,not-delivered,bug"
     utype["ownership-change"] = "spec,interface,process"
-    while ((getline l < rules) > 0) {
-        if (l ~ /^#/ || l ~ /^[ \t]*$/) continue
-        split(l, a, "\t"); def[a[1]] = a[2]; adj[a[1]] = a[3]
-    }
-    close(rules)
     if (idxfile != "") {
         while ((getline l < idxfile) > 0) {
             split(l, a, "\t")
             if (a[1] == "L") { kind[a[2] SUBSEP a[3]] = a[4]; known[a[2]] = 1 }
-            else if (a[1] == "T") hastest = 1
         }
         close(idxfile)
     }
@@ -138,7 +167,7 @@ BEGIN {
     if (t == "F") {
         id = $2; sev = $3; locs = $4; reason = $5
         rec = "skip"; recid = id; recline = NR
-        # Check id "-": no check of the checklist covers the problem; deducted from the total by its severity.
+        # Check id "-": no check item of the standard covers the problem; deducted from the total by its severity.
         other = (id == "-")
         if (!other && !(id in def)) { err("unknown check id " id " (use - when no check covers the problem)"); next }
         if (!(sev in pts)) { err(id ": severity \"" sev "\" is not Critical/Major/Minor/Nit"); next }
@@ -146,7 +175,6 @@ BEGIN {
             if (("," adj[id] ",") !~ ("," sev ",")) { err(id ": severity must be the default " def[id] (adj[id] != "-" ? ", the allowed adjustment " adj[id] : "") " or Nit, not " sev); next }
             if (reason == "") { err(id ": non-default severity " sev " needs the matching adjustment condition in column 5"); next }
         }
-        if (id == "C1" && sev == "Critical" && idxfile != "" && hastest) err("C1 Critical requires that the PR changes no test file, but the diff contains test files")
         if (locs == "") { err(id ": missing file:line location"); next }
         if (locs == "-" && !other) { err(id ": location - (whole PR) is only allowed when the check id is -; give file:line"); next }
         # merge=true: one F record per check id with all its locations, deducted once.
@@ -226,7 +254,7 @@ END {
         d = dims[k]; ded = 0
         for (i = 1; i <= nf_; i++) {
             x = forder[i]
-            if (substr(fid[x], 1, 1) != d) continue
+            if (dimof(fid[x]) != d) continue
             ded += pts[fsev[x]]
         }
         sc[d] = dmax[d] - ded; if (sc[d] < 0) sc[d] = 0
@@ -242,12 +270,17 @@ END {
     if (crit && (grade == "S" || grade == "A")) { grade = "B"; capped = 1 }
 
     printf "total\t%d\ngrade\t%s\ncapped\t%d\ncritical\t%d\n", total, grade, capped, crit ? 1 : 0 > tsvout
+    printf "standard\t%s\t%s\t%s\n", stdname, stdver, stdhash > tsvout
+    if (cmname != "") printf "common\t%s\t%s\t%s\n", cmname, cmver, cmhash > tsvout
     for (k = 1; k <= 7; k++) printf "dim\t%s\t%d\t%d\n", dims[k], sc[dims[k]], dmax[dims[k]] > tsvout
     for (i = 1; i <= nf_; i++) { x = forder[i]; printf "finding\t%s\t%s\t%d\t%s\t%d\n", fid[x], fsev[x], pts[fsev[x]], floc[x], x > tsvout }
     for (i = 1; i <= nu; i++) printf "upstream\t%d\t%s\t%d\n", i, usev[i], pts[usev[i]] > tsvout
     close(tsvout)
 
     printf "{\n  \"total\": %d,\n  \"grade\": \"%s\",\n  \"hasCritical\": %s,\n", total, grade, (crit ? "true" : "false") > jsonout
+    printf "  \"standard\": { \"name\": %s, \"version\": %s, \"hash\": %s },\n", jstr(stdname), jstr(stdver), jstr(stdhash) > jsonout
+    if (cmname != "") printf "  \"common\": { \"name\": %s, \"version\": %s, \"hash\": %s },\n", jstr(cmname), jstr(cmver), jstr(cmhash) > jsonout
+    else printf "  \"common\": null,\n" > jsonout
     printf "  \"dimensions\": { \"A\": %d, \"B\": %d, \"C\": %d, \"D\": %d, \"E\": %d, \"F\": %d, \"G\": %d },\n", sc["A"], sc["B"], sc["C"], sc["D"], sc["E"], sc["F"], sc["G"] > jsonout
     printf "  \"otherDeduction\": %d,\n  \"upstreamDeduction\": %d,\n", othded, upded > jsonout
     printf "  \"findings\": [" > jsonout
@@ -274,9 +307,12 @@ END {
     printf "grade %s, total %d/100%s\n", grade, total, (capped ? " (capped at B because of a Critical finding)" : "")
     for (k = 1; k <= 7; k++) printf "%s %d/%d  ", dims[k], sc[dims[k]], dmax[dims[k]]
     printf "\ndeductions: %d (without a check id: %d), upstream: %d, rejected comments: %d, skipped checks: %d\n", nf_, cnt_other(), nu, nx, ns
+    printf "standard: %s %s%s\n", stdname, stdver, (cmname != "" ? ", common: " cmname " " cmver : "")
     if (nwarn > 0) printf "warnings:\n%s", warns > "/dev/stderr"
 }
 
+# Dimension of a check id: its first letter, or the letter after CM- for the common standard.
+function dimof(id) { return substr(id, 1, 3) == "CM-" ? substr(id, 4, 1) : substr(id, 1, 1) }
 function cnt_other(    c, i) { c = 0; for (i = 1; i <= nf_; i++) if (fid[i] == "-") c++; return c }
 function after(a, b) {
     if (sevrank(fsev[a]) != sevrank(fsev[b])) return sevrank(fsev[a]) > sevrank(fsev[b])

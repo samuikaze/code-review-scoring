@@ -1,0 +1,12 @@
+# Scan rules of common.md (tests/score).
+# source: common.md v0.1 sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+@scope	shell	-	\.(sh|bash|zsh)$
+@scope	docs	-	\.(md|markdown)$
+@scope	ci	-	(^|/)\.github/workflows/
+@scope	docker	-	(^|/)Dockerfile[^/]*$
+@pr	CM-F1	has:shell,no:docs	scripts changed without documentation
+@pr	CM-A1	modified:ci	existing CI workflow changed
+CM-A1	docker	-	^FROM[ \t]+[^ \t]+:latest	-	-	unpinned base image
+CM-B1	any	i	(token|password|secret)[a-z_]*[ \t]*[:=]	-	-	possible secret in a file
+CM-B1	shell	-	curl[^|]*\|[ \t]*(ba)?sh	-	-	downloaded script piped to a shell
+CM-B1	ci	-	curl[^|]*\|[ \t]*(ba)?sh	-	-	downloaded script piped to a shell

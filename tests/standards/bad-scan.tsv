@@ -1,0 +1,22 @@
+# source: bad.md v1 sha256:0000
+@scope	test	-	(^|/)src/test/
+@scope	test	-	x
+@scope	any	-	x
+@scope	Main	-	x
+@scope	main	!nope	x
+@scope	two	-
+@pr	C1	has:main,nope:test	hint
+@pr	C1	has:ghost	
+@bad	x	y	z
+A1	test	-	foo\bbar	-	-	word boundary
+A1	test	-	(?i)foo	-	-	inline option
+A1	test	-	a+?	-	-	lazy
+A1	test	-	[[:alpha:]]	-	-	posix class
+A1	test	-	[:=]x	-	-	not a class
+A1	test	-	\d+	-	-	digit
+A1	test	-	(unclosed	-	-	compile error
+A99	test	-	x	-	-	unknown code
+lower	test	-	x	-	-	bad tag
+API	ghost	q	x	-	-	bad scope and flags
+API	any	-	-	-	-	
+A1	any	-	x

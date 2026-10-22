@@ -1,0 +1,79 @@
+### --diff multi.diff --standards standards.ini
+2 report(s):
+  - springboot-3 v0.2: 4 file(s) (3 scored with the common standard)
+  - angular v0.2: 5 file(s) (3 scored with the common standard)
+wrote OUT/plan/plan.tsv
+exit=0
+--- plan.tsv
+report	springboot-3	4
+report	angular	5
+file	backend/src/main/java/A.java	springboot-3	framework
+file	backend/README.md	springboot-3	common
+file	frontend/src/app.ts	angular	framework
+file	frontend/package.json	angular	common
+file	README.md	springboot-3	common
+file	README.md	angular	common
+file	.github/workflows/ci.yml	springboot-3	common
+file	.github/workflows/ci.yml	angular	common
+file	frontend/src/app.html	angular	framework
+--- confirm.tsv
+springboot-3	A2	資料量多大
+angular	A1	是否支援舊版瀏覽器
+--- angular.diff
+diff --git a/frontend/src/app.ts b/frontend/src/app.ts
+diff --git a/frontend/package.json b/frontend/package.json
+diff --git a/README.md b/README.md
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+diff --git a/frontend/src/app.html b/frontend/src/app.html
+--- springboot-3.diff
+diff --git a/backend/src/main/java/A.java b/backend/src/main/java/A.java
+diff --git a/backend/README.md b/backend/README.md
+diff --git a/README.md b/README.md
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+--- angular.resolve
+standard	angular	v0.2	sha256:0465ef8820c3d07d2303488e209e50b40dd0fce5b0b295ced065091d62d72632	angular.md
+applies	((^|/)[^/]*/.ts$)|((^|/)[^/]*/.html$)
+common	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	ROOT/tests/standards/good-common.md
+--- springboot-3.resolve
+standard	springboot-3	v0.2	sha256:28801aba8ae9d5bb7d08cf4f8472cb5ca628efb871204f41bd9debfe6ac2b948	ROOT/tests/standards/good-v2.md
+applies	((^|/)[^/]*/.java$)|((^|/)[^/]*/.kt$)
+common	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	ROOT/tests/standards/good-common.md
+### --diff common-only.diff --standards standards.ini
+1 report(s):
+  - common v0.1: 2 file(s)
+wrote OUT/plan/plan.tsv
+exit=0
+--- plan.tsv
+report	common	2
+file	README.md	common	common
+file	.github/workflows/ci.yml	common	common
+--- confirm.tsv
+--- common.diff
+diff --git a/README.md b/README.md
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+--- common.resolve
+standard	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	ROOT/tests/standards/good-common.md
+### --diff java-only.diff --standards standards.ini
+1 report(s):
+  - springboot-3 v0.2: 2 file(s) (1 scored with the common standard)
+wrote OUT/plan/plan.tsv
+exit=0
+--- plan.tsv
+report	springboot-3	2
+file	src/main/java/A.java	springboot-3	framework
+file	docs/guide.md	springboot-3	common
+--- confirm.tsv
+springboot-3	A2	資料量多大
+--- springboot-3.diff
+diff --git a/src/main/java/A.java b/src/main/java/A.java
+diff --git a/docs/guide.md b/docs/guide.md
+--- springboot-3.resolve
+standard	springboot-3	v0.2	sha256:28801aba8ae9d5bb7d08cf4f8472cb5ca628efb871204f41bd9debfe6ac2b948	ROOT/tests/standards/good-v2.md
+applies	((^|/)[^/]*/.java$)|((^|/)[^/]*/.kt$)
+common	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	ROOT/tests/standards/good-common.md
+### --diff empty.diff --standards standards.ini
+error: empty.diff: the diff lists no file
+exit=2
+### --diff common-only.diff --standards standards-nocommon.ini
+error: common-only.diff: no framework standard covers the files of this PR and no common standard is registered
+exit=2

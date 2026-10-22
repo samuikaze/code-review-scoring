@@ -2,28 +2,39 @@
 
 PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，遵循 [Agent Skills](https://agentskills.io) 規格，可用於 Claude Code、GitHub Copilot、Codex 等支援 Skill 的工具。
 
-- **評分**：內建依團隊「Spring Boot 3 PR 程式碼品質評分標準（v0.5 試行版）」與 AI 評分指引建立的檢查項與計分規則，目前適用 Java／Spring Boot 3。
+- **評分**：依 `configs/standards.ini` 登錄的評分標準文件評分，不綁定任何技術。每套框架標準（例如 Spring Boot 3、Angular）各產出一份報告，不屬於任何框架的檔案（README、CI 設定、Dockerfile 等）以通用標準評分。標準文件以 Markdown 撰寫，存放在獨立的 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules) 儲存庫，見「評分標準」。
 - **CR**：其他技術（例如前端）或其他團隊的 CR 規範，以外掛 Skill 的方式掛進流程，不受技術限制。
 - **報告**：CR 結果與評分結果合併成一份報告。
 
 ## 評分流程
 
-依「閱讀規格書 → CR → 分析程式碼 → 打分數 → 產出報告」五個步驟執行，另有一個主流程 Skill 負責控管。步驟 2 的 CR 由 `plugins.ini` 登記的外掛 Skill 執行；步驟 3 分析程式碼時會確認 CR 意見，符合評分檢查項的轉為扣分項，所以分數同時反映評分規則與 CR 結果。最終報告包含 CR 結果與分數結果：
+依「閱讀規格書 → CR → 分析程式碼 → 打分數 → 產出報告」五個步驟執行，另有一個主流程 Skill 負責控管。步驟 2 的 CR 由 `configs/plugins.ini` 登記的外掛 Skill 執行；步驟 3 分析程式碼時會確認 CR 意見，符合評分檢查項的轉為扣分項，所以分數同時反映評分規則與 CR 結果。最終報告包含 CR 結果與分數結果：
 
 | Skill | 角色 | 產出（本專案根目錄的 `tmp/` 下；最終報告在本專案的 `reports/`） |
 | --- | --- | --- |
 | `code-review-scoring` | 主 Agent：確認執行方式、依序派發 Sub-Agent、轉達問題、以狀態檔把關 | `request.md`、`inputs/`、`answers.md` |
-| `code-review-scoring-spec-reading` | 步驟 1：閱讀規格書 | `step1/pr.diff`、`step1/spec-context.md` |
-| 外掛 CR Skill（`plugins.ini`） | 步驟 2：CR，依異動檔案決定要跑哪些外掛 | `step2/plan.tsv`、`step2/<外掛>/cr.txt` |
-| `code-review-scoring-code-analysis` | 步驟 3：分析程式碼（確認 CR 意見並轉為扣分項） | `step3/prepared.txt`、`step3/findings.txt` |
-| `code-review-scoring-score` | 步驟 4：打分數（完整流程中由 `review-state finish` 直接執行腳本） | `step4/score.tsv`、`step4/score.json` |
-| `code-review-scoring-report` | 步驟 5：產出報告（CR 結果＋分數結果；完整流程中由 `review-state finish` 直接執行腳本） | 最終報告 `reports/<日期>_<PR 標題>.md`，工作副本 `step5/report.md` |
+| `code-review-scoring-spec-reading` | 步驟 1：閱讀規格書，並規劃這個 PR 要用哪些評分標準 | `step1/pr.diff`、`step1/spec-context.md`、`step1/standards/` |
+| 外掛 CR Skill（`configs/plugins.ini`） | 步驟 2：CR，依異動檔案決定要跑哪些外掛 | `step2/plan.tsv`、`step2/<外掛>/cr.txt` |
+| `code-review-scoring-code-analysis` | 步驟 3：分析程式碼（確認 CR 意見並轉為扣分項），每個評分標準各做一次 | `step3/<標準>/prepared.txt`、`step3/<標準>/findings.txt` |
+| `code-review-scoring-score` | 步驟 4：打分數（完整流程中由 `review-state finish` 直接執行腳本） | `step4/<標準>/score.tsv`、`step4/<標準>/score.json` |
+| `code-review-scoring-report` | 步驟 5：產出報告（CR 結果＋分數結果；完整流程中由 `review-state finish` 直接執行腳本） | 最終報告 `reports/<日期>_<PR 標題>_<標準>.md`，工作副本 `step5/<標準>/report.md` |
+
+### 依評分標準拆分報告
+
+一個 PR 可能同時改到後端與前端。步驟 1 會依 `configs/standards.ini` 規劃這次的評分（`standard plan`）：
+
+- 每個框架評分標準（例如 `springboot-3`、`angular`）只要有檔案符合它的 `applies`，就各自產出一份報告；步驟 3～5 依標準分開執行，狀態也分開記錄。
+- 不屬於任何框架標準的檔案（README、CI 設定、Dockerfile 等）用通用標準評分，歸入同一個專案的報告：以檔案所在目錄往上找，最近的目錄中有哪個框架標準的檔案，就歸入那份報告；判斷不出來時（例如根目錄的 README）每份報告都會列入。
+- PR 完全沒有框架標準的檔案時，只用通用標準產出一份報告，所以每個 PR 至少有一份報告。
+- 每份報告只列出落在自己檔案上的 CR 意見；意見編號維持外掛原本的編號，方便對照。
+- 各標準的「事先確認事項」會列在 `spec-context.md` 的嚴重度事實中，於步驟 1 與缺少的文件一起詢問。
+- 步驟 1 會把每個標準解析後的內容存成快照（`step1/standards/<標準>.resolve`），並把標準名稱、版本與 sha256 記在 `request.md`。之後步驟 3～5 都以這份快照評分；若評分途中標準文件、掃描規則或 `standards.ini` 的設定被修改，狀態腳本會拒絕繼續，請還原修改，或以 `init --reset` 重新開始評分。
 
 ### 執行方式
 
 主 Agent 在開始前會先詢問使用者：
 
-- **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。是否派發 Sub-Agent 由 `configs.ini` 的 `[workflow]` `subagent` 決定：`true` 時由主 Agent 為步驟 1～3 與每個 CR 外掛各派發一個 Sub-Agent；`false` 時由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。平台不支援 Sub-Agent 時，即使設為 `true` 也會由主 Agent 逐步執行。步驟 4、5 只需要執行腳本，一律由主 Agent 以 `review-state finish` 直接完成，不派發 Sub-Agent。
+- **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。是否派發 Sub-Agent 由 `configs/settings.ini` 的 `[workflow]` `subagent` 決定：`true` 時由主 Agent 為步驟 1～3 與每個 CR 外掛各派發一個 Sub-Agent；`false` 時由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。平台不支援 Sub-Agent 時，即使設為 `true` 也會由主 Agent 逐步執行。步驟 4、5 只需要執行腳本，一律由主 Agent 以 `review-state finish` 直接完成，不派發 Sub-Agent。
 - **單一步驟**：直接在對話中執行某一個步驟 Skill，不使用狀態檔。
 
 主 Agent 每次只要執行 `review-state next`，腳本就會印出下一個動作：要執行的步驟 prompt、要轉達的問題、失敗原因、`finish`，或最後的結果摘要。完成後主 Agent 只回覆等級、總分、各面向分數與報告路徑，不會把報告全文貼回對話，完整內容請看 `reports/` 中的檔案。
@@ -36,16 +47,18 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 
 | 設定檔 | 何時需要 | 缺少時 |
 | --- | --- | --- |
-| `plugins.ini` | 每次執行完整流程都需要 | 要登記哪些 CR 外掛；不使用外掛時也要建立一份沒有外掛的檔案，表示已確認不用 |
-| `configs.ini` 的 `[workflow]` 區段 | 每次執行完整流程都需要 | `subagent=true`（每一步派發 Sub-Agent）或 `subagent=false`（主 Agent 逐步執行） |
-| `configs.ini` 中該平台的區段 | 只有 `subagent=true` 且平台支援 Sub-Agent 時 | Sub-Agent 要使用的 model 與 reasoning |
+| `configs/plugins.ini` | 每次執行完整流程都需要 | 要登記哪些 CR 外掛；不使用外掛時也要建立一份沒有外掛的檔案，表示已確認不用 |
+| `configs/settings.ini` 的 `[workflow]` 區段 | 每次執行完整流程都需要 | `subagent=true`（每一步派發 Sub-Agent）或 `subagent=false`（主 Agent 逐步執行） |
+| `configs/settings.ini` 中該平台的區段 | 只有 `subagent=true` 且平台支援 Sub-Agent 時 | Sub-Agent 要使用的 model 與 reasoning |
 
 有缺少時，主 Agent 會告訴你缺了什麼，並詢問要用哪種方式建立：
 
 - **腳本逐步詢問**：由你自己在終端機執行 `check` 印出的 `wizard` 指令，腳本會逐一詢問外掛名稱、路徑、適用範圍、模式，是否使用 Sub-Agent，以及 model 與 reasoning，並在登記時驗證外掛（SKILL.md 是否存在、名稱是否一致）。AI 無法代為執行，因為它需要互動式終端機；在 Claude Code 中可以輸入 `! <指令>` 直接在對話中執行。
 - **AI 詢問**：主 Agent 在一則訊息中問完所需資料，再以 `setup plugin`、`setup plugins --none`、`review-state config --subagent`、`review-state config --platform` 寫入設定檔。外掛驗證不通過時會告訴你原因並重新詢問。
 
-`check` 通過時會印出 `execution:` 一行，說明這次以 Sub-Agent 或由主 Agent 逐步執行。登記了外掛之後，主 Agent 會執行 `link-skills` 連結外掛 Skill，接著再次執行 `check`，通過後才會繼續。`review-state init` 也會在 `plugins.ini` 不存在時拒絕執行，所以不會因為忘了建立清單而靜靜略過 CR。
+設定檔已從專案根目錄搬到 `configs/`：`configs.ini` 改名為 `configs/settings.ini`，`plugins.ini` 搬到 `configs/plugins.ini`。專案根目錄還留有舊的 `configs.ini`、`plugins.ini` 時，`check` 與 `link-skills` 會停下並印出搬移指令，請自行搬移後再執行；`plugins.ini` 中的相對路徑要在前面加上 `../`。
+
+`check` 通過時會印出 `execution:` 一行，說明這次以 Sub-Agent 或由主 Agent 逐步執行。登記了外掛之後，主 Agent 會執行 `link-skills` 連結外掛 Skill，接著再次執行 `check`，通過後才會繼續。`review-state init` 也會在 `configs/plugins.ini` 不存在時拒絕執行，所以不會因為忘了建立清單而靜靜略過 CR。
 
 也可以不透過 AI，直接在專案中執行：
 
@@ -73,23 +86,27 @@ tmp/
   stepN-success        步驟完成
   stepN-failed         步驟失敗，原因寫在狀態檔內
   step2-<外掛>-<狀態>   步驟 2 中每個 CR 外掛各自的狀態檔
+  stepN-<標準>-<狀態>   步驟 3～5 中每個評分標準各自的狀態檔
   step1/ … step5/      各步驟產出；questions.md（步驟提出的問題）、answers.md（使用者回覆）、errors.log（失敗紀錄）
+  step1/standards/     評分規劃：plan.tsv（報告與檔案的歸屬）、<標準>.diff（該報告的 diff）、<標準>.resolve（標準快照）、confirm.tsv（事先確認事項）
   step2/<外掛>/        files.txt 與 diff.patch（要審查的範圍）、raw/（外掛原始輸出）、cr.txt（整理後的 CR 結果）
-  step3/findings.draft.txt  步驟 3 提問前先存下的扣分項草稿，回覆後從這裡接續
+  step3/<標準>/ … step5/<標準>/  步驟 3～5 依評分標準分開的產出
+  step3/<標準>/findings.draft.txt  步驟 3 提問前先存下的扣分項草稿，回覆後從這裡接續
 reports/
-  <日期>_<PR 標題>.md   最終報告（CR 結果＋分數結果），步驟 5 成功前必須已發佈到這裡
+  <日期>_<PR 標題>_<標準>.md   最終報告（CR 結果＋分數結果），每個評分標準一份，步驟 5 成功前必須已發佈到這裡
 ```
 
 - 狀態檔由 Sub-Agent 透過 `review-state` 腳本產生；檔案不存在代表該步驟尚未開始。
 - 腳本會強制把關：前一步不是 `success` 時不能開始下一步；必要產出不存在或已過期時不能標記 `success`；重跑某一步時，後續步驟的狀態會被清除。步驟 3 標記 `success` 時會以 `score --check` 驗證 `findings.txt`，格式或位置有誤會當場退回，不必等到步驟 4 才失敗、再整步重做步驟 3。
 - Sub-Agent 無法直接和使用者對話。需要詢問時先把目前成果存檔，再寫入 `stepN/questions.md` 並標記 `pending`；主 Agent 詢問使用者、把回覆寫入 `stepN/answers.md` 後，再重新執行同一步，該步驟會從存檔接續。
-- 常見的嚴重度相關問題（是否跨時區、資料表是否持續成長、是否使用 springdoc）會在步驟 1 與缺少的文件一起詢問，減少步驟 3 再停下來提問的機會。
-- 步驟失敗時，詳細錯誤寫入該步驟目錄的 `errors.log`（例如 `tmp/step4/errors.log`），狀態腳本標記 `failed` 時也會追加一行摘要。
+- 評分標準的「事先確認事項」（例如是否跨時區、資料表是否持續成長）會在步驟 1 與缺少的文件一起詢問，減少步驟 3 再停下來提問的機會。
+- 步驟失敗時，詳細錯誤寫入該步驟目錄的 `errors.log`（例如 `tmp/step4/springboot-3/errors.log`），狀態腳本標記 `failed` 時也會追加一行摘要。
+- 評分標準在步驟 1 規劃之後被修改時，步驟 3～5 的狀態變更與 `finish` 都會被拒絕（結束碼 5），避免同一份報告混用新舊規則。
 - 支援的 Sub-Agent 工具：Claude Code 的 Agent 工具、GitHub Copilot（VS Code agent mode）的 `runSubagent`，或其他平台的同等工具。
 
 ### 執行方式與 Sub-Agent 設定
 
-設定存在專案根目錄的 `configs.ini`（與 `plugins.ini` 同一層），由設定檢查在第一次需要時要求建立（見上方「設定檢查」），之後直接沿用：
+設定存在專案根目錄的 `configs/settings.ini`（與外掛清單 `configs/plugins.ini` 放在同一個目錄），由設定檢查在第一次需要時要求建立（見上方「設定檢查」），之後直接沿用：
 
 - `[workflow]` 的 `subagent`：`true` 時每一步派發一個 Sub-Agent，`false` 時只由主 Agent 逐步執行。設為 `false` 時不需要平台區段。
 - 各平台一個區段（`workflow` 保留給上述設定，不能當平台名稱）：Sub-Agent 要使用的 model 與 reasoning，在某個平台第一次以 Sub-Agent 執行時建立。
@@ -107,7 +124,7 @@ model="gpt-5.6"
 reasoning="xhigh"
 ```
 
-要修改時可直接編輯此檔，或執行 `review-state config --subagent true|false`、`review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。也可以在第一次使用前，從範本 `configs.example.ini` 複製一份 `configs.ini`，取消註解要用的區段後修改。
+要修改時可直接編輯此檔，或執行 `review-state config --subagent true|false`、`review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。也可以在第一次使用前，從範本 `configs/settings.example.ini` 複製一份 `configs/settings.ini`，取消註解要用的區段後修改。
 
 > [!WARNING]
 > **GitHub Copilot 的已知限制**
@@ -130,34 +147,47 @@ skills/
     assets/prompts/protocol.md            # 各步驟共用的狀態協定（[sub] / [inline] 開頭的行只用於對應的執行方式）
     references/setup.md                   # 設定檢查、平台設定、狀態指令與目錄說明（需要時才載入）
     scripts/review-state.{sh,zsh,ps1}     # init / next / finish / show / cr-plan / prompt / set / config（--help 列出用法）
-    scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 plugins.ini、configs.ini（check / wizard / plugins / plugin）
+    scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 configs/plugins.ini、configs/settings.ini（check / wizard / plugins / plugin）
+    scripts/standard.{sh,zsh,ps1}         # 評分標準的 lint / parse / diff / resolve / plan / stamp（lint、stamp 只在維護標準時執行，plan 供步驟 1 規劃評分）
+    scripts/lib/standard.{awk,ps1}        # 評分標準的解析器（awk 供 bash、zsh 共用，PowerShell 版規則與訊息相同）
   code-review-scoring-spec-reading/
     SKILL.md
     assets/spec-context-template.md
     scripts/init-workspace.{sh,zsh,ps1}   # 儲存 diff、建立 spec-context.md
-    scripts/check-context.{sh,zsh,ps1}    # 輸入資料與待確認問題是否都已處理
+    scripts/check-context.{sh,zsh,ps1}    # 輸入資料、待確認問題與評分標準的事先確認事項是否都已處理
   code-review-scoring-code-analysis/
     SKILL.md
-    references/checks.md                  # A～G 檢查項
     references/upstream.md                # 上游因素判斷（懷疑上游因素時才載入）
     references/findings-format.md         # findings.txt 格式
-    scripts/prepare-diff.{sh,zsh,ps1}
-    scripts/scan-rules.tsv                # 啟發式掃描規則（三種腳本共用）
+    scripts/prepare-diff.{sh,zsh,ps1}     # 掃描規則讀自 configs/standards.ini 登錄的掃描規則檔（scan）
   code-review-scoring-score/
     SKILL.md
-    scripts/score.{sh,zsh,ps1}
-    scripts/rules.tsv                     # 各檢查項的預設與可調整嚴重度
+    scripts/score.{sh,zsh,ps1}            # 檢查項與嚴重度讀自 configs/standards.ini 登錄的評分標準
   code-review-scoring-report/
     SKILL.md
     assets/report-template.md             # 分數報告模板（可自行調整）
     assets/labels.tsv                     # 報告中由腳本插入的文字
     references/placeholders.md            # 模板佔位符號說明
+  code-review-scoring-standard/           # 維護評分標準用（不參與評分流程）
+    SKILL.md                              # 檢查、產生、審核三種模式
+    references/scan-format.md             # 掃描規則檔格式與正規表示式限制
+    references/review-checklist.md        # 審核掃描規則的檢查清單與 review.md 格式
+    assets/generator-prompt.md            # 產生掃描規則的 Sub-Agent 指令
 scripts/
-  link-skills.{sh,zsh,ps1}                # 依 skills/ 與 plugins.ini 同步各工具讀取 Skill 的目錄
-plugins.example.ini                       # 外掛 Skill 清單範本（複製為 plugins.ini 使用）
-configs.example.ini                       # 執行方式、Sub-Agent 的 model 與 reasoning、評分配分的範本（configs.ini 首次使用時自動產生）
+  link-skills.{sh,zsh,ps1}                # 依 skills/ 與 configs/plugins.ini 同步各工具讀取 Skill 的目錄
+configs/                                  # 設定檔（只有 *.example.ini 進版控）
+  settings.example.ini                    # 執行方式、Sub-Agent 的 model 與 reasoning、評分配分的範本（settings.ini 首次使用時自動產生）
+  plugins.example.ini                     # 外掛 Skill 清單範本（複製為 plugins.ini 使用）
+  standards.example.ini                   # 評分標準清單範本（複製為 standards.ini 使用）
 docs/
-  notices.md                              # 注意事項（GitHub Copilot 適用性）
+  notices.md                              # 注意事項（評分標準、GitHub Copilot 適用性）
+  templates/scoring-rule-template.md      # 評分標準文件的模板
+tests/
+  standards/                              # 評分標準 lint 的測試案例；compare.sh 比對三種 shell 的輸出與 expected.txt
+  score/                                  # score 的測試案例（legacy.md 的檢查項與舊 rules.tsv 相同，確保分數不變）
+  prepare/                                # prepare-diff 的測試案例（legacy.tsv 為舊 scan-rules.tsv 的規則，另含通用標準的掃描規則）
+  plan/                                   # standard plan 的測試案例（兩套框架標準與通用標準、各層目錄的通用檔案）
+  workflow/                               # 完整流程的端對端測試（暫存 git 儲存庫、兩份報告、CR 意見分流、標準被修改時拒絕繼續）
 tmp/                                      # 評分過程的暫存檔（所有腳本的預設 review root，不進版控）
 reports/                                  # 最終版分數報告（tmp/ 旁的 reports/，不進版控）
 .gitattributes                            # 固定腳本與設定檔的換行格式
@@ -170,7 +200,7 @@ reports/                                  # 最終版分數報告（tmp/ 旁的 
 
 - `tmp/*`、`reports/*`：評分過程與報告，含 PR 內容，不進版控。
 - `.agents/`、`.github/skills/`、`.claude/skills/`：`link-skills` 產生的連結與 `.managed` 清單，各環境自行執行腳本建立。
-- `configs.ini`、`plugins.ini`：各使用者自己的執行方式與 Sub-Agent 設定、外掛清單（外掛路徑依各人環境而不同）。版控中只放範本 `configs.example.ini`、`plugins.example.ini`；若團隊要共用同一份設定，請從 `.gitignore` 移除對應的那一行。
+- `configs/settings.ini`、`configs/plugins.ini`：各使用者自己的執行方式與 Sub-Agent 設定、外掛清單（外掛路徑依各人環境而不同）。`.gitignore` 以 `/configs/*.ini` 排除，版控中只放 `configs/*.example.ini` 範本；若團隊要共用同一份設定，請在 `.gitignore` 加上例外，例如 `!/configs/plugins.ini`。
 - `.DS_Store`、`Thumbs.db`、`desktop.ini`：作業系統產生的檔案。
 
 ### 換行格式
@@ -185,9 +215,81 @@ git add --renormalize .
 
 每個 Skill 的 `scripts/lib/` 放 awk 核心（bash/zsh 共用）與 PowerShell 共用函式。為了讓每個 Skill 都能單獨安裝，`lib/common.ps1` 在各 Skill 中各有一份相同的副本，修改時請一併更新。
 
+## 評分標準
+
+評分標準是一份 Markdown 文件，評分流程中的 AI 與腳本讀取同一份文件：
+
+- 依 `docs/templates/scoring-rule-template.md` 撰寫。「面向」「檢查項」「事先確認事項」三個章節由腳本解析，格式固定；「特例規則」「判斷提示」只給 AI 參考，可以自由撰寫。
+- 在專案根目錄複製 `configs/standards.example.ini` 為 `configs/standards.ini`，每套標準一個區段，設定標準文件路徑（`path`）、適用的檔案（`applies`，框架標準必填）、掃描規則檔（`scan`，選填）與配分覆寫（`points.A`～`points.G`，選填）；通用標準設定 `role="common"`，檢查代碼以 `CM-` 開頭。各欄位的說明見範本中的註解。
+- 標準文件與掃描規則檔不放在本專案，而是放在 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules) 等外部儲存庫；路徑依各人環境而不同，所以 `standards.ini` 不進版控，換電腦或換人時請各自設定。
+- 寫好或修改標準後，執行 `standard lint` 檢查格式、`applies` 是否重疊、配分加總與掃描規則：
+
+  ```bash
+  bash skills/code-review-scoring/scripts/standard.sh lint
+  ```
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File skills\code-review-scoring\scripts\standard.ps1 lint
+  ```
+
+- 評分流程不執行 lint。標準格式有誤時，評分腳本會停止並提示先執行 lint。
+- 掃描規則檔（TSV）列出可以用正規表示式找出的候選線索，只是提示，不會直接扣分；格式與 `@scope`、`@pr` 記錄見範本與 `tests/prepare/` 的例子。
+- 評分途中不要修改標準：步驟 1 會記錄當下的標準，之後被修改時流程會拒絕繼續（見「依評分標準拆分報告」）。
+
+### 使用現有的評分標準
+
+[code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
+目前提供下列標準，每套都包含標準文件（`.md`）與掃描規則檔（`.tsv`）：
+
+| 標準代號 | 類型 | 適用範圍 | 目錄 |
+| --- | --- | --- | --- |
+| `springboot-3` | 框架標準 | Java／Spring Boot 3 專案 | `springboot3-rule/` |
+| `common` | 通用標準 | 其他檔案，例如 README、CI、Dockerfile | `common-rule/` |
+
+1. 把評分標準儲存庫 clone 到本機，位置不限：
+
+   ```bash
+   git clone https://github.com/samuikaze/code-review-scoring-rules.git
+   ```
+
+2. 在本專案根目錄複製 `configs/standards.example.ini` 為
+   `configs/standards.ini`，`path` 與 `scan` 指向 clone 下來的檔案。
+   相對路徑以 `configs/` 為準，Windows 請使用斜線：
+
+   ```ini
+   [springboot-3]
+   path="/path/to/code-review-scoring-rules/springboot3-rule/springboot-3-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/springboot3-rule/springboot-3-cr-scoring-rule.tsv"
+   applies="*.java, *.kt, *.sql, *.xml, *.yml, *.yaml, *.properties, *.gradle, *.kts"
+
+   [common]
+   path="/path/to/code-review-scoring-rules/common-rule/common-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/common-rule/common-cr-scoring-rule.tsv"
+   role="common"
+   ```
+
+3. 執行 `standard lint` 確認設定與標準都沒有問題。
+
+標準更新時在評分標準儲存庫 `git pull` 即可，不需要修改本專案。不要在評分途中更新，理由同上。新增或修改標準的方式見評分標準儲存庫的 README。
+
+### 維護評分標準
+
+`code-review-scoring-standard` Skill 只在你提到維護標準時觸發（例如「檢查評分標準」「產生掃描規則」「審核掃描規則」），評分流程不會載入它：
+
+- **檢查模式**：對標準文件與掃描規則檔執行 lint，說明錯誤與警告的修正方式，不修改任何檔案。
+- **產生模式**：依標準文件產生或更新掃描規則檔，不需手寫正規表示式。
+  1. 標準文件先通過 lint。
+  2. 由一個 Sub-Agent 產生草稿 `tmp/scan-rules/<標準>/draft.tsv`，並在 `notes.md` 列出沒有產生規則的檢查項與原因。
+  3. 腳本 lint 草稿（格式、引用的代碼與範圍、正規表示式在 awk 與 .NET 都能編譯）。
+  4. 主 Agent 依固定的檢查清單審核草稿與標準文件是否有出入，結果寫到 `review.md`；有問題就退回 Sub-Agent 修正，最多 3 輪。
+  5. 通過後列出和既有檔案的差異請你確認，確認後才以 `standard stamp` 寫入 `standards.ini` 的 `scan` 指定的位置，並在檔頭記錄來源標準文件的版本與雜湊值。
+- **審核模式**：只對既有的掃描規則檔執行 lint 與審核，結果寫到 `review.md`，不修改任何檔案。
+
+不支援 Sub-Agent 的平台（或 `subagent=false`）由主 Agent 依序完成產生與審核，流程與檔案相同，但獨立性較低。標準文件與 `standards.ini` 一律由你自己修改，AI 只回報問題。
+
 ## 調整配分
 
-各面向滿分、各嚴重度扣分與等級門檻設定在專案根目錄 `configs.ini` 的 `[points]`、`[deductions]`、`[grades]` 區段，未設定的項目使用預設值：
+各面向滿分、各嚴重度扣分與等級門檻設定在專案根目錄 `configs/settings.ini` 的 `[points]`、`[deductions]`、`[grades]` 區段，未設定的項目使用預設值：
 
 | 面向 | 預設滿分 | | 嚴重度 | 預設扣分 | | 等級 | 預設最低總分 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -215,13 +317,14 @@ merge="true"
 ```
 
 - 七個面向合計必須為 100，等級門檻必須 S > A > B > C，數值為整數；不符合時打分數步驟會失敗並列出錯誤。
+- 個別評分標準可以在 `configs/standards.ini` 用 `points.A`～`points.G` 覆寫面向滿分，覆寫值優先於 `[points]`，套用後合計同樣必須為 100（`standard lint` 會檢查）。
 - 所有問題都會扣分，包括 Nit。對應不到 A～G 檢查項的問題（檢查代碼 `-`）與上游因素，依嚴重度直接從總分扣分，不計入任何面向；總分最低為 0。
 - 有 Critical 扣分項時，等級上限固定為 B。
 - 是否合併扣分由 `[deductions]` 的 `merge` 決定：
   - `merge="false"`（預設）：不合併，每一處問題各自是一筆扣分項，同一個檢查代碼出現在三處就扣三次。
   - `merge="true"`：合併，同一個檢查代碼只寫一筆並列出所有位置，只扣一次。
   - 分析程式碼步驟會從 `prepared.txt` 摘要的 `- deductions:` 一行得知目前的方式；面向得分最低為 0。
-- 修改後重新執行打分數（步驟 4）與產出報告（步驟 5）即可生效（完整流程中執行 `review-state finish`）；範例見 `configs.example.ini`。第一次建立的 `configs.ini` 會從範本複製，配分區段預設為註解。
+- 修改後重新執行打分數（步驟 4）與產出報告（步驟 5）即可生效（完整流程中執行 `review-state finish`）；範例見 `configs/settings.example.ini`。第一次建立的 `configs/settings.ini` 會從範本複製，配分區段預設為註解。
 
 ## 調整報告
 
@@ -231,9 +334,9 @@ merge="true"
 
 ## 安裝到各工具
 
-`plugins.ini` 不需要事先手動建立：第一次執行完整流程時，設定檢查會引導建立（見「設定檢查」）。也可以先執行 `setup wizard`，或從範本 `plugins.example.ini` 複製後自行編輯。
+`configs/plugins.ini` 不需要事先手動建立：第一次執行完整流程時，設定檢查會引導建立（見「設定檢查」）。也可以先執行 `setup wizard`，或從範本 `configs/plugins.example.ini` 複製後自行編輯。
 
-`link-skills` 會依 `skills/` 與 `plugins.ini` 同步各工具讀取 Skill 的目錄：建立缺少的連結，並解除已從清單移除的外掛連結。重複執行是安全的；已是最新狀態時不會做任何變更。
+`link-skills` 會依 `skills/` 與 `configs/plugins.ini` 同步各工具讀取 Skill 的目錄：建立缺少的連結，並解除已從清單移除的外掛連結。重複執行是安全的；已是最新狀態時不會做任何變更。
 
 ```bash
 # macOS / Linux（建立 symlink）
@@ -263,16 +366,16 @@ powershell -ExecutionPolicy Bypass -File scripts\link-skills.ps1 -Check
 
 ## 外掛 Skill
 
-其他團隊或同仁已做好的 Skill（例如前端、後端的 CR Skill），不需要複製或改寫，在專案根目錄的 `plugins.ini`（從 `plugins.example.ini` 複製而來）登記路徑後執行 `link-skills` 即可掛進來：
+其他團隊或同仁已做好的 Skill（例如前端、後端的 CR Skill），不需要複製或改寫，在專案根目錄的 `configs/plugins.ini`（從 `configs/plugins.example.ini` 複製而來）登記路徑後執行 `link-skills` 即可掛進來：
 
 ```ini
 [backend-code-review]
-path="../shared-skills/backend-code-review"
+path="../../shared-skills/backend-code-review"
 applies="*.java,*.kt,*.sql"
 mode="mapped"
 
 [frontend-code-review]
-path="../shared-skills/frontend-code-review"
+path="../../shared-skills/frontend-code-review"
 applies="*.ts,*.tsx,*.vue,*.scss"
 mode="advisory"
 ```
@@ -280,16 +383,16 @@ mode="advisory"
 | 設定 | 必填 | 說明 |
 | --- | --- | --- |
 | 區段名稱 | 是 | 必須和該 Skill 的 SKILL.md 中的 `name` 一致 |
-| `path` | 是 | Skill 資料夾路徑；相對路徑以 `plugins.ini` 所在目錄為準 |
+| `path` | 是 | Skill 資料夾路徑；相對路徑以 `configs/plugins.ini` 所在目錄（`configs/`）為準 |
 | `applies` | 否 | 適用的檔案範圍（以逗號分隔的萬用字元）；未填表示全部異動檔案 |
 | `mode` | 否 | `mapped`（預設）：步驟 3 確認 CR 意見，確認屬實的一律扣分，不成立的需說明原因；`advisory`：CR 意見只呈現在報告中，不影響分數 |
 
-內建的評分檢查項目前只適用 Java／Spring Boot 3。其他技術的 CR 外掛（例如前端）設為 `mapped` 時，對應不到檢查項的意見會歸入「其他」，依外掛給的嚴重度從總分扣分；不希望這類外掛影響分數時，請設為 `advisory`。
+CR 外掛設為 `mapped` 時，對應不到評分標準檢查項的意見會歸入「其他」，依外掛給的嚴重度從總分扣分；外掛審查的技術沒有對應的評分標準，或不希望外掛影響分數時，請設為 `advisory`。每份報告只列出落在該標準檔案上的意見。
 
 ### 同步規則
 
 - 只會變更本腳本建立過的連結，清單記錄在各目錄的 `.managed`。其他人或其他工具建立的連結、實體目錄一律不動。
-- 從 `plugins.ini` 移除的外掛，下次同步時會解除連結。
+- 從 `configs/plugins.ini` 移除的外掛，下次同步時會解除連結。
 - 舊版腳本建立、指向相同位置的連結，會自動納入管理。
 - 同步前會先檢查以下項目，任何一項不通過就不做任何變更並列出原因：
   - SKILL.md 是否存在；
@@ -368,12 +471,13 @@ mode="advisory"
 
 ## 腳本為什麼存在
 
-- `link-skills`：依 `skills/` 與 `plugins.ini` 同步各工具的 Skill 連結，並在變更前檢查名稱與設定。
-- `setup`：每次執行完整流程前檢查 `plugins.ini` 與 `configs.ini`，並以逐步詢問或指令的方式建立，登記外掛時先驗證，避免設定錯誤到 CR 步驟才發現。
+- `link-skills`：依 `skills/` 與 `configs/plugins.ini` 同步各工具的 Skill 連結，並在變更前檢查名稱與設定。
+- `setup`：每次執行完整流程前檢查 `configs/plugins.ini` 與 `configs/settings.ini`，並以逐步詢問或指令的方式建立，登記外掛時先驗證，避免設定錯誤到 CR 步驟才發現。
 - `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
-- `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以規則表列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。
-- `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs.ini` 的配分計算分數與等級，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
+- `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以評分標準的掃描規則檔列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。框架標準的 `applies` 沒有涵蓋的檔案標上 `[common]`，改用通用標準的掃描規則；檔案分類（`@scope`）與 PR 層級的提示（`@pr`，例如主程式有異動卻沒有測試檔）也寫在掃描規則檔中，腳本不含任何框架的判斷。
+- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），挑出要評分的標準與通用標準、輸出檢查項、配分覆寫、適用檔案與掃描規則檔給 `score` 與 `prepare-diff`（`resolve`），在步驟 1 依異動檔案決定要產出哪幾份報告、切出各報告的 diff（`plan`），以及把審核通過的掃描規則草稿加上來源檔頭後寫入正式位置（`stamp`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度拼字、代碼重複、面向是否齊全、`standards.ini` 的配分加總與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `plan` 與 `review-state` 的檢查呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時直接停止（結束碼 2 或 3），請先執行 `lint` 修正。
+- `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs/settings.ini` 的配分（評分標準在 `configs/standards.ini` 設定的 `points.*` 優先）計算分數與等級；檢查代碼與可用的嚴重度讀自評分標準文件，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
 
 腳本的提示、訊息與註解一律使用英文，避免主控台編碼不同時出現亂碼。報告中由腳本插入的中文用語（含全形括號、冒號等符號）都放在 `skills/code-review-scoring-report/assets/labels.tsv`。
