@@ -65,6 +65,13 @@ run_all() {  # $sh = bash, zsh or powershell
     *) "$ps" -NoProfile -ExecutionPolicy Bypass -File "$skills/code-review-scoring-spec-reading/scripts/init-workspace.ps1" -Git HEAD~1..HEAD -Repo "$w/repo" -Root "$R" -Title "Demo PR" -Standards "$S" ;;
   esac 2>&1 | norm
   echo "--- confirmations"; grep '^- A' "$work/review/step1/spec-context.md" | norm
+  # A question round: next relays the questions until answers.md is newer, then runs step 1 again.
+  printf '1. question\n' > "$work/review/step1/questions.md"
+  step set --step 1 --state pending --message "1 question"
+  step next --inline | grep -E '^(action|exit)'
+  sleep 1; printf '1. answer\n' > "$work/review/step1/answers.md"
+  step next --inline | grep -E '^(action|exit)'
+  step set --step 1 --state working
   sed -i -e 's/: unknown$/: provided/' "$work/review/step1/spec-context.md"
   step set --step 1 --state success
   echo "--- request.md"; sed -n '/^## Scoring standards/,$p' "$work/review/request.md" | norm

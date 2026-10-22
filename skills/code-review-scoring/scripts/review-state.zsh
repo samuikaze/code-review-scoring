@@ -313,10 +313,19 @@ report_language() {
   v="$([[ -f "$dir/labels.tsv" ]] && awk -F'\t' '$1 == "language" { print $2; exit }' "$dir/labels.tsv" | tr -d '\r')"
   printf '%s\n' "${v:-the language of the report template in $dir}"
 }
+# Options that the prompts pass on to the scripts: --standards and --config when they are not the defaults.
+file_opt() {  # $1 = option, $2 = file, $3 = default; prints ' $1 "<absolute file>"' or nothing
+  local d
+  [[ "$2" == "$3" ]] && return 0
+  d="$(dirname "$2")"; [[ -d "$d" ]] && d="$(abspath "$d")"
+  printf ' %s "%s"' "$1" "$d/$(basename "$2")"
+}
 # Prompt of step $step (plugin $plugin): the step template plus the shared status protocol. Lines marked
 # "[sub] " are only for subagents, lines marked "[inline] " only for the main agent ($1 = 1 for inline).
 render_prompt() {
-  local root_abs p_path="" p_mode="" unit_args="--step $step" dir s_doc="" c_doc="none" lang=""
+  local root_abs p_path="" p_mode="" unit_args="--step $step" dir s_doc="" c_doc="none" lang="" s_opt c_opt
+  s_opt="$(file_opt --standards "$standards" "$project_root/configs/standards.ini")"
+  c_opt="$(file_opt --config "$config" "$project_root/configs/settings.ini")"
   root_abs="$(abs_root)"
   [[ "$step" -lt "$CR" ]] || lang="$(report_language)"
   dir="$root_abs/step$step"
@@ -330,7 +339,7 @@ render_prompt() {
     unit_args+=" --standard $standard"; dir="$root_abs/step$step/$standard"
   fi
   cat "$skill_dir/assets/prompts/step$step.md" "$skill_dir/assets/prompts/protocol.md" |
-    LC_ALL=C awk -v inline="$1" -v root="$root_abs" -v sc="$self_cmd set --root \"$root_abs\"" -v repo="$(req_field Repository)" \
+    LC_ALL=C awk -v inline="$1" -v root="$root_abs" -v sc="$self_cmd set --root \"$root_abs\"$s_opt$c_opt" -v sopt="$s_opt" -v copt="$c_opt" -v repo="$(req_field Repository)" \
       -v range="$(req_field 'Diff range')" -v title="$(req_field Title)" -v skills="$skills_dir" -v plugin="$plugin" \
       -v ppath="$p_path" -v pmode="$p_mode" -v unit="$unit_args" -v dir="$dir" -v step="$step" \
       -v std="$standard" -v sdoc="$s_doc" -v cdoc="${c_doc:-none}" -v lang="$lang" '
@@ -341,7 +350,7 @@ render_prompt() {
         l = rep(l, "{{SKILLS_DIR}}", skills); l = rep(l, "{{PLUGIN_PATH}}", ppath); l = rep(l, "{{PLUGIN}}", plugin); l = rep(l, "{{MODE}}", pmode)
         l = rep(l, "{{UNIT}}", unit); l = rep(l, "{{DIR}}", dir); l = rep(l, "{{STEP}}", step)
         l = rep(l, "{{STANDARD}}", std); l = rep(l, "{{STANDARD_DOC}}", sdoc); l = rep(l, "{{COMMON_DOC}}", cdoc)
-        l = rep(l, "{{REPORT_LANGUAGE}}", lang)
+        l = rep(l, "{{REPORT_LANGUAGE}}", lang); l = rep(l, "{{STANDARDS_OPT}}", sopt); l = rep(l, "{{CONFIG_OPT}}", copt)
         print rep(l, "{{TITLE}}", title) }'
 }
 # The action "next" prints for unit $1 (label $2) in state $3; returns 1 when the unit needs nothing.
@@ -356,6 +365,8 @@ next_action() {
   else
     step="$u" plugin="" standard="" d="$(abs_root)/step$u" args="--step $u"
   fi
+  # Once the replies are written (answers.md newer than questions.md), the step runs again and applies them.
+  [[ "$s" == "pending" && -f "$d/answers.md" && "$d/answers.md" -nt "$d/questions.md" ]] && s="answered"
   case "$s" in
     pending)
       echo "action: ask"

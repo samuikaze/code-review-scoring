@@ -413,12 +413,14 @@ scoring workflow read the same document:
 
 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
 currently provides the following standards, each with a standard document
-(`.md`) and a scan rule file (`.tsv`):
+(`.md`) and a scan rule file (`.tsv`) in English (`en/`) and Traditional
+Chinese (`zh-tw/`). Pick either language for a standard; it does not have to
+match the report language:
 
 | Code | Type | Applies to | Directory |
 | --- | --- | --- | --- |
-| `springboot-3` | Framework standard | Java / Spring Boot 3 projects | `springboot3-rule/` |
-| `common` | Common standard | Other files, e.g. README, CI, Dockerfile | `common-rule/` |
+| `springboot-3` | Framework standard | Java / Spring Boot 3 projects | `springboot3-rule/<language>/` |
+| `common` | Common standard | Other files, e.g. README, CI, Dockerfile | `common-rule/<language>/` |
 
 1. Clone the standards repository anywhere on your machine:
 
@@ -433,13 +435,13 @@ currently provides the following standards, each with a standard document
 
    ```ini
    [springboot-3]
-   path="/path/to/code-review-scoring-rules/springboot3-rule/springboot-3-cr-scoring-rule.md"
-   scan="/path/to/code-review-scoring-rules/springboot3-rule/springboot-3-cr-scoring-rule.tsv"
+   path="/path/to/code-review-scoring-rules/springboot3-rule/en/springboot-3-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/springboot3-rule/en/springboot-3-cr-scoring-rule.tsv"
    applies="*.java, *.kt, *.sql, *.xml, *.yml, *.yaml, *.properties, *.gradle, *.kts"
 
    [common]
-   path="/path/to/code-review-scoring-rules/common-rule/common-cr-scoring-rule.md"
-   scan="/path/to/code-review-scoring-rules/common-rule/common-cr-scoring-rule.tsv"
+   path="/path/to/code-review-scoring-rules/common-rule/en/common-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/common-rule/en/common-cr-scoring-rule.tsv"
    role="common"
    ```
 

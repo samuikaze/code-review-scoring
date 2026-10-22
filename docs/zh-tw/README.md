@@ -250,12 +250,12 @@ git add --renormalize .
 ### 使用現有的評分標準
 
 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
-目前提供下列標準，每套都包含標準文件（`.md`）與掃描規則檔（`.tsv`）：
+目前提供下列標準，每套都包含英文（`en/`）與繁體中文（`zh-tw/`）的標準文件（`.md`）與掃描規則檔（`.tsv`）。每套標準可以任選一種語言，不必和報告語言相同：
 
 | 標準代號 | 類型 | 適用範圍 | 目錄 |
 | --- | --- | --- | --- |
-| `springboot-3` | 框架標準 | Java／Spring Boot 3 專案 | `springboot3-rule/` |
-| `common` | 通用標準 | 其他檔案，例如 README、CI、Dockerfile | `common-rule/` |
+| `springboot-3` | 框架標準 | Java／Spring Boot 3 專案 | `springboot3-rule/<語言>/` |
+| `common` | 通用標準 | 其他檔案，例如 README、CI、Dockerfile | `common-rule/<語言>/` |
 
 1. 把評分標準儲存庫 clone 到本機，位置不限：
 
@@ -269,13 +269,13 @@ git add --renormalize .
 
    ```ini
    [springboot-3]
-   path="/path/to/code-review-scoring-rules/springboot3-rule/springboot-3-cr-scoring-rule.md"
-   scan="/path/to/code-review-scoring-rules/springboot3-rule/springboot-3-cr-scoring-rule.tsv"
+   path="/path/to/code-review-scoring-rules/springboot3-rule/zh-tw/springboot-3-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/springboot3-rule/zh-tw/springboot-3-cr-scoring-rule.tsv"
    applies="*.java, *.kt, *.sql, *.xml, *.yml, *.yaml, *.properties, *.gradle, *.kts"
 
    [common]
-   path="/path/to/code-review-scoring-rules/common-rule/common-cr-scoring-rule.md"
-   scan="/path/to/code-review-scoring-rules/common-rule/common-cr-scoring-rule.tsv"
+   path="/path/to/code-review-scoring-rules/common-rule/zh-tw/common-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/common-rule/zh-tw/common-cr-scoring-rule.tsv"
    role="common"
    ```
 

@@ -1,6 +1,6 @@
 # findings.txt format
 
-One record per line, fields separated by `|`. Lines starting with `#` are comments. A record line may be followed by `key: value` lines (indentation optional) that belong to it. Write narrative text in Traditional Chinese (Taiwan usage).
+One record per line, fields separated by `|`. Lines starting with `#` are comments. A record line may be followed by `key: value` lines (indentation optional) that belong to it. Write narrative text in the report language that the workflow prompt names (Traditional Chinese with Taiwan usage by default).
 
 ```text
 F|A1|Major|src/main/java/com/ex/order/OrderService.java:88
