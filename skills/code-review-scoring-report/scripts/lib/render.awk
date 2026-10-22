@@ -1,6 +1,7 @@
 # Report renderer shared by render-report.sh and render-report.zsh (POSIX awk). Run with LC_ALL=C.
 # Variables: labels, findings, scoretsv, scorejson, ctx (may be ""), title (may be ""), today,
 #            crdir (step 4 directory with plan.tsv, skipped.tsv and <plugin>/cr.txt; may be "")
+#            cplan (the review plan ROOT/step1/standards/plan.tsv) and cstd (the standard): show only its comments
 # Main input: the report template. Output: the rendered report on stdout.
 # Exit 1 with a message on stderr when the inputs are inconsistent.
 
@@ -55,9 +56,32 @@ function comment_hdr(id,    p, n) {
 
 function where(locs) { return locs == "-" ? L("loc.pr_wide") : codes(locs) }
 
+# Dimension of a check id: its first letter, or the letter after CM- for the common standard (CM-B1 is B).
+function dimof(id) { return (id ~ /^CM-/) ? substr(id, 4, 1) : substr(id, 1, 1) }
+
 function sevrank(s) { return s == "Critical" ? 1 : (s == "Major" ? 2 : (s == "Minor" ? 3 : 4)) }
 
-# Loads ROOT/step2: the plan, skipped plugins and every plugin's normalized cr.txt.
+# Whether a code review comment with these locations belongs to the standard cstd of the review plan cplan: one of its
+# files is a file of cstd, or none of its files is in the plan (a comment on the whole PR, location -) and cstd is the
+# first report. Without cstd every comment belongs to it.
+function cm_mine(loc,    l, a, n, p, i, f, any) {
+    if (cstd == "") return 1
+    if (!plload) {
+        plload = 1
+        while ((getline l < cplan) > 0) {
+            split(l, a, "\t")
+            if (a[1] == "report" && plfirst == "") plfirst = a[2]
+            else if (a[1] == "file") { plany[a[2]] = 1; if (a[3] == cstd) plmine[a[2]] = 1 }
+        }
+        close(cplan)
+    }
+    n = split(loc, p, ","); any = 0
+    for (i = 1; i <= n; i++) { f = trim(p[i]); sub(/:[0-9][-0-9]*$/, "", f); if (f in plmine) return 1; if (f in plany) any = 1 }
+    return !any && cstd == plfirst
+}
+
+# Loads ROOT/step2: the plan, skipped plugins and every plugin's normalized cr.txt. Comments of other standards keep
+# their number but are hidden (chide).
 function load_cr(    l, a, n, i, f, t, cur, key, val) {
     crstate = "not_run"
     if (crdir == "" || (getline l < (crdir "/plan.tsv")) < 0) return
@@ -87,7 +111,7 @@ function load_cr(    l, a, n, i, f, t, cur, key, val) {
             else if (a[1] == "C") {
                 nc[i]++; cur = i SUBSEP nc[i]
                 csev[cur] = a[2]; cloc[cur] = a[3]; crule[cur] = (a[4] == "" ? "-" : a[4])
-                cnt[i, a[2]]++; tot[a[2]]++
+                if (cm_mine(a[3])) { cnt[i, a[2]]++; tot[a[2]]++ } else chide[cur] = 1
             }
         }
         close(f)
@@ -120,7 +144,7 @@ function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, ts, sevs, s) {
             out = out "**" L("cr.summary") "**" c psum[i] "\n\n"
             # comments sorted by severity, keeping the plugin's order within a severity
             m = 0; ts = " " L("cr.tag_sep") " "
-            for (j = 1; j <= nc[i]; j++) { m++; order[m] = j }
+            for (j = 1; j <= nc[i]; j++) if (!((i SUBSEP j) in chide)) { m++; order[m] = j }
             for (j = 2; j <= m; j++) { tmp = order[j]; k = j - 1; while (k >= 1 && sevrank(csev[i, order[k]]) > sevrank(csev[i, tmp])) { order[k + 1] = order[k]; k-- } order[k + 1] = tmp }
             if (m == 0) out = out L("cr.no_comments") "\n"
             for (j = 1; j <= m; j++) {
@@ -193,6 +217,8 @@ BEGIN {
         else if (a[1] == "dim") { nd++; dcode[nd] = a[2]; dsc[nd] = a[3]; dmx[nd] = a[4] }
         else if (a[1] == "finding") { nf++; sid[nf] = a[2]; ssev[nf] = a[3]; spts[nf] = a[4]; sloc[nf] = a[5]; sseq[nf] = a[6] }
         else if (a[1] == "upstream") { nus++; upts[a[2]] = a[4] }
+        else if (a[1] == "standard") stdlabel = a[2] " " a[3]
+        else if (a[1] == "common") cmlabel = a[2] " " a[3]
     }
     close(scoretsv)
     if (nd != 7 || grade == "") fail("score.tsv is missing or incomplete; run the scoring skill first")
@@ -214,7 +240,7 @@ BEGIN {
     blk["SCORE_ROWS"] = ""
     for (k = 1; k <= nd; k++) {
         items = ""
-        for (i = 1; i <= nf; i++) if (substr(sid[i], 1, 1) == dcode[k]) items = items (items == "" ? "" : L("sep.list")) sid[i] " " ssev[i] " -" spts[i]
+        for (i = 1; i <= nf; i++) if (dimof(sid[i]) == dcode[k]) items = items (items == "" ? "" : L("sep.list")) sid[i] " " ssev[i] " -" spts[i]
         blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " dcode[k] " " L("dim." dcode[k]) " | " dsc[k] "/" dmx[k] " | " (items == "" ? L("none") : items) " |\n"
     }
     # Records without a check id and upstream factors are deducted from the total.
@@ -255,6 +281,7 @@ BEGIN {
 
     inl["PR_TITLE"] = title; inl["REVIEW_DATE"] = today; inl["GRADE"] = grade; inl["TOTAL"] = total
     inl["CAPPED_NOTE"] = (capped == 1) ? L("capped_note") : ""
+    inl["STANDARD"] = (stdlabel == "" ? L("none") : stdlabel) (cmlabel == "" ? "" : replace_all(L("standard.common"), "{common}", cmlabel))
 }
 
 {

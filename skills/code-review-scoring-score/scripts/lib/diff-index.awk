@@ -1,5 +1,5 @@
 # Builds a line index from a unified diff so score can verify finding locations (POSIX awk).
-# Output: L<TAB>path<TAB>new line number<TAB>"+" (added) or " " (context);  T<TAB>test file path
+# Output: L<TAB>path<TAB>new line number<TAB>"+" (added) or " " (context)
 { sub(/\r$/, ""); line = $0 }
 inhunk && (oleft > 0 || nleft > 0) {
     tag = (line == "") ? " " : substr(line, 1, 1)
@@ -13,7 +13,6 @@ inhunk && (oleft > 0 || nleft > 0) {
 /^\+\+\+ / {
     p = substr(line, 5); sub(/\t.*$/, "", p); gsub(/^"|"$/, "", p)
     if (p == "/dev/null") p = ""; else sub(/^b\//, "", p)
-    if (p ~ /(^|\/)src\/test\// || p ~ /(Test|Tests|IT)\.(java|kt)$/) printf "T\t%s\n", p
     next
 }
 /^@@ / {

@@ -1,0 +1,64 @@
+# Display labels used by render-report. Columns: key<TAB>text. Edit the text to change the report wording.
+# language: the language the AI writes the narrative text of the report in (steps 2 and 3).
+language	English
+none	None
+title.missing	(not provided)
+capped_note	 (Critical deductions cap the grade at B)
+standard.common	; common files use {common}
+sep.list	,
+sep.bracket	 |
+sep.colon	:
+dim.A	Correctness
+dim.B	Security
+dim.C	Test quality
+dim.D	Architecture and design
+dim.E	Performance and resource use
+dim.F	Readability
+dim.G	Maintainability
+field.problem	Problem
+field.suggestion	Suggestion
+field.assumption	Assumption
+field.source	Source
+field.content	Content
+field.code	Related code
+field.ticket	Vendor ticket
+check.none	Other
+loc.pr_wide	Whole PR
+row.other	Other (no matching check item)
+row.upstream	Upstream factors
+upstream.spec-gap	Suspected spec gap
+upstream.third-party	Suspected third-party issue
+upstream.ownership-change	Suspected change of ownership
+sub.missing	Missing
+sub.wrong	Wrong
+sub.ambiguous	Ambiguous
+sub.spec-missing	Missing from spec
+sub.spec-wrong	Wrong in spec
+sub.behavior-mismatch	Behavior differs from spec
+sub.not-delivered	Feature not delivered
+sub.bug	Bug
+sub.spec	Spec change
+sub.interface	Interface change
+sub.process	Process change
+impact.high	High
+impact.medium	Medium
+impact.low	Low
+cr.not_run	No code review was run
+cr.no_plugins	No code review plugin applied
+cr.missing	(code review result missing)
+cr.col.plugin	CR plugin
+cr.col.files	Files reviewed
+cr.col.summary	Conclusion
+cr.summary	Conclusion
+cr.highlights	Highlights
+cr.tag_sep	|
+cr.upstream	Upstream factor
+cr.rejected	Rejected
+cr.reason	Reason for rejection
+cr.advisory	For reference only
+cr.unjudged	Not judged
+cr.code	Code locations
+cr.spec	Spec locations
+cr.no_comments	No code review comments
+cr.skipped	No changed file matches its scope ({applies})
+cr.all_files	all files

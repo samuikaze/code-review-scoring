@@ -1,53 +1,148 @@
 # Code Review Scoring
 
-PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，遵循 [Agent Skills](https://agentskills.io) 規格，可用於 Claude Code、GitHub Copilot、Codex 等支援 Skill 的工具。
+<!-- markdownlint-disable MD028 -->
+<!-- markdownlint-disable MD033 -->
 
-- **評分**：內建依團隊「Spring Boot 3 PR 程式碼品質評分標準（v0.5 試行版）」與 AI 評分指引建立的檢查項與計分規則，目前適用 Java／Spring Boot 3。
-- **CR**：其他技術（例如前端）或其他團隊的 CR 規範，以外掛 Skill 的方式掛進流程，不受技術限制。
-- **報告**：CR 結果與評分結果合併成一份報告。
+English | [繁體中文](docs/zh-tw/README.md)
 
-## 評分流程
+A framework for PR code review and code quality scoring, implemented as Agent
+Skills following the [Agent Skills](https://agentskills.io) specification. It
+works with any tool that supports skills, such as Claude Code, GitHub Copilot
+and Codex.
 
-依「閱讀規格書 → CR → 分析程式碼 → 打分數 → 產出報告」五個步驟執行，另有一個主流程 Skill 負責控管。步驟 2 的 CR 由 `plugins.ini` 登記的外掛 Skill 執行；步驟 3 分析程式碼時會確認 CR 意見，符合評分檢查項的轉為扣分項，所以分數同時反映評分規則與 CR 結果。最終報告包含 CR 結果與分數結果：
+- **Scoring**: scores against the scoring standard documents registered in
+  `configs/standards.ini`, not tied to any technology. Each framework
+  standard (for example Spring Boot 3 or Angular) produces its own report;
+  files that belong to no framework (README, CI configuration, Dockerfile and
+  so on) are scored with the common standard. Standard documents are written
+  in Markdown and kept in the separate
+  [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
+  repository; see [Scoring standards](#scoring-standards).
+- **CR**: CR guidelines for other technologies (for example the frontend) or
+  of other teams plug into the workflow as plugin skills, with no technology
+  restriction.
+- **Report**: the CR results and the scoring results are combined into one
+  report.
 
-| Skill | 角色 | 產出（本專案根目錄的 `tmp/` 下；最終報告在本專案的 `reports/`） |
+## Scoring workflow
+
+The workflow runs five steps, "read the spec → CR → analyze the code → score
+→ write the report", controlled by a main workflow skill. The CR of step 2 is
+done by the plugin skills registered in `configs/plugins.ini`; step 3 confirms
+the CR comments while analyzing the code and turns those that match a check
+item of the scoring standard into deductions, so the score reflects both the
+scoring rules and the CR results. The final report contains both the CR
+results and the score:
+
+| Skill | Role | Outputs (under `tmp/` in this project's root; final reports in this project's `reports/`) |
 | --- | --- | --- |
-| `code-review-scoring` | 主 Agent：確認執行方式、依序派發 Sub-Agent、轉達問題、以狀態檔把關 | `request.md`、`inputs/`、`answers.md` |
-| `code-review-scoring-spec-reading` | 步驟 1：閱讀規格書 | `step1/pr.diff`、`step1/spec-context.md` |
-| 外掛 CR Skill（`plugins.ini`） | 步驟 2：CR，依異動檔案決定要跑哪些外掛 | `step2/plan.tsv`、`step2/<外掛>/cr.txt` |
-| `code-review-scoring-code-analysis` | 步驟 3：分析程式碼（確認 CR 意見並轉為扣分項） | `step3/prepared.txt`、`step3/findings.txt` |
-| `code-review-scoring-score` | 步驟 4：打分數（完整流程中由 `review-state finish` 直接執行腳本） | `step4/score.tsv`、`step4/score.json` |
-| `code-review-scoring-report` | 步驟 5：產出報告（CR 結果＋分數結果；完整流程中由 `review-state finish` 直接執行腳本） | 最終報告 `reports/<日期>_<PR 標題>.md`，工作副本 `step5/report.md` |
+| `code-review-scoring` | Main agent: picks the execution mode, dispatches the subagents in order, relays questions, gates with status files | `request.md`, `inputs/`, `answers.md` |
+| `code-review-scoring-spec-reading` | Step 1: reads the spec and plans which scoring standards this PR uses | `step1/pr.diff`, `step1/spec-context.md`, `step1/standards/` |
+| Plugin CR skills (`configs/plugins.ini`) | Step 2: CR; the changed files decide which plugins run | `step2/plan.tsv`, `step2/<plugin>/cr.txt` |
+| `code-review-scoring-code-analysis` | Step 3: analyzes the code (confirms the CR comments and turns them into deductions), once per scoring standard | `step3/<standard>/prepared.txt`, `step3/<standard>/findings.txt` |
+| `code-review-scoring-score` | Step 4: scores (in the full workflow, `review-state finish` runs the script directly) | `step4/<standard>/score.tsv`, `step4/<standard>/score.json` |
+| `code-review-scoring-report` | Step 5: writes the report (CR results + score; in the full workflow, `review-state finish` runs the script directly) | Final report `reports/<date>_<PR title>_<standard>.md`, working copy `step5/<standard>/report.md` |
 
-### 執行方式
+### One report per scoring standard
 
-主 Agent 在開始前會先詢問使用者：
+A PR may change both the backend and the frontend. Step 1 plans the scoring
+from `configs/standards.ini` (`standard plan`):
 
-- **完整流程**：依序執行五個步驟，前一步成功後才能進行下一步，不可跳步。是否派發 Sub-Agent 由 `configs.ini` 的 `[workflow]` `subagent` 決定：`true` 時由主 Agent 為步驟 1～3 與每個 CR 外掛各派發一個 Sub-Agent；`false` 時由主 Agent 自己逐步執行，使用相同的指令、狀態檔與目錄。平台不支援 Sub-Agent 時，即使設為 `true` 也會由主 Agent 逐步執行。步驟 4、5 只需要執行腳本，一律由主 Agent 以 `review-state finish` 直接完成，不派發 Sub-Agent。
-- **單一步驟**：直接在對話中執行某一個步驟 Skill，不使用狀態檔。
+- Every framework standard (for example `springboot-3` or `angular`) with at
+  least one file matching its `applies` produces its own report; steps 3 to 5
+  run separately per standard, with separate status.
+- Files that belong to no framework standard (README, CI configuration,
+  Dockerfile and so on) are scored with the common standard and go into the
+  report of the same project: starting from the file's directory and walking
+  up, the nearest directory containing files of a framework standard decides
+  the report. When this cannot be decided (for example the README at the
+  root), the file is listed in every report.
+- When the PR has no files of any framework standard, only one report is
+  produced with the common standard, so every PR gets at least one report.
+- Each report lists only the CR comments on its own files; comment numbers
+  keep the plugin's original numbering for easy cross-reference.
+- The confirmations (事先確認事項) of each standard are listed among the
+  severity facts in `spec-context.md` and asked in step 1 together with the
+  missing documents.
+- Step 1 saves a snapshot of each parsed standard
+  (`step1/standards/<standard>.resolve`) and records the standard names,
+  versions and sha256 in `request.md`. Steps 3 to 5 then score with that
+  snapshot; if a standard document, a scan rule file or the settings in
+  `standards.ini` change during the run, the status script refuses to
+  continue. Revert the change, or start over with `init --reset`.
 
-主 Agent 每次只要執行 `review-state next`，腳本就會印出下一個動作：要執行的步驟 prompt、要轉達的問題、失敗原因、`finish`，或最後的結果摘要。完成後主 Agent 只回覆等級、總分、各面向分數與報告路徑，不會把報告全文貼回對話，完整內容請看 `reports/` 中的檔案。
+### Execution modes
 
-所有需要交接的內容都寫在 `tmp/`：你在對話中貼上的文件會存成 `tmp/inputs/` 中的檔案，各步驟在提問前會先把目前的成果存檔（例如步驟 3 的 `findings.draft.txt`），回覆後只套用答案，不會整步重做。評分中斷時，在新對話說「繼續評分」即可從 `tmp/` 接續。
+Before starting, the main agent asks the user:
 
-### 設定檢查（完整流程每次執行前）
+- **Full workflow**: runs the five steps in order; a step can start only
+  after the previous one succeeded, and no step can be skipped. Whether
+  subagents are dispatched is decided by `subagent` in `[workflow]` of
+  `configs/settings.ini`: with `true`, the main agent dispatches one subagent
+  for each of steps 1 to 3 and for each CR plugin; with `false`, the main
+  agent runs every step itself with the same prompts, status files and
+  directories. On platforms without subagents, the main agent runs the steps
+  itself even when this is `true`. Steps 4 and 5 only run scripts, so the main
+  agent always completes them with `review-state finish` and never dispatches
+  subagents for them.
+- **Single step**: runs one step skill directly in the chat, without status
+  files.
 
-選擇完整流程後，主 Agent 的第一件事就是執行 `setup check`，確認專案根目錄的兩個設定檔。單一步驟用不到這兩個檔案，不會檢查。
+The main agent only needs to run `review-state next`; the script prints the
+next action: the prompt of the step to run, a question to relay, a failure
+reason, `finish`, or the final summary. When done, the main agent replies with
+only the grade, the total score, the score per dimension and the report path,
+and does not paste the report into the chat; read the files in `reports/` for
+the full content.
 
-| 設定檔 | 何時需要 | 缺少時 |
+Everything to hand over is written to `tmp/`: documents you paste in the chat
+are saved as files in `tmp/inputs/`, and every step saves its work before
+asking a question (for example `findings.draft.txt` of step 3), so after your
+reply it only applies the answer instead of redoing the whole step. If a
+scoring run is interrupted, say "繼續評分" (continue scoring) in a new chat to
+resume from `tmp/`.
+
+### Setup check (before every full workflow run)
+
+After you choose the full workflow, the first thing the main agent does is run
+`setup check`, which checks the two configuration files in the project root.
+A single step does not use them, so they are not checked then.
+
+| Configuration | When needed | When missing |
 | --- | --- | --- |
-| `plugins.ini` | 每次執行完整流程都需要 | 要登記哪些 CR 外掛；不使用外掛時也要建立一份沒有外掛的檔案，表示已確認不用 |
-| `configs.ini` 的 `[workflow]` 區段 | 每次執行完整流程都需要 | `subagent=true`（每一步派發 Sub-Agent）或 `subagent=false`（主 Agent 逐步執行） |
-| `configs.ini` 中該平台的區段 | 只有 `subagent=true` 且平台支援 Sub-Agent 時 | Sub-Agent 要使用的 model 與 reasoning |
+| `configs/plugins.ini` | Every full workflow run | Which CR plugins to register; when you use no plugin, create a file without plugins to show that this was decided |
+| `[workflow]` in `configs/settings.ini` | Every full workflow run | `subagent=true` (one subagent per step) or `subagent=false` (the main agent runs the steps) |
+| The platform's section in `configs/settings.ini` | Only with `subagent=true` on a platform with subagents | The model and reasoning of the subagents |
 
-有缺少時，主 Agent 會告訴你缺了什麼，並詢問要用哪種方式建立：
+When something is missing, the main agent tells you what and asks how to
+create it:
 
-- **腳本逐步詢問**：由你自己在終端機執行 `check` 印出的 `wizard` 指令，腳本會逐一詢問外掛名稱、路徑、適用範圍、模式，是否使用 Sub-Agent，以及 model 與 reasoning，並在登記時驗證外掛（SKILL.md 是否存在、名稱是否一致）。AI 無法代為執行，因為它需要互動式終端機；在 Claude Code 中可以輸入 `! <指令>` 直接在對話中執行。
-- **AI 詢問**：主 Agent 在一則訊息中問完所需資料，再以 `setup plugin`、`setup plugins --none`、`review-state config --subagent`、`review-state config --platform` 寫入設定檔。外掛驗證不通過時會告訴你原因並重新詢問。
+- **Step-by-step script**: run the `wizard` command printed by `check`
+  yourself in a terminal. The script asks for each plugin's name, path, scope
+  and mode, whether to use subagents, and the model and reasoning, and it
+  validates each plugin as it is registered (SKILL.md exists, names match).
+  The AI cannot run it for you because it needs an interactive terminal; in
+  Claude Code you can type `! <command>` to run it right in the chat.
+- **Asked by the AI**: the main agent asks for everything in one message,
+  then writes the configuration with `setup plugin`, `setup plugins --none`,
+  `review-state config --subagent` and `review-state config --platform`. When
+  a plugin fails validation, it tells you why and asks again.
 
-`check` 通過時會印出 `execution:` 一行，說明這次以 Sub-Agent 或由主 Agent 逐步執行。登記了外掛之後，主 Agent 會執行 `link-skills` 連結外掛 Skill，接著再次執行 `check`，通過後才會繼續。`review-state init` 也會在 `plugins.ini` 不存在時拒絕執行，所以不會因為忘了建立清單而靜靜略過 CR。
+The configuration files moved from the project root to `configs/`:
+`configs.ini` was renamed to `configs/settings.ini`, and `plugins.ini` moved to
+`configs/plugins.ini`. If the old `configs.ini` or `plugins.ini` is still in
+the project root, `check` and `link-skills` stop and print the commands to
+move them; move them yourself and run again. Relative paths in `plugins.ini`
+need a `../` prefix.
 
-也可以不透過 AI，直接在專案中執行：
+When `check` passes, it prints an `execution:` line telling whether this run
+uses subagents or the main agent runs the steps. After plugins are
+registered, the main agent runs `link-skills` to link the plugin skills, then
+runs `check` again and continues only when it passes. `review-state init` also
+refuses to run when `configs/plugins.ini` does not exist, so the CR is never
+silently skipped because the list was forgotten.
+
+You can also run these directly in the project without the AI:
 
 ```bash
 bash skills/code-review-scoring/scripts/setup.sh check --platform Claude
@@ -58,41 +153,77 @@ bash skills/code-review-scoring/scripts/setup.sh wizard --platform Claude
 powershell -ExecutionPolicy Bypass -File skills\code-review-scoring\scripts\setup.ps1 wizard --platform Claude
 ```
 
-### 狀態控管
+### Status control
 
-暫存檔與報告一律寫在本專案根目錄的 `tmp/`、`reports/`，不會寫進被審查的專案。腳本以 Skill 實體資料夾往上兩層找到本專案根目錄（經由 `link-skills` 建立的連結執行也一樣），`--root` 可改用其他目錄，報告則發佈到該目錄旁的 `reports/`。git 指令仍在被審查的專案執行：主 Agent 在被審查專案的根目錄執行 `init`，或以 `--repo` 指定。
+Temporary files and reports are always written to `tmp/` and `reports/` in
+this project's root, never into the project under review. The scripts find
+this project's root two levels above the skill's real directory (also when
+run through the links created by `link-skills`); `--root` selects another
+directory, and the reports are then published to `reports/` next to it. git
+commands still run in the project under review: the main agent runs `init` in
+the root of the reviewed project, or passes it with `--repo`.
 
 ```text
 tmp/
-  .gitkeep             保留目錄用
-  .gitignore           只有 git 尚未忽略 tmp/ 時才自動產生（* 與 !.gitkeep）
-  request.md           主 Agent 記錄 PR、diff 範圍與使用者提供的文件
-  inputs/              使用者在對話中貼上的文件，由主 Agent 存成檔案（--reset 時一併清除）
-  stepN-working        Sub-Agent 開始執行
-  stepN-pending        Sub-Agent 需要使用者回覆，問題寫在 stepN/questions.md
-  stepN-success        步驟完成
-  stepN-failed         步驟失敗，原因寫在狀態檔內
-  step2-<外掛>-<狀態>   步驟 2 中每個 CR 外掛各自的狀態檔
-  step1/ … step5/      各步驟產出；questions.md（步驟提出的問題）、answers.md（使用者回覆）、errors.log（失敗紀錄）
-  step2/<外掛>/        files.txt 與 diff.patch（要審查的範圍）、raw/（外掛原始輸出）、cr.txt（整理後的 CR 結果）
-  step3/findings.draft.txt  步驟 3 提問前先存下的扣分項草稿，回覆後從這裡接續
+  .gitkeep             keeps the directory
+  .gitignore           generated only when git does not ignore tmp/ yet (* and !.gitkeep)
+  request.md           the PR, the diff range and the documents the user provided, recorded by the main agent
+  inputs/              documents the user pasted in the chat, saved by the main agent (also cleared by --reset)
+  stepN-working        a subagent started the step
+  stepN-pending        the subagent needs the user's reply; the questions are in stepN/questions.md
+  stepN-success        the step is done
+  stepN-failed         the step failed; the reason is in the status file
+  step2-<plugin>-<state>    status of each CR plugin in step 2
+  stepN-<standard>-<state>  status of each scoring standard in steps 3 to 5
+  step1/ … step5/      outputs of each step; questions.md (questions of the step), answers.md (the user's replies), errors.log (failures)
+  step1/standards/     the scoring plan: plan.tsv (which files go to which report), <standard>.diff (the report's diff), <standard>.resolve (snapshot of the standard), confirm.tsv (confirmations)
+  step2/<plugin>/      files.txt and diff.patch (the scope to review), raw/ (the plugin's own output), cr.txt (the normalized CR result)
+  step3/<standard>/ … step5/<standard>/  outputs of steps 3 to 5 per scoring standard
+  step3/<standard>/findings.draft.txt    draft deductions saved by step 3 before asking; work resumes from here after the reply
 reports/
-  <日期>_<PR 標題>.md   最終報告（CR 結果＋分數結果），步驟 5 成功前必須已發佈到這裡
+  <date>_<PR title>_<standard>.md   final report (CR results + score), one per scoring standard; must be published here before step 5 succeeds
 ```
 
-- 狀態檔由 Sub-Agent 透過 `review-state` 腳本產生；檔案不存在代表該步驟尚未開始。
-- 腳本會強制把關：前一步不是 `success` 時不能開始下一步；必要產出不存在或已過期時不能標記 `success`；重跑某一步時，後續步驟的狀態會被清除。步驟 3 標記 `success` 時會以 `score --check` 驗證 `findings.txt`，格式或位置有誤會當場退回，不必等到步驟 4 才失敗、再整步重做步驟 3。
-- Sub-Agent 無法直接和使用者對話。需要詢問時先把目前成果存檔，再寫入 `stepN/questions.md` 並標記 `pending`；主 Agent 詢問使用者、把回覆寫入 `stepN/answers.md` 後，再重新執行同一步，該步驟會從存檔接續。
-- 常見的嚴重度相關問題（是否跨時區、資料表是否持續成長、是否使用 springdoc）會在步驟 1 與缺少的文件一起詢問，減少步驟 3 再停下來提問的機會。
-- 步驟失敗時，詳細錯誤寫入該步驟目錄的 `errors.log`（例如 `tmp/step4/errors.log`），狀態腳本標記 `failed` 時也會追加一行摘要。
-- 支援的 Sub-Agent 工具：Claude Code 的 Agent 工具、GitHub Copilot（VS Code agent mode）的 `runSubagent`，或其他平台的同等工具。
+- Subagents create the status files through the `review-state` script; a
+  missing file means the step has not started.
+- The script enforces the gates: a step cannot start unless the previous one
+  is `success`; a step cannot be marked `success` when a required output is
+  missing or stale; rerunning a step clears the status of the later steps.
+  When step 3 is marked `success`, `findings.txt` is validated with
+  `score --check`, so a format or location error is rejected right away
+  instead of failing in step 4 and redoing all of step 3.
+- Subagents cannot talk to the user directly. To ask, a subagent first saves
+  its work, writes `stepN/questions.md` and marks the step `pending`; the main
+  agent asks the user, writes the reply to `stepN/answers.md` and runs the
+  same step again, which resumes from the saved work.
+- The confirmations of the scoring standards (for example whether time zones
+  are involved, or whether a table keeps growing) are asked in step 1 together
+  with the missing documents, so step 3 rarely has to stop and ask.
+- When a step fails, the details go to `errors.log` in the step's directory
+  (for example `tmp/step4/springboot-3/errors.log`), and the status script
+  appends a one-line summary when it marks the step `failed`.
+- When a scoring standard changes after step 1 planned the scoring, status
+  changes of steps 3 to 5 and `finish` are refused (exit code 5), so one
+  report never mixes old and new rules.
+- Supported subagent tools: the Agent tool of Claude Code, `runSubagent` of
+  GitHub Copilot (VS Code agent mode), or the equivalent on other platforms.
 
-### 執行方式與 Sub-Agent 設定
+### Execution mode and subagent settings
 
-設定存在專案根目錄的 `configs.ini`（與 `plugins.ini` 同一層），由設定檢查在第一次需要時要求建立（見上方「設定檢查」），之後直接沿用：
+The settings are stored in `configs/settings.ini` in the project root (in the
+same directory as the plugin list `configs/plugins.ini`). The setup check asks
+you to create it the first time it is needed (see
+[Setup check](#setup-check-before-every-full-workflow-run)), and it is reused
+afterwards:
 
-- `[workflow]` 的 `subagent`：`true` 時每一步派發一個 Sub-Agent，`false` 時只由主 Agent 逐步執行。設為 `false` 時不需要平台區段。
-- 各平台一個區段（`workflow` 保留給上述設定，不能當平台名稱）：Sub-Agent 要使用的 model 與 reasoning，在某個平台第一次以 Sub-Agent 執行時建立。
+- `subagent` in `[workflow]`: `true` dispatches one subagent per step, `false`
+  has the main agent run the steps. With `false`, no platform section is
+  needed.
+- One section per platform (`workflow` and `language` are reserved and
+  cannot be platform names): the model and reasoning of the subagents,
+  created the first time a platform runs with subagents.
+- `report` in `[language]` (optional): the report language; see
+  [Report language](#report-language).
 
 ```ini
 [workflow]
@@ -107,97 +238,267 @@ model="gpt-5.6"
 reasoning="xhigh"
 ```
 
-要修改時可直接編輯此檔，或執行 `review-state config --subagent true|false`、`review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。也可以在第一次使用前，從範本 `configs.example.ini` 複製一份 `configs.ini`，取消註解要用的區段後修改。
+To change them, edit this file directly, or run
+`review-state config --subagent true|false` and
+`review-state config --platform <name> --model "<model>" --reasoning "<level>"`.
+Before the first use, you can also copy the template
+`configs/settings.example.ini` to `configs/settings.ini`, then uncomment and
+edit the sections you need.
 
 > [!WARNING]
-> **GitHub Copilot 的已知限制**
+> **Known limitations of GitHub Copilot**
 >
-> - `[Copilot]` 的 reasoning 設定目前不會套用到 Sub-Agent：`runSubagent` 無法逐次指定 reasoning，VS Code 的本機執行方式也會忽略自訂 agent 檔的 `reasoning-effort`。
-> - Sub-Agent 指定的 model 不能高於主對話 model 的費用等級，否則 Sub-Agent 不會執行。
-> - Copilot CLI 可能無法指定 Sub-Agent 的 model 與 reasoning；雲端的 Copilot coding agent 無法即時轉達待確認問題，不適合跑完整流程。
-> - 尚未在 Copilot 上實際驗證完整流程，也尚未確認 Copilot 是否會讀取以 symlink 或 Junction 連結的 Skill。
+> - The reasoning of `[Copilot]` is not applied to subagents yet:
+>   `runSubagent` cannot set reasoning per call, and the local harness of
+>   VS Code ignores `reasoning-effort` in custom agent files.
+> - The subagent model cannot be in a higher cost tier than the model of the
+>   main chat, or the subagent does not run.
+> - Copilot CLI may not be able to set the subagent model and reasoning; the
+>   cloud Copilot coding agent cannot relay pending questions in real time,
+>   so it is not suited to the full workflow.
+> - The full workflow has not been verified on Copilot yet, and it is not
+>   confirmed whether Copilot reads skills linked through a symlink or
+>   junction.
 >
-> 詳細說明與因應方式請見 [docs/notices.md](docs/notices.md)。
+> See [docs/en/notices.md](docs/en/notices.md) for details and workarounds.
 
-## 目錄結構
+## Directory structure
 
 ```text
 skills/
   code-review-scoring/
     SKILL.md
     assets/request-template.md
-    assets/prompts/step1.md … step3.md   # 步驟 1～3 的指令模板（step2.md 為 CR 外掛用）
-    assets/prompts/protocol.md            # 各步驟共用的狀態協定（[sub] / [inline] 開頭的行只用於對應的執行方式）
-    references/setup.md                   # 設定檢查、平台設定、狀態指令與目錄說明（需要時才載入）
-    scripts/review-state.{sh,zsh,ps1}     # init / next / finish / show / cr-plan / prompt / set / config（--help 列出用法）
-    scripts/setup.{sh,zsh,ps1}            # 設定檢查與建立 plugins.ini、configs.ini（check / wizard / plugins / plugin）
+    assets/prompts/step1.md … step3.md   # prompt templates of steps 1 to 3 (step2.md is for CR plugins)
+    assets/prompts/protocol.md            # status protocol shared by all steps (lines starting with [sub] / [inline] apply to that mode only)
+    references/setup.md                   # setup check, platform settings, status commands and directories (loaded when needed)
+    scripts/review-state.{sh,zsh,ps1}     # init / next / finish / show / cr-plan / prompt / set / config (--help lists the usage)
+    scripts/setup.{sh,zsh,ps1}            # setup check and creation of configs/plugins.ini, configs/settings.ini (check / wizard / plugins / plugin)
+    scripts/standard.{sh,zsh,ps1}         # lint / parse / diff / resolve / plan / stamp of scoring standards (lint and stamp only when maintaining standards; plan plans the scoring in step 1)
+    scripts/lib/standard.{awk,ps1}        # parser of scoring standards (awk shared by bash and zsh; the PowerShell version has the same rules and messages)
   code-review-scoring-spec-reading/
     SKILL.md
     assets/spec-context-template.md
-    scripts/init-workspace.{sh,zsh,ps1}   # 儲存 diff、建立 spec-context.md
-    scripts/check-context.{sh,zsh,ps1}    # 輸入資料與待確認問題是否都已處理
+    scripts/init-workspace.{sh,zsh,ps1}   # saves the diff and creates spec-context.md
+    scripts/check-context.{sh,zsh,ps1}    # checks that the inputs, open questions and confirmations of the standards are all handled
   code-review-scoring-code-analysis/
     SKILL.md
-    references/checks.md                  # A～G 檢查項
-    references/upstream.md                # 上游因素判斷（懷疑上游因素時才載入）
-    references/findings-format.md         # findings.txt 格式
-    scripts/prepare-diff.{sh,zsh,ps1}
-    scripts/scan-rules.tsv                # 啟發式掃描規則（三種腳本共用）
+    references/upstream.md                # judging upstream factors (loaded only when an upstream factor is suspected)
+    references/findings-format.md         # format of findings.txt
+    scripts/prepare-diff.{sh,zsh,ps1}     # scan rules come from the scan rule files (scan) registered in configs/standards.ini
   code-review-scoring-score/
     SKILL.md
-    scripts/score.{sh,zsh,ps1}
-    scripts/rules.tsv                     # 各檢查項的預設與可調整嚴重度
+    scripts/score.{sh,zsh,ps1}            # check items and severities come from the standards registered in configs/standards.ini
   code-review-scoring-report/
     SKILL.md
-    assets/report-template.md             # 分數報告模板（可自行調整）
-    assets/labels.tsv                     # 報告中由腳本插入的文字
-    references/placeholders.md            # 模板佔位符號說明
+    references/placeholders.md            # placeholders of the report template and keys of labels.tsv
+  code-review-scoring-standard/           # for maintaining scoring standards (not part of the scoring workflow)
+    SKILL.md                              # check, generate and review modes
+    references/scan-format.md             # scan rule file format and regex restrictions
+    references/review-checklist.md        # checklist for reviewing scan rules and the review.md format
+    assets/generator-prompt.md            # prompt of the subagent that generates scan rules
 scripts/
-  link-skills.{sh,zsh,ps1}                # 依 skills/ 與 plugins.ini 同步各工具讀取 Skill 的目錄
-plugins.example.ini                       # 外掛 Skill 清單範本（複製為 plugins.ini 使用）
-configs.example.ini                       # 執行方式、Sub-Agent 的 model 與 reasoning、評分配分的範本（configs.ini 首次使用時自動產生）
+  link-skills.{sh,zsh,ps1}                # syncs the skill directories each tool reads from skills/ and configs/plugins.ini
+configs/                                  # configuration (only *.example.ini is under version control)
+  settings.example.ini                    # template for execution mode, subagent model and reasoning, report language and points (settings.ini is generated on first use)
+  plugins.example.ini                     # template for the plugin skill list (copy to plugins.ini)
+  standards.example.ini                   # template for the scoring standard list (copy to standards.ini)
 docs/
-  notices.md                              # 注意事項（GitHub Copilot 適用性）
-tmp/                                      # 評分過程的暫存檔（所有腳本的預設 review root，不進版控）
-reports/                                  # 最終版分數報告（tmp/ 旁的 reports/，不進版控）
-.gitattributes                            # 固定腳本與設定檔的換行格式
+  en/notices.md                           # notices (scoring standards, GitHub Copilot compatibility)
+  zh-tw/README.md                         # Traditional Chinese version of this README
+  zh-tw/notices.md                        # Traditional Chinese version of the notices
+templates/                                # one folder per language; see "Report language"
+  en/                                     # English
+    scoring-rule-template.md              # template for scoring standard documents
+    report-template.md                    # report template (customizable)
+    labels.tsv                            # text the script inserts into the report, and the language the agents write in
+  zh-tw/                                  # Traditional Chinese (same files)
+tests/
+  standards/                              # test cases of standard lint; compare.sh compares the output of the three shells with expected.txt
+  score/                                  # test cases of score (the check items of legacy.md equal the old rules.tsv, so scores stay the same)
+  prepare/                                # test cases of prepare-diff (legacy.tsv holds the rules of the old scan-rules.tsv, plus scan rules of the common standard)
+  plan/                                   # test cases of standard plan (two framework standards and the common standard, common files at several levels)
+  workflow/                               # end-to-end test of the full workflow (temporary git repository, two reports, routing of CR comments, refusal when a standard changes)
+tmp/                                      # temporary files of a scoring run (default review root of all scripts, not under version control)
+reports/                                  # final score reports (reports/ next to tmp/, not under version control)
+.gitattributes                            # fixes the line endings of scripts and configuration files
 .gitignore
 ```
 
-### 版控排除項目
+### Excluded from version control
 
-`.gitignore` 排除以下內容（`tmp/`、`reports/` 只保留 `.gitkeep`）：
+`.gitignore` excludes the following (`tmp/` and `reports/` keep only
+`.gitkeep`):
 
-- `tmp/*`、`reports/*`：評分過程與報告，含 PR 內容，不進版控。
-- `.agents/`、`.github/skills/`、`.claude/skills/`：`link-skills` 產生的連結與 `.managed` 清單，各環境自行執行腳本建立。
-- `configs.ini`、`plugins.ini`：各使用者自己的執行方式與 Sub-Agent 設定、外掛清單（外掛路徑依各人環境而不同）。版控中只放範本 `configs.example.ini`、`plugins.example.ini`；若團隊要共用同一份設定，請從 `.gitignore` 移除對應的那一行。
-- `.DS_Store`、`Thumbs.db`、`desktop.ini`：作業系統產生的檔案。
+- `tmp/*`, `reports/*`: scoring runs and reports, which contain PR content.
+- `.agents/`, `.github/skills/`, `.claude/skills/`: the links created by
+  `link-skills` and their `.managed` lists; each environment runs the script
+  to create them.
+- `configs/settings.ini`, `configs/plugins.ini`: each user's execution mode,
+  subagent settings and plugin list (plugin paths differ per environment).
+  `.gitignore` excludes them with `/configs/*.ini`, and only the
+  `configs/*.example.ini` templates are under version control. If your team
+  wants to share one configuration, add an exception to `.gitignore`, for
+  example `!/configs/plugins.ini`.
+- `.DS_Store`, `Thumbs.db`, `desktop.ini`: files created by the operating
+  system.
 
-### 換行格式
+### Line endings
 
-`.gitattributes` 固定 `.sh`、`.zsh`、`.awk`、`.tsv`、`.ini`、`.md` 使用 LF。Windows 上若設定了 `core.autocrlf=true`，沒有這個設定時取出的檔案會變成 CRLF，bash／zsh 腳本在 WSL、macOS、Linux 上會無法執行，awk 讀取規則表也會出錯。`.ps1` 則交由 git 依平台處理。
+`.gitattributes` fixes LF line endings for `.sh`, `.zsh`, `.awk`, `.tsv`,
+`.ini` and `.md`. Without it, with `core.autocrlf=true` on Windows, checked-out
+files become CRLF, the bash and zsh scripts fail on WSL, macOS and Linux, and
+awk misreads the rule tables. `.ps1` files are left to git's per-platform
+handling.
 
-已經取出的工作目錄若是在加入 `.gitattributes` 之前建立的，請執行一次以下指令，讓 git 依新規則重新整理換行：
+If your working copy was checked out before `.gitattributes` was added, run
+the following once so git renormalizes the line endings:
 
 ```bash
 git add --renormalize .
 ```
 
-每個 Skill 的 `scripts/lib/` 放 awk 核心（bash/zsh 共用）與 PowerShell 共用函式。為了讓每個 Skill 都能單獨安裝，`lib/common.ps1` 在各 Skill 中各有一份相同的副本，修改時請一併更新。
+The `scripts/lib/` of each skill holds the awk core (shared by bash and zsh)
+and the shared PowerShell functions. So that every skill can be installed on
+its own, each skill has an identical copy of `lib/common.ps1`; update all
+copies when you change it.
 
-## 調整配分
+## Scoring standards
 
-各面向滿分、各嚴重度扣分與等級門檻設定在專案根目錄 `configs.ini` 的 `[points]`、`[deductions]`、`[grades]` 區段，未設定的項目使用預設值：
+A scoring standard is a Markdown document; the AI and the scripts of the
+scoring workflow read the same document:
 
-| 面向 | 預設滿分 | | 嚴重度 | 預設扣分 | | 等級 | 預設最低總分 |
+- Write it from `templates/en/scoring-rule-template.md` (English) or
+  `templates/zh-tw/scoring-rule-template.md` (Traditional Chinese). The
+  sections Dimensions, Check items and Confirmations (面向, 檢查項 and
+  事先確認事項 in Chinese) are parsed by the scripts and have a fixed format;
+  Special rules and Judging hints (特例規則 and 判斷提示) are only for the AI
+  and can be written freely. The scripts accept the headings, the dimension
+  names and 「無」 / `None` in either language, so a standard can be written
+  in either one regardless of the report language.
+- In the project root, copy `configs/standards.example.ini` to
+  `configs/standards.ini`, with one section per standard: the path of the
+  standard document (`path`), the files it applies to (`applies`, required
+  for framework standards), the scan rule file (`scan`, optional) and point
+  overrides (`points.A` to `points.G`, optional). The common standard sets
+  `role="common"` and its check codes start with `CM-`. See the comments in
+  the template for every field.
+- The standard documents and scan rule files are not kept in this project
+  but in an external repository such as
+  [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules).
+  Paths differ per environment, so `standards.ini` is not under version
+  control; set it up yourself on each machine or for each person.
+- After writing or changing a standard, run `standard lint` to check the
+  format, overlapping `applies`, the point totals and the scan rules:
+
+  ```bash
+  bash skills/code-review-scoring/scripts/standard.sh lint
+  ```
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File skills\code-review-scoring\scripts\standard.ps1 lint
+  ```
+
+- The scoring workflow does not run lint. When a standard has a format
+  error, the scoring scripts stop and tell you to run lint first.
+- A scan rule file (TSV) lists candidate clues that regular expressions can
+  find; they are only hints and never deduct by themselves. For the format
+  and the `@scope` and `@pr` records, see the template and the examples in
+  `tests/prepare/`.
+- Do not change a standard during a scoring run: step 1 records the
+  standards as they are, and the workflow refuses to continue when they change
+  later (see [One report per scoring standard](#one-report-per-scoring-standard)).
+
+### Using the existing scoring standards
+
+[code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
+currently provides the following standards, each with a standard document
+(`.md`) and a scan rule file (`.tsv`) in English (`en/`) and Traditional
+Chinese (`zh-tw/`). Pick either language for a standard; it does not have to
+match the report language:
+
+| Code | Type | Applies to | Directory |
+| --- | --- | --- | --- |
+| `springboot-3` | Framework standard | Java / Spring Boot 3 projects | `springboot3-rule/<language>/` |
+| `common` | Common standard | Other files, e.g. README, CI, Dockerfile | `common-rule/<language>/` |
+
+1. Clone the standards repository anywhere on your machine:
+
+   ```bash
+   git clone https://github.com/samuikaze/code-review-scoring-rules.git
+   ```
+
+2. In this project's root, copy `configs/standards.example.ini` to
+   `configs/standards.ini`, and point `path` and `scan` to the cloned files.
+   Relative paths are relative to `configs/`; on Windows, use forward
+   slashes:
+
+   ```ini
+   [springboot-3]
+   path="/path/to/code-review-scoring-rules/springboot3-rule/en/springboot-3-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/springboot3-rule/en/springboot-3-cr-scoring-rule.tsv"
+   applies="*.java, *.kt, *.sql, *.xml, *.yml, *.yaml, *.properties, *.gradle, *.kts"
+
+   [common]
+   path="/path/to/code-review-scoring-rules/common-rule/en/common-cr-scoring-rule.md"
+   scan="/path/to/code-review-scoring-rules/common-rule/en/common-cr-scoring-rule.tsv"
+   role="common"
+   ```
+
+3. Run `standard lint` to check the configuration and the standards.
+
+When the standards are updated, run `git pull` in the standards repository;
+this project needs no change. Do not update during a scoring run, for the
+reason above. To add or change a standard, see the README of the standards
+repository.
+
+### Maintaining scoring standards
+
+The `code-review-scoring-standard` skill triggers only when you ask to
+maintain a standard (for example 「檢查評分標準」 "check the scoring
+standards", 「產生掃描規則」 "generate scan rules" or 「審核掃描規則」 "review
+scan rules"); the scoring workflow never loads it:
+
+- **Check mode**: runs lint on the standard documents and scan rule files and
+  explains how to fix each error and warning, without changing any file.
+- **Generate mode**: generates or updates the scan rule file from the
+  standard document, so nobody writes regexes by hand.
+  1. The standard document passes lint first.
+  2. One subagent generates the draft `tmp/scan-rules/<standard>/draft.tsv`
+     and lists in `notes.md` the check items that got no rule, with the
+     reason.
+  3. The script lints the draft (format, referenced codes and scopes, and
+     that every regex compiles in both awk and .NET).
+  4. The main agent reviews the draft against the standard document with a
+     fixed checklist and writes the result to `review.md`; problems go back to
+     the subagent, for at most 3 rounds.
+  5. When it passes, the changes against the existing file are shown for your
+     confirmation; only after you confirm, `standard stamp` writes it to the
+     location set by `scan` in `standards.ini`, with the version and hash of
+     the source standard document in the header.
+- **Review mode**: runs lint and the review on an existing scan rule file
+  only, writes the result to `review.md`, and changes no file.
+
+On platforms without subagents (or with `subagent=false`), the main agent
+does the generation and the review in turn, with the same steps and files but
+less independence. You always change the standard documents and
+`standards.ini` yourself; the AI only reports problems.
+
+## Adjusting points
+
+The maximum points per dimension, the deduction per severity and the grade
+thresholds are set in the `[points]`, `[deductions]` and `[grades]` sections
+of `configs/settings.ini` in the project root; unset items use the defaults:
+
+| Dimension | Default max | | Severity | Default deduction | | Grade | Default minimum total |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A 正確性 | 25 | | Critical | 10 | | S | 95 |
-| B 安全性 | 15 | | Major | 5 | | A | 85 |
-| C 測試品質 | 15 | | Minor | 2 | | B | 70 |
-| D 架構與設計 | 15 | | Nit | 1 | | C | 55 |
-| E 效能與資源 | 10 | | | | | D | 低於 C |
-| F 可讀性 | 10 | | | | | | |
-| G 可維護性 | 10 | | | | | | |
+| A Correctness | 25 | | Critical | 10 | | S | 95 |
+| B Security | 15 | | Major | 5 | | A | 85 |
+| C Test quality | 15 | | Minor | 2 | | B | 70 |
+| D Architecture and design | 15 | | Nit | 1 | | C | 55 |
+| E Performance and resources | 10 | | | | | D | below C |
+| F Readability | 10 | | | | | | |
+| G Maintainability | 10 | | | | | | |
 
 ```ini
 [points]
@@ -214,102 +515,200 @@ Major="6"
 merge="true"
 ```
 
-- 七個面向合計必須為 100，等級門檻必須 S > A > B > C，數值為整數；不符合時打分數步驟會失敗並列出錯誤。
-- 所有問題都會扣分，包括 Nit。對應不到 A～G 檢查項的問題（檢查代碼 `-`）與上游因素，依嚴重度直接從總分扣分，不計入任何面向；總分最低為 0。
-- 有 Critical 扣分項時，等級上限固定為 B。
-- 是否合併扣分由 `[deductions]` 的 `merge` 決定：
-  - `merge="false"`（預設）：不合併，每一處問題各自是一筆扣分項，同一個檢查代碼出現在三處就扣三次。
-  - `merge="true"`：合併，同一個檢查代碼只寫一筆並列出所有位置，只扣一次。
-  - 分析程式碼步驟會從 `prepared.txt` 摘要的 `- deductions:` 一行得知目前的方式；面向得分最低為 0。
-- 修改後重新執行打分數（步驟 4）與產出報告（步驟 5）即可生效（完整流程中執行 `review-state finish`）；範例見 `configs.example.ini`。第一次建立的 `configs.ini` 會從範本複製，配分區段預設為註解。
+- The seven dimensions must total 100, the grade thresholds must satisfy
+  S > A > B > C, and all values are integers; otherwise the scoring step fails
+  and lists the errors.
+- A scoring standard can override the maximum points of dimensions with
+  `points.A` to `points.G` in `configs/standards.ini`. Overrides take
+  precedence over `[points]`, and the result must also total 100
+  (`standard lint` checks this).
+- Every problem deducts points, including Nit. Problems that match no A to G
+  check item (check code `-`) and upstream factors are deducted from the
+  total by severity, not from any dimension; the total is at least 0.
+- With any Critical deduction, the grade is capped at B.
+- Whether deductions are merged is decided by `merge` in `[deductions]`:
+  - `merge="false"` (default): not merged; every occurrence is its own
+    deduction, so a check code at three locations deducts three times.
+  - `merge="true"`: merged; a check code is written once with all its
+    locations and deducts once.
+  - Step 3 learns the current mode from the `- deductions:` line of the
+    `prepared.txt` summary; each dimension's score is at least 0.
+- Changes take effect when you rerun scoring (step 4) and the report (step 5)
+  (`review-state finish` in the full workflow); see
+  `configs/settings.example.ini` for an example. The first
+  `configs/settings.ini` is copied from the template, with the point sections
+  commented out.
 
-## 調整報告
+## Adjusting the report
 
-- 版面與文字：編輯 `skills/code-review-scoring-report/assets/report-template.md`，可自由調整 CR 結果與評分結果兩部分的順序與標題。
-- 腳本插入的用語（面向名稱、欄位名稱、上游因素類別、CR 表頭、「無」等）：編輯 `assets/labels.tsv`。
-- 可用的佔位符號見 `references/placeholders.md`。
+- Layout and text: edit `templates/<language>/report-template.md`; you can
+  freely change the order and headings of the CR part and the scoring part.
+- Wording inserted by the script (dimension names, column names, upstream
+  factor categories, CR table headers, "None" and so on): edit
+  `templates/<language>/labels.tsv`.
+- For the available placeholders and label keys, see
+  `skills/code-review-scoring-report/references/placeholders.md`.
 
-## 安裝到各工具
+### Report language
 
-`plugins.ini` 不需要事先手動建立：第一次執行完整流程時，設定檢查會引導建立（見「設定檢查」）。也可以先執行 `setup wizard`，或從範本 `plugins.example.ini` 複製後自行編輯。
+The report templates live in `templates/` in the project root, one folder per
+language: `templates/en/` and `templates/zh-tw/`.
 
-`link-skills` 會依 `skills/` 與 `plugins.ini` 同步各工具讀取 Skill 的目錄：建立缺少的連結，並解除已從清單移除的外掛連結。重複執行是安全的；已是最新狀態時不會做任何變更。
+- When `templates/` holds the report template of only one language (in a
+  language folder, or `report-template.md` and `labels.tsv` right in
+  `templates/`), that template is always used and the setting below is
+  ignored.
+- With several languages, `report` in the `[language]` section of
+  `configs/settings.ini` picks the folder (default `zh-tw`):
+
+  ```ini
+  [language]
+  report="en"
+  ```
+
+  A language without a folder stops the report step and lists the available
+  languages.
+- The `language` line of the folder's `labels.tsv` (for example `English`)
+  tells the agents of steps 2 and 3 which language to write the CR comments
+  and findings in, so the whole report is in one language.
+- To add a language, copy a language folder to a new name (for example
+  `templates/ja/`), translate `report-template.md` and `labels.tsv`, and set
+  `report` to the folder name. `scoring-rule-template.md` is only a starting
+  point for writing standards and is not needed for the report.
+
+## Installing into each tool
+
+You do not need to create `configs/plugins.ini` in advance: the first full
+workflow run guides you through it in the setup check (see
+[Setup check](#setup-check-before-every-full-workflow-run)). You can also run
+`setup wizard` first, or copy the template `configs/plugins.example.ini` and
+edit it.
+
+`link-skills` syncs the skill directories each tool reads from `skills/` and
+`configs/plugins.ini`: it creates missing links and removes the links of
+plugins removed from the list. It is safe to run repeatedly; when everything
+is up to date, it changes nothing.
 
 ```bash
-# macOS / Linux（建立 symlink）
-bash scripts/link-skills.sh                # 預設：.agents/skills 與 .github/skills
-zsh  scripts/link-skills.zsh -t all        # 另外加上 .claude/skills
-bash scripts/link-skills.sh --check        # 只檢查並列出會做的變更
+# macOS / Linux (creates symlinks)
+bash scripts/link-skills.sh                # default: .agents/skills and .github/skills
+zsh  scripts/link-skills.zsh -t all        # also .claude/skills
+bash scripts/link-skills.sh --check        # only check and list the changes it would make
 ```
 
 ```powershell
-# Windows（建立 Junction，不需系統管理員權限）
+# Windows (creates junctions, no administrator rights needed)
 powershell -ExecutionPolicy Bypass -File scripts\link-skills.ps1
 powershell -ExecutionPolicy Bypass -File scripts\link-skills.ps1 -Target all
 powershell -ExecutionPolicy Bypass -File scripts\link-skills.ps1 -Check
 ```
 
-| 目標 | 目錄 | 使用的工具 |
+| Target | Directory | Used by |
 | --- | --- | --- |
-| `agents` | `.agents/skills` | Codex、Gemini CLI 等通用位置 |
+| `agents` | `.agents/skills` | Codex, Gemini CLI and other tools using the common location |
 | `github` | `.github/skills` | GitHub Copilot |
 | `claude` | `.claude/skills` | Claude Code |
 
-其他選項：`--config <檔案>`（PowerShell 為 `-Config`）改用其他外掛清單；`--remove`（`-Remove`）移除本腳本建立的所有連結，不會刪除 Skill 本身。
+Other options: `--config <file>` (`-Config` in PowerShell) uses another
+plugin list; `--remove` (`-Remove`) removes every link this script created,
+without deleting the skills themselves.
 
-**請在開啟 AI 工具的對話之前執行同步。** 多數平台在對話開始時掃描 Skill，對話中途才建立的連結，那一輪可能讀不到。可以手動執行，或掛在 git hook（例如 `post-checkout`、`post-merge`）、VS Code 開啟資料夾時自動執行的工作。
+**Sync before you open a chat in the AI tool.** Most platforms scan skills
+when a chat starts, so links created in the middle of a chat may not be seen
+in that session. Run it by hand, or hook it into git (for example
+`post-checkout` or `post-merge`) or a VS Code task that runs when the folder
+opens.
 
-注意：連結目錄已列在 `.gitignore`，不會進版控。若需要讓 GitHub Copilot coding agent 等雲端環境讀到 Skill，請在雲端環境中執行連結腳本；或從 `.gitignore` 移除 `.github/skills/`，在 macOS / Linux 建立 symlink 後提交（Windows Junction 無法被 git 追蹤）。
+Note: the link directories are listed in `.gitignore` and are not under
+version control. For cloud environments such as the GitHub Copilot coding
+agent to see the skills, run the link script in the cloud environment, or
+remove `.github/skills/` from `.gitignore` and commit symlinks created on
+macOS / Linux (Windows junctions cannot be tracked by git).
 
-## 外掛 Skill
+## Plugin skills
 
-其他團隊或同仁已做好的 Skill（例如前端、後端的 CR Skill），不需要複製或改寫，在專案根目錄的 `plugins.ini`（從 `plugins.example.ini` 複製而來）登記路徑後執行 `link-skills` 即可掛進來：
+Skills that other teams or colleagues already built (for example CR skills
+for the frontend or the backend) need no copying or rewriting: register their
+paths in `configs/plugins.ini` in the project root (copied from
+`configs/plugins.example.ini`) and run `link-skills` to plug them in:
 
 ```ini
 [backend-code-review]
-path="../shared-skills/backend-code-review"
+path="../../shared-skills/backend-code-review"
 applies="*.java,*.kt,*.sql"
 mode="mapped"
 
 [frontend-code-review]
-path="../shared-skills/frontend-code-review"
+path="../../shared-skills/frontend-code-review"
 applies="*.ts,*.tsx,*.vue,*.scss"
 mode="advisory"
 ```
 
-| 設定 | 必填 | 說明 |
+| Setting | Required | Description |
 | --- | --- | --- |
-| 區段名稱 | 是 | 必須和該 Skill 的 SKILL.md 中的 `name` 一致 |
-| `path` | 是 | Skill 資料夾路徑；相對路徑以 `plugins.ini` 所在目錄為準 |
-| `applies` | 否 | 適用的檔案範圍（以逗號分隔的萬用字元）；未填表示全部異動檔案 |
-| `mode` | 否 | `mapped`（預設）：步驟 3 確認 CR 意見，確認屬實的一律扣分，不成立的需說明原因；`advisory`：CR 意見只呈現在報告中，不影響分數 |
+| Section name | Yes | Must equal `name` in the skill's SKILL.md |
+| `path` | Yes | Path of the skill folder; relative paths are relative to the directory of `configs/plugins.ini` (`configs/`) |
+| `applies` | No | The files it applies to (comma-separated wildcards); empty means all changed files |
+| `mode` | No | `mapped` (default): step 3 confirms the CR comments; every confirmed comment deducts points, and a rejected one needs a reason. `advisory`: the CR comments only appear in the report and do not affect the score |
 
-內建的評分檢查項目前只適用 Java／Spring Boot 3。其他技術的 CR 外掛（例如前端）設為 `mapped` 時，對應不到檢查項的意見會歸入「其他」，依外掛給的嚴重度從總分扣分；不希望這類外掛影響分數時，請設為 `advisory`。
+With a CR plugin in `mapped` mode, comments that match no check item of the
+scoring standard go to "other" and are deducted from the total by the
+plugin's severity. When no scoring standard covers the technology a plugin
+reviews, or you do not want the plugin to affect the score, use `advisory`.
+Each report lists only the comments on its standard's files.
 
-### 同步規則
+### Sync rules
 
-- 只會變更本腳本建立過的連結，清單記錄在各目錄的 `.managed`。其他人或其他工具建立的連結、實體目錄一律不動。
-- 從 `plugins.ini` 移除的外掛，下次同步時會解除連結。
-- 舊版腳本建立、指向相同位置的連結，會自動納入管理。
-- 同步前會先檢查以下項目，任何一項不通過就不做任何變更並列出原因：
-  - SKILL.md 是否存在；
-  - 資料夾名稱、外掛區段名稱是否和 SKILL.md 的 `name` 一致；
-  - 名稱是否和其他 Skill 重複；
-  - 是否設定了 `disable-model-invocation: true`（設定後 Sub-Agent 無法透過 Skill 工具載入）；
-  - 目標位置是否已有不是本腳本建立的同名連結或目錄。
+- Only links this script created are changed; they are listed in the
+  `.managed` file of each directory. Links and real directories created by
+  other people or tools are never touched.
+- Plugins removed from `configs/plugins.ini` are unlinked at the next sync.
+- Links created by older versions of the script that point to the same
+  location are taken over automatically.
+- Before syncing, the following are checked; if any fails, nothing is changed
+  and the reasons are listed:
+  - SKILL.md exists;
+  - the folder name and the plugin section name equal `name` in SKILL.md;
+  - the name does not clash with another skill;
+  - `disable-model-invocation: true` is not set (with it, subagents cannot
+    load the skill through the skill tool);
+  - the target location has no link or directory of the same name that this
+    script did not create.
 
-### 載入方式與注意事項
+### Loading and caveats
 
-- 流程中的每一步都由主 Agent 明確指定要用哪個 Skill，不靠 Agent 自行挑選，所以不需要限制 Agent 能讀哪些 Skill。
-- Sub-Agent 會先用平台的 Skill 工具依名稱載入；如果平台的 Sub-Agent 沒有 Skill 工具，或找不到該 Skill，就直接讀取 `SKILL.md` 並照著執行。Claude Code 的 Sub-Agent 確定可以透過 Skill 工具載入；GitHub Copilot 官方文件未說明，因此保留這個備援。
-- 外掛 Skill 的描述請寫得具體（例如註明「前端 Vue／TypeScript 的 CR 規範」）。描述太籠統時，使用者在主對話中說「審查這個 PR」，可能會和主流程 Skill 搶著被觸發。
-- 外掛 Skill 不需要配合這套框架修改。主流程派給它的指令會限定審查範圍、輸出位置與狀態協定，並要求把結果整理成統一的 `cr.txt`。
+- The main agent names the skill for every step of the workflow instead of
+  letting the agent pick one, so there is no need to restrict which skills an
+  agent can read.
+- A subagent first loads the skill by name with the platform's skill tool; if
+  the platform's subagents have no skill tool, or the skill is not found, it
+  reads `SKILL.md` directly and follows it. Subagents of Claude Code can load
+  skills through the skill tool; the GitHub Copilot documentation does not
+  say, so this fallback stays.
+- Write specific descriptions for plugin skills (for example "CR guidelines
+  for the Vue / TypeScript frontend"). With a vague description, saying
+  "review this PR" in the main chat may trigger the plugin instead of the main
+  workflow skill.
+- Plugin skills need no changes for this framework. The prompt the workflow
+  gives them limits the review scope, the output location and the status
+  protocol, and asks them to normalize the result into a common `cr.txt`.
 
-### 外掛在流程中的執行方式（步驟 2）
+### How plugins run in the workflow (step 2)
 
-1. 步驟 1 成功後，執行 `review-state cr-plan`：依 PR 實際異動的檔案（排除建置產物、自動產生檔與 lock 檔）比對每個外掛的 `applies`，決定要執行哪些外掛。各外掛要審查的檔案寫在 `tmp/step2/<外掛>/files.txt`，並切出只含這些檔案的 `diff.patch`。沒有任何外掛適用時，步驟 2 直接視為完成。
-2. 每個適用的外掛由一個 Sub-Agent 依序執行（不支援 Sub-Agent 的平台由主 Agent 自己執行），一樣遵守狀態協定，狀態檔為 `tmp/step2-<外掛>-<狀態>`。`review-state next` 在步驟 2 尚未規劃時會自動執行 `cr-plan`。
-3. 外掛只讀自己的 `diff.patch`，依自己的規範審查，原始輸出放在 `tmp/step2/<外掛>/raw/`，再整理成統一格式的 `cr.txt`：
+1. After step 1 succeeds, `review-state cr-plan` matches the files the PR
+   actually changed (excluding build output, generated files and lock files)
+   against each plugin's `applies` to decide which plugins run. The files each
+   plugin reviews are written to `tmp/step2/<plugin>/files.txt`, with a
+   `diff.patch` containing only those files. When no plugin applies, step 2
+   counts as done right away.
+2. Each applicable plugin runs in its own subagent, one after another (on
+   platforms without subagents, the main agent runs it), following the same
+   status protocol with the status files `tmp/step2-<plugin>-<state>`.
+   `review-state next` runs `cr-plan` automatically when step 2 is not planned
+   yet.
+3. A plugin reads only its own `diff.patch` and reviews it by its own
+   guidelines; its own output goes to `tmp/step2/<plugin>/raw/`, normalized
+   into `cr.txt`:
 
    ```text
    S|整體結論
@@ -320,28 +719,49 @@ mode="advisory"
    H|做得好的地方
    ```
 
-   嚴重度依意義對應到 Critical、Major、Minor、Nit；外掛原本的規則編號放在第 4 欄；`spec:`（選填）列出意見依據的所有規格書位置。標記成功時，狀態腳本會驗證 `cr.txt` 的格式。
-4. 所有外掛都成功後才能進入步驟 3。
+   Severities map by meaning to Critical, Major, Minor and Nit; the plugin's
+   own rule id goes in the 4th field; `spec:` (optional) lists every spec
+   location the comment is based on. When the step is marked successful, the
+   status script validates the format of `cr.txt`.
+4. Step 3 can start only after every plugin succeeded.
 
-### CR 結果如何影響分數（步驟 3）
+### How CR results affect the score (step 3)
 
-- `prepare-diff` 會在 `prepared.txt` 列出每則意見的編號 `<外掛>#<序號>`（該外掛 `cr.txt` 中第幾則意見）。
-- `mapped` 外掛的每一則意見，分析程式碼時都會對照程式碼確認，結果只有兩種：
-  - **確認屬實**：一律扣分，並以 `source: <意見編號>` 註明來自哪則意見。符合 A～G 檢查項的，依評分規則的預設嚴重度與調整條件扣在該檢查項；對應不到任何檢查項的，檢查代碼寫 `-`，依外掛給的嚴重度從總分扣分；判斷根本原因疑似在上游的，記為上游因素並扣分。
-  - **不成立**（外掛誤判、不在本次異動範圍內、無法在程式碼中確認）：寫成 `X|<意見編號>|原因`，原因會顯示在報告中。
-- 打分數時會檢查每則 `mapped` 意見都已扣分或註明不成立，有遺漏就無法通過。
-- `advisory` 外掛的意見只作為參考，不會轉為扣分項。
+- `prepare-diff` lists in `prepared.txt` the id `<plugin>#<n>` of every
+  comment (the n-th comment in that plugin's `cr.txt`).
+- Every comment of a `mapped` plugin is checked against the code during the
+  analysis, with one of two outcomes:
+  - **Confirmed**: always deducts points, with `source: <comment id>` naming
+    the comment. A comment matching an A to G check item deducts under that
+    item with the scoring rules' default severity and adjustment conditions;
+    one matching no check item uses check code `-` and is deducted from the
+    total by the plugin's severity; one whose root cause seems to be upstream
+    is recorded as an upstream factor and deducted.
+  - **Rejected** (the plugin was wrong, it is outside this change, or it
+    cannot be confirmed in the code): written as `X|<comment id>|reason`, and
+    the reason appears in the report.
+- Scoring checks that every `mapped` comment is either deducted or rejected
+  with a reason; a missing one fails the check.
+- Comments of `advisory` plugins are for reference only and never become
+  deductions.
 
-### 為什麼 CR 排在分析程式碼之前
+### Why CR comes before the code analysis
 
-- **分數更準確**：評分同時參考評分規則與 CR 規範，CR 找到的問題會反映在分數中。
-- **節省 token**：每個外掛只讀自己範圍內的 `diff.patch`，不讀整份 PR；分析程式碼時把 CR 已找到的問題當成線索確認即可，不必重新從頭找一遍。
+- **More accurate scores**: the score considers both the scoring rules and
+  the CR guidelines, so problems found by the CR are reflected in the score.
+- **Fewer tokens**: each plugin reads only the `diff.patch` of its own scope,
+  not the whole PR; the analysis only confirms the problems the CR already
+  found as clues instead of searching from scratch.
 
-### 報告內容
+### Report contents
 
-最終報告分成兩部分：
+The final report has two parts:
 
-- **一、CR 結果**：各外掛的總覽表（審查檔案數、各嚴重度意見數、結論）、各外掛的意見明細（依嚴重度排序）與亮點，以及因沒有符合的異動檔案而未執行的外掛。每則意見的標頭為「嚴重度 | 規則 | 判定」，程式碼位置與規格書位置逐行全部列出：
+- **Part 1, CR results**: an overview per plugin (files reviewed, comments
+  per severity, conclusion), the comments of each plugin (sorted by severity)
+  and highlights, and the plugins that did not run because no changed file
+  matched. Each comment's header is "severity | rule | verdict", and all code
+  locations and spec locations are listed one per line:
 
   ```text
   1. [Critical | EXT-CODE | A8]
@@ -355,31 +775,97 @@ mode="advisory"
        - `docs/spec/order-sd.md:57`
   ```
 
-  「判定」依扣分項與上游因素的 `source:` 對應：
-  - 已扣分的意見列出對應的檢查代碼，例如 `A8`；對應不到檢查項的顯示「其他」，記為上游因素的顯示「上游因素」。
-  - 不成立的顯示「不成立」，並多一行「不成立原因」。
-  - `advisory` 外掛的意見顯示「僅供參考」。
-- **二、評分結果**：各面向得分、問題明細、建議、上游因素、亮點、評分備註、結構化結果。
-  - 得分表在七個面向之後，另列「其他（未對應檢查項）」與「上游因素」兩列的扣分。
-  - 問題明細包含 Nit；由 CR 意見確認而來的扣分項會標示來源的意見編號。
-  - 「建議（不扣分）」只放步驟 3 額外提出的建議。
+  The verdict follows the `source:` of the deductions and upstream factors:
+  - A deducted comment shows its check code, for example `A8`; one matching
+    no check item shows 「其他」 (other), and one recorded as an upstream
+    factor shows 「上游因素」 (upstream factor).
+  - A rejected comment shows 「不成立」 (rejected), with an extra line
+    「不成立原因」 (reason for rejection).
+  - Comments of `advisory` plugins show 「僅供參考」 (for reference only).
+- **Part 2, scoring results**: the score per dimension, the problem details,
+  suggestions, upstream factors, highlights, scoring notes and the structured
+  result.
+  - After the seven dimensions, the score table has two more rows for the
+    deductions of 「其他（未對應檢查項）」 (other, no matching check item) and
+    「上游因素」 (upstream factors).
+  - The problem details include Nit; deductions confirmed from CR comments
+    show the comment id they came from.
+  - 「建議（不扣分）」 (suggestions, no deduction) holds only the extra
+    suggestions made in step 3.
 
-報告開頭會同時列出評分等級與 CR 意見總數。版面與用語可在 `assets/report-template.md`、`assets/labels.tsv` 調整，可用的佔位符號見 `skills/code-review-scoring-report/references/placeholders.md`。
+The top of the report shows both the grade and the total number of CR
+comments. Layout and wording can be adjusted in
+`templates/<language>/report-template.md` and `templates/<language>/labels.tsv`
+(see [Adjusting the report](#adjusting-the-report)).
 
-## 腳本為什麼存在
+## Why the scripts exist
 
-- `link-skills`：依 `skills/` 與 `plugins.ini` 同步各工具的 Skill 連結，並在變更前檢查名稱與設定。
-- `setup`：每次執行完整流程前檢查 `plugins.ini` 與 `configs.ini`，並以逐步詢問或指令的方式建立，登記外掛時先驗證，避免設定錯誤到 CR 步驟才發現。
-- `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
-- `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
-- `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以規則表列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。
-- `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依 `configs.ini` 的配分計算分數與等級，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
-- `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
+- `link-skills`: syncs each tool's skill links from `skills/` and
+  `configs/plugins.ini`, checking names and settings before any change.
+- `setup`: before every full workflow run, checks `configs/plugins.ini` and
+  `configs/settings.ini` and creates them step by step or by command,
+  validating plugins as they are registered, so configuration errors are not
+  discovered only in the CR step.
+- `review-state`: manages the step status files, plans which CR plugins run,
+  generates each step's prompt and enforces the order. `next` combines
+  checking the status, planning the plugins and generating the prompt into
+  one call, and `finish` runs the scripts of steps 4 and 5 directly, which
+  cuts the main agent's round trips and tokens.
+- `init-workspace` / `check-context`: fix where the handover files live, and
+  block the later steps until all inputs and open questions are handled.
+- `prepare-diff`: excludes generated files and lock files, numbers the lines
+  of new files, and lists heuristic candidates with the scan rule files of the
+  scoring standards, saving the tokens the AI would spend counting lines and
+  scanning again. Files not covered by the `applies` of a framework standard
+  are marked `[common]` and scanned with the common standard's rules; file
+  categories (`@scope`) and PR-level hints (`@pr`, for example main code
+  changed without any test file) are also defined in the scan rule files, so
+  the script contains no framework-specific logic.
+- `standard`: checks the format when writing a scoring standard (`lint`),
+  parses the standard document into data the scripts can read (`parse`),
+  lists the differences between two versions (`diff`), selects the standard
+  to score with and the common standard and outputs the check items, point
+  overrides, applicable files and scan rule files for `score` and
+  `prepare-diff` (`resolve`), decides in step 1 which reports to produce from
+  the changed files and cuts the diff of each report (`plan`), and writes a
+  reviewed scan rule draft with its source header to its final location
+  (`stamp`). The standard document is shared by the AI and the scripts, and a
+  format error would make the scoring read the wrong rules, so the script
+  checks strictly: field counts, severity spelling, duplicate codes, that all
+  dimensions exist, the point totals and overlapping `applies` in
+  `standards.ini`, and whether the regexes of the scan rules use only syntax
+  shared by awk and .NET, whether the codes they reference still exist, and
+  whether they are stale after the standard document changed. `lint` runs
+  only when writing or maintaining standards; the scoring workflow calls
+  `resolve` only through `plan` and the checks of `review-state`, which print
+  no format messages when the format is correct and so cost no tokens. On a
+  format error they stop (exit code 2 or 3); run `lint` to fix it first.
+- `score`: validates the scoring result (check codes, severity adjustment
+  conditions, whether locations are on added lines of the diff, and merged or
+  per-occurrence deductions according to `merge`), and computes the scores
+  and grade with the points of `configs/settings.ini` (the `points.*` of a
+  standard in `configs/standards.ini` take precedence). Check codes and
+  allowed severities come from the scoring standard document, which avoids
+  calculation mistakes by the AI. `--check` only validates without writing
+  files, for step 3 to check itself before finishing.
+- `render-report`: combines the CR results and the score into one report from
+  the template and publishes it to `reports/`; numbers and comments are taken
+  directly from the files of the earlier steps, never retyped by the AI.
 
-腳本的提示、訊息與註解一律使用英文，避免主控台編碼不同時出現亂碼。報告中由腳本插入的中文用語（含全形括號、冒號等符號）都放在 `skills/code-review-scoring-report/assets/labels.tsv`。
+The prompts, messages and comments of the scripts are always in English, to
+avoid garbled text under different console encodings. The wording the script
+inserts into reports (including separators such as full-width brackets and
+colons) is all in `templates/<language>/labels.tsv`.
 
-PowerShell 腳本以 UTF-8 with BOM 儲存，並在執行時將主控台與 git 輸出切換為 UTF-8，Windows PowerShell 5.1 也能正確處理中文。編輯 `.ps1` 時請保留 BOM。
+The PowerShell scripts are saved as UTF-8 with BOM and switch the console and
+git output to UTF-8 at run time, so Windows PowerShell 5.1 handles Chinese
+correctly too. Keep the BOM when you edit a `.ps1` file.
 
-在 Windows 的 Git Bash 執行 bash 腳本時，輸出與 Sub-Agent 指令中的路徑會使用 `C:/...` 格式，而不是 `/c/...` 或 `/tmp/...`，所以 Sub-Agent 不論改用 PowerShell 或 bash 都能找到同一個檔案。
+When the bash scripts run in Git Bash on Windows, paths in the output and in
+subagent prompts use the `C:/...` form instead of `/c/...` or `/tmp/...`, so
+subagents find the same file whether they use PowerShell or bash.
 
-三種腳本在相同輸入下的產出一致（已在 Windows 上以 PowerShell 5.1 與 Git Bash 驗證完整五步驟流程）。zsh 版由 bash 版轉換而來，修改 bash 版時請同步更新 zsh 版。
+The three script variants produce the same output for the same input (the
+full five-step workflow was verified on Windows with PowerShell 5.1 and Git
+Bash). The zsh version is converted from the bash version; update the zsh
+version whenever you change the bash version.

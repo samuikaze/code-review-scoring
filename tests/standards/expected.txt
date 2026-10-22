@@ -1,0 +1,260 @@
+### lint --file bad.md
+document: Bad_Name , 4 check items (A 3, B 0, C 0, D 0, E 1, F 0, G 0), 1 adjustable, 1 confirmations
+warning: bad.md:3: applies is set in configs/standards.ini, not in the document; this line is ignored
+warning: bad.md:4: unknown front matter key color is ignored
+error: bad.md:15: dimension B is listed more than once
+error: bad.md:16: dimension codes are A to G, not "H"
+error: bad.md:29: A1 is already defined on line 28
+error: bad.md:30: separate the fields with the full-width ｜, not |
+error: bad.md:31: a check item has 3 or 5 fields separated by ｜, not 4
+error: bad.md:32: severity must be Critical, Major, Minor or Nit (case-sensitive), not "major"
+error: bad.md:33: A5 lists its default severity Minor as adjustable
+warning: bad.md:34: A6: Nit is always allowed and does not need to be listed
+error: bad.md:35: A7 has no condition for the adjustment
+error: bad.md:36: B1 is under ### A; the letter of a check code must match its dimension
+error: bad.md:37: the CM prefix is reserved for the common standard (role="common"): CM-A8
+error: bad.md:38: a check item is - code｜content｜severity, or - code｜content｜severity｜adjustable to｜condition
+error: bad.md:48: unexpected text under a dimension heading; write check items (- code｜content｜severity), 無 (None), or an HTML comment
+error: bad.md:52: B2 has no content
+error: bad.md:54: headings under ## 檢查項 (Check items) are ### X. name, with X from A to G
+error: bad.md:56: headings under ## 檢查項 (Check items) are ### X. name, with X from A to G
+error: bad.md:71: a confirmation needs the thing to confirm
+error: bad.md:72: a confirmation is - codes｜what to confirm (separate with the full-width ｜, not |)
+error: bad.md:74: section ## 檢查項 appears more than once
+error: bad.md:76: this HTML comment is not closed
+error: bad.md:2: name may only contain lowercase letters, digits and -
+error: bad.md:1: the front matter has no version
+error: bad.md:14: dimension B must be named 安全性 or Security (dimension codes and names cannot be changed)
+error: bad.md:9: dimension G (可維護性) is missing from the ## 面向 (Dimensions) table
+warning: bad.md:50: the heading should be ### B. 安全性 or ### B. Security
+warning: bad.md:50: ### B has no check item; write 無 or None if that is intended
+warning: bad.md:58: ### C has no check item; write 無 or None if that is intended
+warning: bad.md:22: ### F. 可讀性 is missing (keep the heading and write 無 or None when it has no check item)
+warning: bad.md:22: ### G. 可維護性 is missing (keep the heading and write 無 or None when it has no check item)
+error: bad.md:70: the confirmation refers to Z9, which is not a check item
+
+result: 24 error(s), 8 warning(s)
+exit=1
+### lint --file bad-common.md --common
+document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
+error: bad-common.md:23: check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not "A2"
+error: bad-common.md:24: CM-B1 is under ### A; the letter of a check code must match its dimension
+
+result: 2 error(s), 0 warning(s)
+exit=1
+### lint --file good-v1.md --scan bad-scan.tsv
+document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
+scan rules: 11 line rules, 1 scopes, 2 PR hints
+error: bad-scan.tsv:3: scope test is already defined on line 2
+error: bad-scan.tsv:4: the scope any is built in and cannot be defined
+error: bad-scan.tsv:5: scope names may only contain lowercase letters, digits, _ and -
+error: bad-scan.tsv:6: within is -, a scope defined above, or !scope; nope is not defined above
+error: bad-scan.tsv:7: @scope has 4 TAB-separated fields (@scope name within path-regex), not 3
+error: bad-scan.tsv:8: conditions are has:scope, no:scope or modified:scope, not "nope:test"
+error: bad-scan.tsv:9: the hint is empty
+error: bad-scan.tsv:10: unknown directive @bad (use @scope or @pr)
+error: bad-scan.tsv:11: the regex uses /b, which POSIX ERE (awk) and .NET do not share; avoid /b /s /d /w, lookaround, lazy quantifiers, POSIX classes and back-references
+error: bad-scan.tsv:12: the regex uses (?, which POSIX ERE (awk) and .NET do not share; avoid /b /s /d /w, lookaround, lazy quantifiers, POSIX classes and back-references
+error: bad-scan.tsv:13: the regex uses +?, which POSIX ERE (awk) and .NET do not share; avoid /b /s /d /w, lookaround, lazy quantifiers, POSIX classes and back-references
+error: bad-scan.tsv:14: the regex uses [:class:], which POSIX ERE (awk) and .NET do not share; avoid /b /s /d /w, lookaround, lazy quantifiers, POSIX classes and back-references
+error: bad-scan.tsv:16: the regex uses /d, which POSIX ERE (awk) and .NET do not share; avoid /b /s /d /w, lookaround, lazy quantifiers, POSIX classes and back-references
+error: bad-scan.tsv:18: A99 is not a check item of the standard (removed or renamed?)
+error: bad-scan.tsv:19: rule ids are check codes or uppercase tags (e.g. API), not "lower"
+error: bad-scan.tsv:20: flags are -, i, c or ic, not "q"
+error: bad-scan.tsv:21: the regex is required
+error: bad-scan.tsv:21: the hint is empty
+error: bad-scan.tsv:22: a line rule has 7 TAB-separated fields (id scope flags regex prev-regex exclude-regex hint), not 4
+error: bad-scan.tsv:8: scope main is not defined (define it with @scope)
+error: bad-scan.tsv:9: scope ghost is not defined (define it with @scope)
+error: bad-scan.tsv:20: scope ghost is not defined (define it with @scope)
+error: bad-scan.tsv:17: the regex does not compile in awk: (unclosed
+error: bad-scan.tsv:17: the regex does not compile in .NET: (unclosed
+warning: bad-scan.tsv:1: the scan rules were made from bad.md v1, and the document has changed since; regenerate them or run the review mode
+
+result: 24 error(s), 1 warning(s)
+exit=1
+### lint --file good-v2.md --scan good-scan.tsv
+document: springboot-3 v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 1 confirmations
+scan rules: 2 line rules, 2 scopes, 1 PR hints
+error: good-scan.tsv:5: C1 is not a check item of the standard (removed or renamed?)
+warning: good-scan.tsv:2: the scan rules were made from good-v1.md v0.1, and the document has changed since; regenerate them or run the review mode
+
+result: 1 error(s), 1 warning(s)
+exit=1
+### lint --standards bad-standards.ini --settings none.ini
+== bad-standards.ini
+error: bad-standards.ini:2: key outside a [section]
+error: bad-standards.ini:7: [springboot-3] is already defined on line 3
+error: bad-standards.ini:12: points.B must be a whole number, not "x"
+error: bad-standards.ini:13: unknown key color (path, scan, applies, role, points.A to points.G)
+error: bad-standards.ini:14: section names are the name of the standard: lowercase letters, digits and -
+error: bad-standards.ini:29: lines are [name], key="value" or ; comments
+error: bad-standards.ini:6: [springboot-3] the seven dimensions must add up to 100 with the overrides, not 105
+error: bad-standards.ini:11: the pattern *.java is also in [springboot-3]; a file may belong to one framework standard only
+error: bad-standards.ini:17: [noapplies] has no applies (framework standards need one)
+warning: bad-standards.ini:22: applies is ignored for the common standard, which covers the files no framework standard covers
+error: bad-standards.ini:25: role is "common" or not set, not "weird"
+error: bad-standards.ini:23: [common2] has no applies (framework standards need one)
+error: bad-standards.ini:28: only one standard can have role="common"
+
+== [springboot-3] good-v1.md
+document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
+
+== [angular] missing.md
+error: missing.md: file not found
+
+== [Bad Name] good-v1.md
+document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
+error: good-v1.md: the front matter name springboot-3 does not match the section [Bad Name] in standards.ini
+
+== [noapplies] good-v1.md
+document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
+error: good-v1.md: the front matter name springboot-3 does not match the section [noapplies] in standards.ini
+
+== [common] bad-common.md
+document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
+error: bad-common.md:23: check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not "A2"
+error: bad-common.md:24: CM-B1 is under ### A; the letter of a check code must match its dimension
+
+== [common2] bad-common.md
+document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
+error: bad-common.md:22: the CM prefix is reserved for the common standard (role="common"): CM-A1
+error: bad-common.md:24: the CM prefix is reserved for the common standard (role="common"): CM-B1
+error: bad-common.md: the front matter name common does not match the section [common2] in standards.ini
+
+== [common3] bad-common.md
+document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
+error: bad-common.md:23: check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not "A2"
+error: bad-common.md:24: CM-B1 is under ### A; the letter of a check code must match its dimension
+error: bad-common.md: the front matter name common does not match the section [common3] in standards.ini
+
+result: 23 error(s), 1 warning(s)
+exit=1
+### lint --standards good-standards.ini
+== good-standards.ini
+
+== [springboot-3] good-v1.md
+document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
+scan rules: 2 line rules, 2 scopes, 1 PR hints
+
+== [common] good-common.md
+document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
+
+result: 0 error(s), 0 warning(s)
+exit=0
+### lint --standards good-standards.ini springboot-3 nope
+== good-standards.ini
+error: good-standards.ini: [nope] is not registered
+
+== [springboot-3] good-v1.md
+document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
+scan rules: 2 line rules, 2 scopes, 1 PR hints
+
+result: 1 error(s), 0 warning(s)
+exit=1
+### lint --standards missing.ini
+== missing.ini
+error: missing.ini: file not found; copy configs/standards.example.ini to configs/standards.ini
+
+result: 1 error(s), 0 warning(s)
+exit=1
+### lint --file ../../templates/zh-tw/scoring-rule-template.md
+document: example-standard v1.0, 8 check items (A 2, B 1, C 1, D 1, E 1, F 1, G 1), 1 adjustable, 2 confirmations
+
+result: 0 error(s), 0 warning(s)
+exit=0
+### lint --file ../../templates/en/scoring-rule-template.md
+document: example-standard v1.0, 8 check items (A 2, B 1, C 1, D 1, E 1, F 1, G 1), 1 adjustable, 2 confirmations
+
+result: 0 error(s), 0 warning(s)
+exit=0
+### lint --file good-en.md
+document: english v1.0, 7 check items (A 2, B 1, C 1, D 1, E 1, F 1, G 0), 1 adjustable, 2 confirmations
+
+result: 0 error(s), 0 warning(s)
+exit=0
+### lint --scan good-scan.tsv
+error: --scan and --common go with --file
+exit=2
+### parse --file good-v2.md
+name	springboot-3
+version	v0.2
+dim	A	正確性	x
+dim	B	安全性	是否引入弱點
+dim	C	測試品質	x
+dim	D	架構與設計	x
+dim	E	效能與資源使用	x
+dim	F	可讀性	x
+dim	G	可維護性	x
+check	A1	Major	-	-	正常但改了內容	22
+check	A2	Minor	Major	資料量大時	新增的項目	23
+check	C2	Major	-	-	改名後的項目	31
+confirm	A2	資料量多大	51
+exit=0
+### parse --file bad.md
+error: bad.md:15: dimension B is listed more than once; run standard lint first
+exit=3
+### parse --file nofile.md
+error: file not found: nofile.md
+exit=2
+### diff good-v1.md good-v2.md
+version: v0.1 -> v0.2
+~ dimension B focus: x -> 是否引入弱點
+~ A1 content: 正常 -> 正常但改了內容
+~ A1 severity: Minor -> Major
++ A2｜新增的項目｜Minor｜Major｜資料量大時
++ C2｜改名後的項目｜Major
+- C1｜測試｜Major｜Critical｜沒有測試時
++ confirm A2｜資料量多大
+3 added, 1 removed, 2 changed
+exit=0
+### diff good-v1.md good-v1.md
+0 added, 0 removed, 0 changed
+exit=0
+### diff good-v1.md bad.md
+error: bad.md:15: dimension B is listed more than once; run standard lint first
+exit=3
+### diff good-v1.md
+error: diff needs OLD.md NEW.md
+exit=2
+### resolve --standards good-standards.ini
+standard	springboot-3	v0.1	sha256:0aed7bc76d20fcc7cd89c7114fb366d09eb951b071f8e5f22750c3baddb41481	good-v1.md
+applies	((^|/)[^/]*/.java$)|((^|/)[^/]*/.kt$)
+scan	good-scan.tsv	sha256:725a551283124b46fb276988d2ffc7310851f576c37fdcc9b713a7e4f096a3f9
+points	C	20
+points	F	5
+check	A1	Minor	-	-	正常	22
+check	C1	Major	Critical	沒有測試時	測試	30
+common	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	good-common.md
+check	CM-A1	Minor	-	-	正常	22
+exit=0
+### resolve --standards good-standards.ini common
+standard	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	good-common.md
+check	CM-A1	Minor	-	-	正常	22
+exit=0
+### resolve --standards good-standards.ini nope
+error: good-standards.ini: [nope] is not registered
+exit=2
+### resolve --standards bad-standards.ini
+error: bad-standards.ini:2: key outside a [section]; run standard lint first
+exit=3
+### resolve --standards missing.ini
+error: missing.ini: file not found; copy configs/standards.example.ini to configs/standards.ini
+exit=3
+### stamp --file good-v2.md --scan good-scan.tsv --out stamped.tmp.tsv
+wrote stamped.tmp.tsv
+# source: good-v2.md v0.2 sha256:28801aba8ae9d5bb7d08cf4f8472cb5ca628efb871204f41bd9debfe6ac2b948
+exit=0
+### lint --file good-v2.md --scan stamped.tmp.tsv
+document: springboot-3 v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 1 confirmations
+scan rules: 2 line rules, 2 scopes, 1 PR hints
+error: stamped.tmp.tsv:5: C1 is not a check item of the standard (removed or renamed?)
+
+result: 1 error(s), 0 warning(s)
+exit=1
+### stamp --file bad.md --scan good-scan.tsv --out stamped.tmp.tsv
+error: bad.md:15: dimension B is listed more than once; run standard lint first
+exit=3
+### stamp --file good-v2.md --out stamped.tmp.tsv
+error: stamp needs --file DOC.md --scan DRAFT.tsv --out RULES.tsv
+exit=2

@@ -7,11 +7,15 @@ With -Root (default: tmp in the project root): uses ROOT/step3/findings.txt and 
 questions in step1/step3, checks that every comment of a mapped code review plugin in ROOT/step2 is deducted or rejected,
 and writes ROOT/step4/score.tsv and ROOT/step4/score.json.
 With -Findings: standalone use without the root layout.
-Scoring settings come from the [points], [deductions] (incl. merge) and [grades] sections of -Config (default: configs.ini in
+Scoring settings come from the [points], [deductions] (incl. merge) and [grades] sections of -Config (default: configs/settings.ini in
 the project root); settings that are not given keep the defaults. Works on Windows PowerShell 5.1 and PowerShell 7+.
 Saved as UTF-8 with BOM; keep that encoding.
+The check items come from -Standard (a section of -Standards, default: configs/standards.ini in the project root; default
+standard: the only framework standard, or the common standard when no framework standard is registered) and from the
+common standard; the [points] overrides of -Standard win over the settings.
 With -Check: validate findings.txt only (same checks and exit codes) and write nothing; step 3 runs it before reporting success.
-Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad arguments or invalid scoring settings,
+Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad arguments, invalid scoring settings or standards
+(run standard lint),
 3 spec-context.md still has unresolved inputs or questions.
 
 .EXAMPLE
@@ -26,6 +30,8 @@ param(
     [Alias('r')][string]$Repo = '.',
     [Alias('o')][string]$OutDir,
     [string]$Config,
+    [string]$Standard,
+    [string]$Standards,
     [switch]$Check
 )
 
@@ -35,13 +41,19 @@ Initialize-Utf8
 
 $projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
 if (-not $Root -and -not $Findings) { $Root = Join-Path $projectRoot 'tmp' }
-if (-not $Config) { $Config = Join-Path $projectRoot 'configs.ini' }
+if (-not $Config) { $Config = Join-Path $projectRoot 'configs/settings.ini' }
+if (-not $Standards) { $Standards = Join-Path $projectRoot 'configs/standards.ini' }
+$cplan = ''; $cstd = ''; $sub = ''
 if ($Root) {
     if (-not [IO.Directory]::Exists((Resolve-UserPath $Root))) { Exit-WithError "review root not found: $Root" }
-    if (-not $Findings) { $Findings = Join-Path $Root 'step3/findings.txt' }
+    # With a review plan (step 1 of the workflow), each standard has its own diff and step folders.
+    $cstd = Get-PlanStandard $Root $Standard
+    if ($cstd) { $Standard = $cstd; $cplan = Join-Path $Root 'step1/standards/plan.tsv'; $sub = "/$cstd" }
+    if (-not $Findings) { $Findings = Join-Path $Root "step3$sub/findings.txt" }
+    if (-not $Diff -and -not $Git -and $cstd) { $Diff = Join-Path $Root "step1/standards/$cstd.diff" }
     if (-not $Diff -and -not $Git -and (Test-UserFile (Join-Path $Root 'step1/pr.diff'))) { $Diff = Join-Path $Root 'step1/pr.diff' }
     if (-not $OutDir -and -not $Check) {
-        $OutDir = Join-Path $Root 'step4'
+        $OutDir = Join-Path $Root "step4$sub"
         [void][IO.Directory]::CreateDirectory((Resolve-UserPath $OutDir))
     }
     # Scoring must wait until every input is resolved and every question is answered.
@@ -55,7 +67,7 @@ if ($Root) {
             exit 3
         }
     }
-    foreach ($s in 'step1', 'step3') {
+    foreach ($s in 'step1', "step3$sub") {
         if ((Test-UserFile (Join-Path $Root "$s/questions.md")) -and -not (Test-UserFile (Join-Path $Root "$s/answers.md"))) {
             [Console]::Error.WriteLine("error: $(Join-Path $Root "$s/questions.md") has no answers.md yet; ask the user first")
             exit 3
@@ -66,16 +78,32 @@ if (-not $Findings) { Exit-WithError '-Root or -Findings is required (see Get-He
 if (-not (Test-UserFile $Findings)) { Exit-WithError "findings file not found: $Findings" }
 if (-not $OutDir) { $OutDir = Split-Path -Parent (Resolve-UserPath $Findings) }
 
-# Default and allowed severities per check id
-$def = @{}; $adj = @{}
-foreach ($l in (Read-Utf8Lines (Join-Path $PSScriptRoot 'rules.tsv'))) {
-    if ($l -match '^#' -or $l -match '^\s*$') { continue }
+# Check items of the standard and of the common standard, and the points overrides of the standard
+# (code-review-scoring/scripts/standard.ps1 resolve, run with the same PowerShell; it prints its own errors).
+$def = @{}; $adj = @{}; $override = @{}; $std = $null; $common = $null
+# With the review plan: the standard as step 1 planned it (the workflow refuses to go on when it has changed since).
+if ($cstd) { $resolved = @(Read-Utf8Lines (Join-Path $Root "step1/standards/$cstd.resolve") | Where-Object { $_ }) }
+else {
+    $resolveArgs = @('resolve', '--standards', $Standards, '--settings', $Config)
+    if ($Standard) { $resolveArgs += $Standard }
+    $exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $resolved = @(& $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $projectRoot 'skills/code-review-scoring/scripts/standard.ps1') @resolveArgs) }
+    finally { $ErrorActionPreference = $prev }
+    if ($LASTEXITCODE -ne 0) { exit 2 }
+}
+foreach ($l in $resolved) {
     $a = $l -split "`t"
-    $def[$a[0]] = $a[1]; $adj[$a[0]] = @($a[2] -split ',' | Where-Object { $_ -ne '-' })
+    switch -CaseSensitive ($a[0]) {
+        'check' { $def[$a[1]] = $a[2]; $adj[$a[1]] = @($a[3] -split ',' | Where-Object { $_ -ne '-' }) }
+        'points' { $override[$a[1]] = [int]$a[2] }
+        'standard' { $std = $a }
+        'common' { $common = $a }
+    }
 }
 
 # Line index of the diff: key = "path|line", value = '+' (added) or ' ' (context)
-$kind = @{}; $known = @{}; $hasTest = $false; $useIndex = $false
+$kind = @{}; $known = @{}; $useIndex = $false
 if ($Diff -or $Git) {
     $useIndex = $true
     $diffText = Get-DiffText -InputPath $Diff -Git $Git -Repo $Repo
@@ -94,7 +122,6 @@ if ($Diff -or $Git) {
         if ($line.StartsWith('+++ ')) {
             $p = ($line.Substring(4) -split "`t")[0].Trim('"')
             if ($p -eq '/dev/null') { $p = '' } else { $p = $p -replace '^b/', '' }
-            if ($p -match '(^|/)src/test/' -or $p -cmatch '(Test|Tests|IT)\.(java|kt)$') { $hasTest = $true }
             continue
         }
         if ($line -match '^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@') {
@@ -109,12 +136,12 @@ else {
     [Console]::Error.WriteLine('note: no diff given, location checks skipped')
 }
 
-# Defaults; configs.ini can change them
+# Defaults; configs/settings.ini can change them
 $dimMax = [ordered]@{ A = 25; B = 15; C = 15; D = 15; E = 10; F = 10; G = 10 }
 $pts = @{ Critical = 10; Major = 5; Minor = 2; Nit = 1 }
 $gradeMin = [ordered]@{ S = 95; A = 85; B = 70; C = 55 }
 $merge = $false
-# Reads the scoring settings of configs.ini; keys that are not set keep their defaults.
+# Reads the scoring settings of configs/settings.ini; keys that are not set keep their defaults.
 $cfgErrors = New-Object System.Collections.Generic.List[string]
 if (Test-UserFile $Config) {
     $sec = ''
@@ -137,8 +164,11 @@ if (Test-UserFile $Config) {
         $target[$k] = [int]$v
     }
 }
+# The [points] overrides of the standard in configs/standards.ini win over the settings.
+foreach ($k in $override.Keys) { $dimMax[$k] = $override[$k] }
 $sum = 0; foreach ($d in $dimMax.Keys) { $sum += $dimMax[$d] }
-if ($sum -ne 100) { $cfgErrors.Add("  - [points] the seven dimensions must add up to 100, not $sum") }
+$ovNote = if ($override.Count -gt 0) { " (with the points overrides of [$($std[1])] in standards.ini)" } else { '' }
+if ($sum -ne 100) { $cfgErrors.Add("  - [points] the seven dimensions must add up to 100, not $sum$ovNote") }
 if ($gradeMin.S -gt 100) { $cfgErrors.Add('  - [grades] S must be at most 100') }
 $g = @('S', 'A', 'B', 'C')
 for ($i = 0; $i -lt 3; $i++) {
@@ -171,7 +201,11 @@ if ($Root -and (Test-UserFile (Join-Path $Root 'step2/plan.tsv'))) {
     $hasCr = $true
     foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step2/plan.tsv') | Where-Object { $_ })) {
         $p = $l -split "`t"; $crFile = Join-Path $Root "step2/$($p[0])/cr.txt"; $n = 0
-        if (Test-UserFile $crFile) { foreach ($x in (Read-Utf8Lines $crFile)) { if ($x -match '^\s*C\s*\|') { $n++; $commentMode["$($p[0])#$n"] = $p[2] } } }
+        if (Test-UserFile $crFile) {
+            foreach ($x in (Read-Utf8Lines $crFile)) {
+                if ($x -match '^\s*C\s*\|') { $n++; if (Test-CommentOwner $cplan $cstd (@($x -split '\|') + '')[2].Trim()) { $commentMode["$($p[0])#$n"] = $p[2] } }
+            }
+        }
     }
 }
 $used = @{}; $rejected = New-Object System.Collections.Generic.List[object]; $rejectedIds = @{}
@@ -220,7 +254,7 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
         'F' {
             $id = $c[1]; $sev = $c[2]; $locs = $c[3]; $reason = $c[4]
             $rec = 'skip'; $recId = $id; $recLine = $no
-            # Check id "-": no check of the checklist covers the problem; deducted from the total by its severity.
+            # Check id "-": no check item of the standard covers the problem; deducted from the total by its severity.
             $other = ($id -eq '-')
             if (-not $other -and -not $def.ContainsKey($id)) { Add-Error $no "unknown check id $id (use - when no check covers the problem)"; break }
             if ($sev -cnotin 'Critical', 'Major', 'Minor', 'Nit') { Add-Error $no "${id}: severity `"$sev`" is not Critical/Major/Minor/Nit"; break }
@@ -231,7 +265,6 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
                 }
                 if (-not $reason) { Add-Error $no "${id}: non-default severity $sev needs the matching adjustment condition in column 5"; break }
             }
-            if ($id -eq 'C1' -and $sev -eq 'Critical' -and $useIndex -and $hasTest) { Add-Error $no 'C1 Critical requires that the PR changes no test file, but the diff contains test files' }
             if (-not $locs) { Add-Error $no "${id}: missing file:line location"; break }
             if ($locs -eq '-' -and -not $other) { Add-Error $no "${id}: location - (whole PR) is only allowed when the check id is -; give file:line"; break }
             # merge=true: one F record per check id with all its locations, deducted once.
@@ -310,6 +343,11 @@ if ($Check) {
 function ConvertTo-JsonString([string]$s) {
     return '"' + ($s -replace '\\', '\\' -replace '"', '\"' -replace "`t", '\t') + '"'
 }
+# Dimension of a check id: its first letter, or the letter after CM- for the common standard.
+function Get-Dimension([string]$Id) {
+    if ($Id.StartsWith('CM-', [StringComparison]::Ordinal)) { return $Id.Substring(3, 1) }
+    return $Id.Substring(0, 1)
+}
 function Join-JsonArray($items) {
     if ($items.Count -eq 0) { return '[]' }
     return "[`n" + ($items -join ",`n") + "`n  ]"
@@ -320,7 +358,7 @@ $sorted = @($found | Sort-Object @{ Expression = { $rank[$_.Severity] } }, @{ Ex
 $scores = [ordered]@{}; $total = 0
 foreach ($d in $dimMax.Keys) {
     $ded = 0
-    foreach ($x in $sorted) { if ($x.Id.Substring(0, 1) -ceq $d) { $ded += $pts[$x.Severity] } }
+    foreach ($x in $sorted) { if ((Get-Dimension $x.Id) -ceq $d) { $ded += $pts[$x.Severity] } }
     $scores[$d] = [Math]::Max(0, $dimMax[$d] - $ded)
     $total += $scores[$d]
 }
@@ -335,6 +373,8 @@ if ($crit -and $grade -in 'S', 'A') { $grade = 'B'; $capped = $true }
 
 $tsv = New-Object System.Text.StringBuilder
 [void]$tsv.Append("total`t$total`ngrade`t$grade`ncapped`t$([int]$capped)`ncritical`t$([int]$crit)`n")
+[void]$tsv.Append("standard`t$($std[1])`t$($std[2])`t$($std[3])`n")
+if ($common) { [void]$tsv.Append("common`t$($common[1])`t$($common[2])`t$($common[3])`n") }
 foreach ($d in $dimMax.Keys) { [void]$tsv.Append("dim`t$d`t$($scores[$d])`t$($dimMax[$d])`n") }
 foreach ($x in $sorted) { [void]$tsv.Append("finding`t$($x.Id)`t$($x.Severity)`t$($pts[$x.Severity])`t$($x.Clean)`t$($x.Seq)`n") }
 $i = 0; foreach ($u in $upstream) { $i++; [void]$tsv.Append("upstream`t$i`t$($u.Severity)`t$($pts[$u.Severity])`n") }
@@ -356,10 +396,14 @@ $uj = @($upstream | ForEach-Object {
     })
 $xj = @($rejected | ForEach-Object { '    { "comment": ' + (ConvertTo-JsonString $_.Comment) + ', "reason": ' + (ConvertTo-JsonString $_.Reason) + ' }' })
 $sj = @($skipped | ForEach-Object { '    { "id": ' + (ConvertTo-JsonString $_.Id) + ', "reason": ' + (ConvertTo-JsonString $_.Reason) + ' }' })
+$stdJson = { param($r) '{ "name": ' + (ConvertTo-JsonString $r[1]) + ', "version": ' + (ConvertTo-JsonString $r[2]) + ', "hash": ' + (ConvertTo-JsonString $r[3]) + ' }' }
+$commonJson = if ($common) { & $stdJson $common } else { 'null' }
 $json = "{`n" +
 '  "total": ' + $total + ",`n" +
 '  "grade": "' + $grade + '"' + ",`n" +
 '  "hasCritical": ' + $crit.ToString().ToLower() + ",`n" +
+'  "standard": ' + (& $stdJson $std) + ",`n" +
+'  "common": ' + $commonJson + ",`n" +
 '  "dimensions": { ' + $dimJson + " },`n" +
 '  "otherDeduction": ' + $othDed + ",`n" +
 '  "upstreamDeduction": ' + $upDed + ",`n" +
@@ -372,7 +416,8 @@ Write-Utf8File $jsonPath $json
 $capNote = if ($capped) { ' (capped at B because of a Critical finding)' } else { '' }
 $summary = "grade $grade, total $total/100$capNote`n" +
 (@($dimMax.Keys | ForEach-Object { "$_ $($scores[$_])/$($dimMax[$_])  " }) -join '') + "`n" +
-"deductions: $($found.Count) (without a check id: $(@($found | Where-Object { $_.Id -eq '-' }).Count)), upstream: $($upstream.Count), rejected comments: $($rejected.Count), skipped checks: $($skipped.Count)`n"
+"deductions: $($found.Count) (without a check id: $(@($found | Where-Object { $_.Id -eq '-' }).Count)), upstream: $($upstream.Count), rejected comments: $($rejected.Count), skipped checks: $($skipped.Count)`n" +
+"standard: $($std[1]) $($std[2])$(if ($common) { ", common: $($common[1]) $($common[2])" })`n"
 [Console]::Out.Write($summary)
 if ($warnings.Count -gt 0) { [Console]::Error.WriteLine('warnings:'); $warnings | ForEach-Object { [Console]::Error.WriteLine($_) } }
 Write-Output "wrote $tsvPath and $jsonPath"

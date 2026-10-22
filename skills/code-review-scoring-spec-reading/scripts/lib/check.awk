@@ -14,6 +14,8 @@ section == "Inputs" && /^- [a-z-]+:/ {
     next
 }
 section == "Open questions" && /^- \[ \] / { wait = wait "  - open question: " substr($0, 7) "\n" }
+# A confirmation of a scoring standard (- <check ids> (<standard>) <what to confirm>:) without an answer.
+section == "Severity facts" && /^- .+ \([a-z0-9-]+\) .+:[ \t]*$/ { l = $0; sub(/:[ \t]*$/, "", l); wait = wait "  - confirmation not answered: " substr(l, 3) "\n" }
 END {
     if (!("diff" in seen) || !("pr-description" in seen)) bad = bad "  - the Inputs section must list diff and pr-description\n"
     if (bad != "") { printf "spec-context.md is malformed:\n%s", bad; exit 1 }

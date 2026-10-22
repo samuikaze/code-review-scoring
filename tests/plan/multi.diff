@@ -1,0 +1,42 @@
+diff --git a/backend/src/main/java/A.java b/backend/src/main/java/A.java
+new file mode 100644
+--- /dev/null
++++ b/backend/src/main/java/A.java
+@@ -0,0 +1 @@
++// backend/src/main/java/A.java
+diff --git a/backend/README.md b/backend/README.md
+new file mode 100644
+--- /dev/null
++++ b/backend/README.md
+@@ -0,0 +1 @@
++// backend/README.md
+diff --git a/frontend/src/app.ts b/frontend/src/app.ts
+new file mode 100644
+--- /dev/null
++++ b/frontend/src/app.ts
+@@ -0,0 +1 @@
++// frontend/src/app.ts
+diff --git a/frontend/package.json b/frontend/package.json
+new file mode 100644
+--- /dev/null
++++ b/frontend/package.json
+@@ -0,0 +1 @@
++// frontend/package.json
+diff --git a/README.md b/README.md
+new file mode 100644
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1 @@
++// README.md
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1 @@
++// .github/workflows/ci.yml
+diff --git a/frontend/src/app.html b/frontend/src/app.html
+new file mode 100644
+--- /dev/null
++++ b/frontend/src/app.html
+@@ -0,0 +1 @@
++// frontend/src/app.html

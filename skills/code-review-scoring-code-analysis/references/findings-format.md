@@ -1,6 +1,6 @@
 # findings.txt format
 
-One record per line, fields separated by `|`. Lines starting with `#` are comments. A record line may be followed by `key: value` lines (indentation optional) that belong to it. Write narrative text in Traditional Chinese (Taiwan usage).
+One record per line, fields separated by `|`. Lines starting with `#` are comments. A record line may be followed by `key: value` lines (indentation optional) that belong to it. Write narrative text in the report language that the workflow prompt names (Traditional Chinese with Taiwan usage by default).
 
 ```text
 F|A1|Major|src/main/java/com/ex/order/OrderService.java:88
@@ -61,13 +61,14 @@ R|未提供靜態分析報告，純格式問題不扣分。
 ## Rules
 
 - Severity: `Critical`, `Major`, `Minor` or `Nit`. Every `F` and `U` record is deducted, `Nit` included.
-- Check id `-`: no check of the checklist covers the problem. Choose the severity by its meaning (for a code review comment, keep the plugin's severity); it is deducted from the total instead of a dimension. Only these records may use location `-` for a problem of the whole PR.
+- Check id: a check item of the scoring standard (`A1`; its first letter is the dimension), a check item of the common standard for `[common]` files (`CM-A1`; the letter after `CM-` is the dimension), or `-`. The examples below use check ids of a Java standard.
+- Check id `-`: no check item of the standard covers the problem. Choose the severity by its meaning (for a code review comment, keep the plugin's severity); it is deducted from the total instead of a dimension. Only these records may use location `-` for a problem of the whole PR.
 - Location: `full/path/from/diff:line` or `path:start-end`, using new-file line numbers. `U` records may list several comma-separated locations in `code:`.
-- How `F` lines are written depends on `[deductions] merge` in `configs.ini`, shown in the `- deductions:` line of the `prepared.txt` summary:
+- How `F` lines are written depends on `[deductions] merge` in `configs/settings.ini`, shown in the `- deductions:` line of the `prepared.txt` summary:
   - `merge=false` (default): one `F` line per occurrence with exactly one location (a range only for one occurrence). The same check id may appear on several lines, one per location, and each is deducted. The same check id at the same location may appear only once.
   - `merge=true`: one `F` line per check id with all its locations, comma-separated; it is deducted once.
   - Records with check id `-` are always one problem per line.
 - Every comment of a `mapped` code review plugin listed in `prepared.txt` must appear exactly once in one of two ways: in `source:` of `F` or `U` records (one comment may confirm several records), or in an `X` line. Comments of `advisory` plugins appear in neither.
-- Column 5 is required whenever the severity is neither the default nor `Nit`; it must state the condition from the checklist that was met.
+- Column 5 is required whenever the severity is neither the default nor `Nit`; it must state the condition from the check item that was met.
 - `U` type is `spec-gap`, `third-party` or `ownership-change`. Impact is `high`, `medium` or `low` for `spec-gap`, and `-` for the others. Subtypes are listed in [upstream.md](upstream.md). Severity follows the severity meaning; the record is deducted from the total.
 - Do not put `|` inside field text.

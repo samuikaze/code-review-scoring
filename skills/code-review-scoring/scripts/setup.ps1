@@ -1,6 +1,7 @@
 ﻿<#
 .SYNOPSIS
-Setup check for the code review scoring workflow: plugins.ini and configs.ini in the project root.
+Setup check for the code review scoring workflow: configs/plugins.ini, configs/settings.ini and configs/standards.ini
+in the project root.
 
 .DESCRIPTION
 "check" tells the agent what is missing; the missing files are created either by the user with the
@@ -8,20 +9,24 @@ interactive "wizard", or by the agent with "plugins --none", "plugin" and "revie
 Uses the same GNU-style arguments as setup.sh:
 
   setup.ps1 check [--platform NAME]
-      report whether plugins.ini exists, whether configs.ini sets subagent=true|false and, when it is true
-      and --platform is given, whether configs.ini has a [NAME] section (give --platform only when the
-      platform has a subagent tool). Prints the execution style. Exit 7 when something is missing
+      report whether configs/plugins.ini exists, whether configs/settings.ini sets subagent=true|false
+      and, when it is true and --platform is given, whether it has a [NAME] section (give --platform only
+      when the platform has a subagent tool), and whether configs/standards.ini registers a scoring standard.
+      Prints the execution style. Exit 7 when something is missing,
+      or when the old configs.ini / plugins.ini is still in the project root (all commands stop then)
   setup.ps1 wizard [--platform NAME]
       create what is missing by asking the user step by step; needs an interactive console,
       so the user runs it, not the agent
   setup.ps1 plugins --none
-      create plugins.ini without plugins (the user confirmed that no code review plugin is used)
+      create configs/plugins.ini without plugins (the user confirmed that no code review plugin is used)
   setup.ps1 plugin --name NAME --path DIR [--applies PATTERNS] [--mode mapped|advisory]
-      add a plugin to plugins.ini, or replace the section with the same name; creates plugins.ini if needed.
-      A relative --path is relative to the folder of plugins.ini
+      add a plugin to configs/plugins.ini, or replace the section with the same name; creates the file
+      if needed. A relative --path is relative to the folder of the plugin list (configs/)
 
-Options: --plugins FILE (default: plugins.ini in the project root), --config FILE (default: configs.ini in the project root).
-Settings in configs.ini are saved with: review-state config --subagent true|false
+Options: --plugins FILE (default: configs/plugins.ini in the project root)
+         --config FILE  (default: configs/settings.ini in the project root)
+         --standards FILE (default: configs/standards.ini in the project root; check only)
+Settings in configs/settings.ini are saved with: review-state config --subagent true|false
                                    and review-state config --platform NAME --model TEXT --reasoning TEXT
 After the plugins change, run scripts/link-skills in the project root.
 
@@ -43,12 +48,13 @@ $linkCmd = "$(if ($isWin) { 'powershell -ExecutionPolicy Bypass' } else { 'pwsh'
 $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
-$opt = @{ plugins = (Join-Path $projectRoot 'plugins.ini'); config = (Join-Path $projectRoot 'configs.ini')
+$opt = @{ plugins = (Join-Path $projectRoot 'configs/plugins.ini'); config = (Join-Path $projectRoot 'configs/settings.ini')
+    standards = (Join-Path $projectRoot 'configs/standards.ini')
     platform = ''; name = ''; path = ''; applies = ''; mode = 'mapped'; none = $false }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -in '--plugins', '--config', '--platform', '--name', '--path', '--applies', '--mode') {
+    if ($a -in '--plugins', '--config', '--standards', '--platform', '--name', '--path', '--applies', '--mode') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]; $i += 2
     }
@@ -67,7 +73,7 @@ function Get-PluginNames {
 }
 
 function Get-IniSection([string]$Section) {
-    # key/value pairs of one configs.ini section, read the same way as "review-state config"
+    # key/value pairs of one configs/settings.ini section, read the same way as "review-state config"
     $val = @{}
     if (-not [IO.File]::Exists($configFile)) { return $val }
     $inSec = $false
@@ -97,12 +103,41 @@ function Get-SkillName([string]$SkillMd) {
     return ''
 }
 
+# configs.ini and plugins.ini moved from the project root into configs/ (as settings.ini and plugins.ini).
+# The old files are no longer read, so every command stops until the user moves them.
+function Test-LegacySettings {
+    $found = $false; $moves = @(); $psMoves = @()
+    foreach ($pair in @(@('configs.ini', 'settings.ini'), @('plugins.ini', 'plugins.ini'))) {
+        $old = Join-Path $projectRoot $pair[0]; $new = Join-Path $projectRoot "configs/$($pair[1])"
+        if (-not [IO.File]::Exists($old)) { continue }
+        $found = $true
+        if ([IO.File]::Exists($new)) {
+            [Console]::WriteLine("legacy: $old is no longer read, and $new already exists")
+            [Console]::WriteLine('        (ask the user which one to keep, and to delete the other)')
+        }
+        else {
+            [Console]::WriteLine("legacy: $old is no longer read; move it to $new")
+            $moves += "mv `"$old`" `"$new`""; $psMoves += "Move-Item `"$old`" `"$new`""
+        }
+    }
+    if (-not $found) { return }
+    if ([IO.File]::Exists((Join-Path $projectRoot 'plugins.ini'))) { [Console]::WriteLine('note: relative plugin paths are relative to the folder of the plugin list, so add ../ in front of them after the move') }
+    [Console]::WriteLine('next: ask the user to move the files themselves, then run setup check again')
+    if ($moves.Count -gt 0) {
+        $dir = Join-Path $projectRoot 'configs'
+        [Console]::WriteLine("      bash/zsh:   mkdir -p `"$dir`"; $($moves -join ';')")
+        [Console]::WriteLine("      PowerShell: New-Item -ItemType Directory -Force `"$dir`" | Out-Null; $($psMoves -join ';')")
+    }
+    exit 7
+}
+
 function New-PluginsFile {
-    # plugins.ini starts as a copy of the commented example
+    # configs/plugins.ini starts as a copy of the commented example
     if ([IO.File]::Exists($pluginsFile)) { return }
-    $example = Join-Path $projectRoot 'plugins.example.ini'
+    [void][IO.Directory]::CreateDirectory((Split-Path -Parent $pluginsFile))
+    $example = Join-Path $projectRoot 'configs/plugins.example.ini'
     if ([IO.File]::Exists($example)) { Write-Utf8File $pluginsFile (Read-Utf8Text $example) }
-    else { Write-Utf8File $pluginsFile "; Code review plugin skills. See plugins.example.ini for the format.`n" }
+    else { Write-Utf8File $pluginsFile "; Code review plugin skills. See configs/plugins.example.ini for the format.`n" }
 }
 
 # Returns the problem, or an empty string when the plugin is valid.
@@ -162,21 +197,34 @@ function Read-YesNo([string]$Prompt, [bool]$Default) {
     }
 }
 
+if ($cmd -in 'check', 'wizard', 'plugins', 'plugin') { Test-LegacySettings }
+
 switch ($cmd) {
     'check' {
         $missing = $false
         if ([IO.File]::Exists($pluginsFile)) {
             $names = Get-PluginNames
             $list = if ($names.Count -gt 0) { ": $($names -join ', ')" } else { '' }
-            [Console]::WriteLine("plugins.ini: ok ($($names.Count) plugin(s)$list) $pluginsFile")
+            [Console]::WriteLine("configs/plugins.ini: ok ($($names.Count) plugin(s)$list) $pluginsFile")
         }
-        else { [Console]::WriteLine("plugins.ini: missing $pluginsFile"); $missing = $true }
+        else { [Console]::WriteLine("configs/plugins.ini: missing $pluginsFile"); $missing = $true }
         $sub = Get-Subagent
-        if ($sub) { [Console]::WriteLine("configs.ini subagent: $sub $configFile") }
-        else { [Console]::WriteLine("configs.ini subagent: missing $configFile"); $missing = $true }
+        if ($sub) { [Console]::WriteLine("configs/settings.ini subagent: $sub $configFile") }
+        else { [Console]::WriteLine("configs/settings.ini subagent: missing $configFile"); $missing = $true }
         if ($sub -eq 'true' -and $opt.platform) {
-            if (Test-Platform) { [Console]::WriteLine("configs.ini [$($opt.platform)]: ok $configFile") }
-            else { [Console]::WriteLine("configs.ini [$($opt.platform)]: missing $configFile"); $missing = $true }
+            if (Test-Platform) { [Console]::WriteLine("configs/settings.ini [$($opt.platform)]: ok $configFile") }
+            else { [Console]::WriteLine("configs/settings.ini [$($opt.platform)]: missing $configFile"); $missing = $true }
+        }
+        # Scoring needs at least one standard; the user registers them (the wizard does not create standards.ini).
+        $standardsFile = Resolve-UserPath $opt.standards
+        $stds = @()
+        if ([IO.File]::Exists($standardsFile)) { $stds = @(Read-Utf8Lines $standardsFile | Where-Object { $_ -match '^[ \t]*\[([^\]]*)\]' } | ForEach-Object { $Matches[1] }) }
+        if ($stds.Count -gt 0) { [Console]::WriteLine("configs/standards.ini: ok ($($stds.Count) standard(s): $($stds -join ', ')) $standardsFile") }
+        elseif ([IO.File]::Exists($standardsFile)) { [Console]::WriteLine("configs/standards.ini: no standard registered $standardsFile") }
+        else { [Console]::WriteLine("configs/standards.ini: missing $standardsFile") }
+        if ($stds.Count -eq 0) {
+            [Console]::WriteLine('next: ask the user to register their scoring standards: copy configs/standards.example.ini to configs/standards.ini')
+            [Console]::WriteLine('      and add the standard documents (template: templates/<language>/scoring-rule-template.md); never create them yourself')
         }
         if ($missing) {
             $p = if ($opt.platform) { " --platform $($opt.platform)" } else { '' }
@@ -184,6 +232,7 @@ switch ($cmd) {
             [Console]::WriteLine("      ($selfCmd wizard$p) or by answering your questions")
             exit 7
         }
+        if ($stds.Count -eq 0) { exit 7 }
         if ($sub -eq 'true' -and $opt.platform) { [Console]::WriteLine("execution: subagent (each step runs in its own subagent with the [$($opt.platform)] settings)") }
         elseif ($sub -eq 'true') { [Console]::WriteLine('execution: inline (subagent=true, but no --platform was given, so the main agent runs every step)') }
         else { [Console]::WriteLine('execution: inline (subagent=false, so the main agent runs every step)') }
@@ -239,7 +288,7 @@ switch ($cmd) {
     }
     'plugins' {
         if (-not $opt.none) { Exit-WithError 'plugins needs --none' }
-        if ([IO.File]::Exists($pluginsFile)) { [Console]::WriteLine("plugins.ini already exists: $pluginsFile"); exit 0 }
+        if ([IO.File]::Exists($pluginsFile)) { [Console]::WriteLine("configs/plugins.ini already exists: $pluginsFile"); exit 0 }
         New-PluginsFile
         [Console]::WriteLine("created $pluginsFile without plugins")
     }

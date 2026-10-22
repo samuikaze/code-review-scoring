@@ -1,0 +1,9 @@
+F|Z1|Major|a.java:1
+problem: x
+suggestion: y
+F|A1|Critical|a.java:2
+problem: x
+suggestion: y
+F|A7|Major|a.java:3
+problem: x
+suggestion: y

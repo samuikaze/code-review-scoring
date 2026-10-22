@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-Syncs the skill folders that AI tools read with skills/ and plugins.ini: creates missing links and removes links that are no longer listed.
+Syncs the skill folders that AI tools read with skills/ and configs/plugins.ini: creates missing links and removes links that are no longer listed.
 
 .DESCRIPTION
 Windows gets junctions (no administrator rights needed); PowerShell 7 on macOS / Linux gets symlinks.
@@ -49,9 +49,14 @@ if ($Target -contains 'all') { $Target = @($dirs.Keys) }
 foreach ($t in $Target) {
     if (-not $dirs.Contains($t)) { [Console]::Error.WriteLine("error: unknown target $t (must be agents, github, claude or all)"); exit 2 }
 }
-$defaultConfig = Join-Path $root 'plugins.ini'
+$defaultConfig = Join-Path $root 'configs/plugins.ini'
 if (-not $Config) { $Config = $defaultConfig }
 $Config = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Config)
+# plugins.ini moved from the project root into configs/; syncing without it would unlink every plugin.
+$legacy = Join-Path $root 'plugins.ini'
+if (-not $Remove -and $Config -eq $defaultConfig -and [IO.File]::Exists($legacy)) {
+    [Console]::Error.WriteLine("error: $legacy is no longer read; move it to $Config (add ../ in front of relative plugin paths), then run this again"); exit 2
+}
 
 function Read-Lines([string]$Path) { return [IO.File]::ReadAllText($Path, $utf8) -split "`r?`n" }
 function Get-FrontMatter([string]$SkillMd) {
@@ -85,7 +90,7 @@ function New-Link([string]$Path, [string]$SkillPath, [string]$Kind) {
     else { [void](New-Item -ItemType SymbolicLink -Path $Path -Target $SkillPath) }
 }
 
-# ---- 1. Skills to link: everything under skills/ plus plugins.ini ----
+# ---- 1. Skills to link: everything under skills/ plus configs/plugins.ini ----
 $skills = New-Object System.Collections.Generic.List[object]
 $errors = New-Object System.Collections.Generic.List[string]
 foreach ($d in (Get-ChildItem -LiteralPath (Join-Path $root 'skills') -Directory | Sort-Object Name)) {

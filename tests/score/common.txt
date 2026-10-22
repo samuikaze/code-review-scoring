@@ -1,0 +1,13 @@
+# Check items of the common standard (CM-) are deducted from the dimension after CM-
+F|CM-A1|Major|config/application.yml:3
+problem: x
+suggestion: y
+F|CM-B1|Critical|config/application.yml:8|機密已推到遠端
+problem: x
+suggestion: y
+F|CM-F1|Minor|README.md:10
+problem: x
+suggestion: y
+F|A1|Major|src/main/java/com/ex/order/OrderService.java:88
+problem: x
+suggestion: y

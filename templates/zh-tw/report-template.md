@@ -2,6 +2,7 @@
 
 - **PR**：{{PR_TITLE}}
 - **審查日期**：{{REVIEW_DATE}}
+- **評分標準**：{{STANDARD}}
 - **評分等級**：{{GRADE}}（{{TOTAL}} / 100）{{CAPPED_NOTE}}
 - **CR 意見**：{{CR_TOTALS}}
 

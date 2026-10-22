@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Syncs the skill folders that AI tools read with skills/ and plugins.ini: creates missing links and removes links that are no longer listed.
+# Syncs the skill folders that AI tools read with skills/ and configs/plugins.ini: creates missing links and removes links that are no longer listed.
 # macOS / Linux get symlinks; Git Bash / MSYS2 / Cygwin on Windows get junctions (no administrator rights needed).
 # Only links created by this script (listed in .managed in each folder) are changed; other links and real folders are left alone.
 set -euo pipefail
@@ -13,7 +13,7 @@ Usage: link-skills.sh [options]
                        github  -> .github/skills (GitHub Copilot)
                        claude  -> .claude/skills (Claude Code)
                        all     -> all of the above
-  -c, --config FILE  plugin list (default: plugins.ini in the project root)
+  -c, --config FILE  plugin list (default: configs/plugins.ini in the project root)
       --check        only check and list the changes, without applying them
       --remove       remove every link created by this script (the skills themselves are kept)
   -h, --help         show this help
@@ -39,7 +39,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$targets" == "all" ]] && targets="agents,github,claude"
-[[ -z "$config" ]] && config="$root/plugins.ini"
+[[ -z "$config" ]] && config="$root/configs/plugins.ini"
+# plugins.ini moved from the project root into configs/; syncing without it would unlink every plugin.
+if [[ "$mode" != "remove" && "$config" == "$root/configs/plugins.ini" && -f "$root/plugins.ini" ]]; then
+  echo "error: $root/plugins.ini is no longer read; move it to $config (add ../ in front of relative plugin paths), then run this again" >&2; exit 2
+fi
 
 is_windows=0
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) is_windows=1 ;; esac
@@ -76,7 +80,7 @@ fm_disabled() {  # whether the frontmatter sets disable-model-invocation: true
     END { exit !found }' "$1"
 }
 
-# ---- 1. Skills to link: everything under skills/ plus plugins.ini ----
+# ---- 1. Skills to link: everything under skills/ plus configs/plugins.ini ----
 names=() paths=() kinds=() errors=()
 for d in "$root"/skills/*; do
   [[ -f "$d/SKILL.md" ]] || continue
@@ -109,7 +113,7 @@ if [[ -f "$config" ]]; then
     }
     END { if (sec != "" && !haspath) print sec "\t__nopath__\t" }
   ' "$config")
-elif [[ "$config" != "$root/plugins.ini" ]]; then
+elif [[ "$config" != "$root/configs/plugins.ini" ]]; then
   echo "error: plugin list not found: $config" >&2; exit 2
 fi
 

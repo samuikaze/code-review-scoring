@@ -21,7 +21,7 @@ function Resolve-UserPath([string]$Path) {
 }
 
 function Get-ProjectRoot([string]$SkillDir) {
-    # The project root, two levels above the physical skill folder, holds tmp/, reports/, plugins.ini and configs.ini.
+    # The project root, two levels above the physical skill folder, holds tmp/, reports/, configs/plugins.ini and configs/settings.ini.
     # The skill folder may be a junction or symlink (e.g. .agents/skills/...), so resolve it first.
     $item = Get-Item -LiteralPath $SkillDir -Force
     $path = $item.FullName
@@ -79,4 +79,69 @@ function Write-Utf8Output([string]$Text, [string]$Out) {
     else {
         [Console]::Out.Write($Text)
     }
+}
+
+# The standard of a review with a plan (ROOT/step1/standards/plan.tsv, written in step 1 of the workflow): the name
+# given, or the only one planned. Returns '' without a plan; exits 2 when the name is missing or not planned.
+function Get-PlanStandard([string]$Root, [string]$Standard) {
+    $plan = Join-Path $Root 'step1/standards/plan.tsv'
+    if (-not (Test-UserFile $plan)) { return '' }
+    $reports = @(Read-Utf8Lines $plan | ForEach-Object { $a = $_.Split("`t"); if ($a[0] -ceq 'report') { $a[1] } })
+    if (-not $Standard) {
+        if ($reports.Count -ne 1) { Exit-WithError "several standards score this review (see $plan); pass -Standard NAME" }
+        $Standard = $reports[0]
+    }
+    if ($reports -cnotcontains $Standard) { Exit-WithError "the standard $Standard does not score this review (see $plan)" }
+    return $Standard
+}
+
+# Whether a code review comment with these locations belongs to the standard of the review plan: one of its files is a
+# file of the standard, or none of its files is in the plan (a comment on the whole PR, location -) and the standard is
+# the first report. Without a standard every comment belongs to it.
+function Test-CommentOwner([string]$Plan, [string]$Standard, [string]$Locations) {
+    if (-not $Standard) { return $true }
+    if ($script:planKey -cne "$Plan|$Standard") {
+        $script:planFirst = ''; $script:planAny = [hashtable]::new([StringComparer]::Ordinal); $script:planMine = [hashtable]::new([StringComparer]::Ordinal)
+        foreach ($l in (Read-Utf8Lines $Plan)) {
+            $a = $l.Split("`t")
+            if ($a[0] -ceq 'report' -and -not $script:planFirst) { $script:planFirst = $a[1] }
+            elseif ($a[0] -ceq 'file') { $script:planAny[$a[1]] = 1; if ($a[2] -ceq $Standard) { $script:planMine[$a[1]] = 1 } }
+        }
+        $script:planKey = "$Plan|$Standard"
+    }
+    $any = $false
+    foreach ($p in $Locations.Split(',')) {
+        $f = $p.Trim(' ', "`t") -creplace ':[0-9][-0-9]*$', ''
+        if ($script:planMine.ContainsKey($f)) { return $true }
+        if ($script:planAny.ContainsKey($f)) { $any = $true }
+    }
+    return (-not $any -and $Standard -ceq $script:planFirst)
+}
+
+# The folder of the report language under templates/ in the project root: the only folder that holds a
+# report-template.md (templates/ itself or one templates/<language>/), or, with several, the one [language] report of
+# the settings names (default zh-tw). Exits 2 when there is none or the language has no folder.
+function Get-ReportTemplateDir([string]$ProjectRoot, [string]$Config) {
+    $t = Join-Path $ProjectRoot 'templates'
+    $dirs = New-Object System.Collections.Generic.List[string]; $names = New-Object System.Collections.Generic.List[string]
+    if (Test-Path -LiteralPath (Join-Path $t 'report-template.md') -PathType Leaf) { $dirs.Add($t); $names.Add('templates/') }
+    if (Test-Path -LiteralPath $t -PathType Container) {
+        foreach ($d in (Get-ChildItem -LiteralPath $t -Directory | Sort-Object Name)) {
+            if (Test-Path -LiteralPath (Join-Path $d.FullName 'report-template.md') -PathType Leaf) { $dirs.Add($d.FullName); $names.Add($d.Name) }
+        }
+    }
+    if ($dirs.Count -eq 0) { Exit-WithError "no report template (report-template.md) in $t" }
+    if ($dirs.Count -eq 1) { return $dirs[0] }
+    $want = ''
+    if ($Config -and (Test-UserFile $Config)) {
+        $sec = ''
+        foreach ($l in (Read-Utf8Lines $Config)) {
+            if ($l -cmatch '^[ \t]*\[(.*)\][ \t\r]*$') { $sec = $Matches[1]; continue }
+            if ($sec -ceq 'language' -and $l -cmatch '^[ \t]*report[ \t]*=[ \t]*(.*?)[ \t\r]*$') { $want = $Matches[1] -replace '^"|"$', '' }
+        }
+    }
+    if (-not $want) { $want = 'zh-tw' }
+    $i = $names.IndexOf($want)
+    if ($i -lt 0) { Exit-WithError "no report template for the language `"$want`" ([language] report of $Config); available: $($names -join ' ')" }
+    return $dirs[$i]
 }
