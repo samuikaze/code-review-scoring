@@ -155,7 +155,7 @@ case "$cmd" in
         base="$(dirname "$standards")"
         run_awk -v mode=standards -v settings="$settings" "$standards" > "$tmpd/ini"
         report "$standards" "$tmpd/ini"
-        for n in "${names[@]+"${names[@]}"}"; do
+        for n in "${names[@]}"; do
           awk -F'\t' -v n="$n" '$1 == "std" && $2 == n { f = 1 } END { exit !f }' "$tmpd/ini" || problem error "$standards: [$n] is not registered"
         done
         while IFS=$'\t' read -r -u 3 k1 name k2 dpath scan role; do
@@ -259,7 +259,7 @@ case "$cmd" in
     e="$(awk -F'\t' '$1 == "!error" { print ($2 != "" ? ":" $2 : "") ": " $3; exit }' "$tmpd/ini")"
     [[ -z "$e" ]] || { echo "error: $standards$e; run standard lint first" >&2; exit 3; }
     mkdir -p "$pout"
-    rm -f "$pout"/plan.tsv "$pout"/confirm.tsv "$pout"/*.diff "$pout"/*.resolve
+    rm -f "$pout"/plan.tsv "$pout"/confirm.tsv "$pout"/*.diff(N) "$pout"/*.resolve(N)
     run_awk -v mode=plan -v ini="$tmpd/ini" -v out="$pout" "$pdiff" > "$tmpd/plan"
     e="$(awk -F'\t' '$1 == "!error" { print $3; exit }' "$tmpd/plan")"
     [[ -z "$e" ]] || { echo "error: $pdiff: $e" >&2; exit 2; }
@@ -287,7 +287,7 @@ case "$cmd" in
           if (x[s]) printf " (%d not covered by any standard)", x[s]
           print ""
         }
-      }' <(cat "$pout"/*.resolve) "$pout/plan.tsv"
+      }' <(cat /dev/null "$pout"/*.resolve(N)) "$pout/plan.tsv"
     echo "wrote $(full "$pout")/plan.tsv"
     ;;
 

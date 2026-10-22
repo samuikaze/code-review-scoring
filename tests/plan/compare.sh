@@ -16,7 +16,7 @@ cases=(
   "--diff common-only.diff --standards standards-nocommon.ini"
 )
 
-out="$(mktemp -d)"
+out="$(cd "$(mktemp -d)" && pwd -P)"
 trap 'rm -rf "$out"' EXIT
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"; out_w="$( (cd "$out" && pwd -W 2>/dev/null) || echo "$out")"
 root="$(cd ../.. && pwd)"; root_w="$(cd ../.. && { pwd -W 2>/dev/null || pwd; })"

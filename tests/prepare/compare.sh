@@ -35,7 +35,7 @@ psargs() {
 
 run_all() {  # $sh = bash, zsh or powershell; prints every case with its exit code
   local c rc
-  local -a a
+  local -a a; local x
   for c in "${cases[@]}"; do
     echo "### $c"
     # shellcheck disable=SC2086
@@ -43,7 +43,7 @@ run_all() {  # $sh = bash, zsh or powershell; prints every case with its exit co
     case "$sh" in
       bash) bash "$scripts/prepare-diff.sh" "$@" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;
       zsh) zsh "$scripts/prepare-diff.zsh" "$@" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;
-      *) mapfile -t a < <(psargs "$@"); "$ps" -NoProfile -ExecutionPolicy Bypass -File "$scripts/prepare-diff.ps1" "${a[@]}" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;
+      *) a=(); while IFS= read -r x; do a+=("$x"); done < <(psargs "$@"); "$ps" -NoProfile -ExecutionPolicy Bypass -File "$scripts/prepare-diff.ps1" "${a[@]}" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;
     esac
     echo "exit=$rc"
   done

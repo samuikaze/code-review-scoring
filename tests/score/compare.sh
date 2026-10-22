@@ -41,7 +41,7 @@ psargs() {
 
 run_all() {  # $1 = bash, zsh or powershell; prints every case with its exit code, score.tsv and score.json
   local c f rc
-  local -a a
+  local -a a; local x
   for c in "${cases[@]}"; do
     echo "### $c"
     rm -f "$out"/score.*
@@ -50,7 +50,7 @@ run_all() {  # $1 = bash, zsh or powershell; prints every case with its exit cod
     case "$sh" in
       bash) bash "$scripts/score.sh" "$@" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;
       zsh) zsh "$scripts/score.zsh" "$@" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;
-      *) mapfile -t a < <(psargs "$@"); "$ps" -NoProfile -ExecutionPolicy Bypass -File "$scripts/score.ps1" "${a[@]}" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;
+      *) a=(); while IFS= read -r x; do a+=("$x"); done < <(psargs "$@"); "$ps" -NoProfile -ExecutionPolicy Bypass -File "$scripts/score.ps1" "${a[@]}" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;
     esac
     echo "exit=$rc"
     for f in score.tsv score.json; do [[ -f "$out/$f" ]] && { echo "--- $f"; norm < "$out/$f"; }; done

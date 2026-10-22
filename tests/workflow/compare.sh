@@ -11,12 +11,12 @@ here="$(pwd)"
 skills="$(cd ../../skills && pwd)"
 root="$(cd ../.. && pwd)"; root_w="$(cd ../.. && { pwd -W 2>/dev/null || pwd; })"
 
-work="$(mktemp -d)"
+work="$(cd "$(mktemp -d)" && pwd -P)"
 trap 'rm -rf "$work"' EXIT
 work_w="$( (cd "$work" && pwd -W 2>/dev/null) || echo "$work")"
 norm() {
   tr -d '\r' | tr '\134' '/' | sed -E -e "s#$work_w#WORK#g" -e "s#$work#WORK#g" -e "s#$root_w/#ROOT/#g" -e "s#$root/#ROOT/#g" \
-    -e 's#(bash|zsh|powershell -NoProfile -ExecutionPolicy Bypass -File) "ROOT/skills/code-review-scoring/scripts/review-state\.(sh|zsh|ps1)"#STATE_CMD#g' \
+    -e 's#(bash|zsh|powershell -NoProfile -ExecutionPolicy Bypass -File|pwsh -NoProfile -File) "ROOT/skills/code-review-scoring/scripts/review-state\.(sh|zsh|ps1)"#STATE_CMD#g' \
     -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+[+-][0-9:]+/TIME/g' -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}/DATE/g'
 }
 
