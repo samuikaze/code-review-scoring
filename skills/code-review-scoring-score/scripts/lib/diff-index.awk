@@ -13,7 +13,6 @@ inhunk && (oleft > 0 || nleft > 0) {
 /^\+\+\+ / {
     p = substr(line, 5); sub(/\t.*$/, "", p); gsub(/^"|"$/, "", p)
     if (p == "/dev/null") p = ""; else sub(/^b\//, "", p)
-    if (p ~ /(^|\/)src\/test\// || p ~ /(Test|Tests|IT)\.(java|kt)$/) printf "T\t%s\n", p
     next
 }
 /^@@ / {
