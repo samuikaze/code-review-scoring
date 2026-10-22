@@ -6,7 +6,7 @@ compatibility: Works with or without a subagent tool. Requires the code-review-s
 
 # Code Review Scoring – Maintain Scoring Standards
 
-A scoring standard is a Markdown document (written from `docs/templates/scoring-rule-template.md` in the project root) registered in `configs/standards.ini`, optionally with a scan rule file (TSV, `scan=`). The people who write standards maintain only the document; the scan rules are generated and reviewed here, so nobody writes regexes by hand. The scan rules only list candidate lines for step 3 of the scoring; they never deduct by themselves.
+A scoring standard is a Markdown document (written from `templates/<language>/scoring-rule-template.md` in the project root) registered in `configs/standards.ini`, optionally with a scan rule file (TSV, `scan=`). The people who write standards maintain only the document; the scan rules are generated and reviewed here, so nobody writes regexes by hand. The scan rules only list candidate lines for step 3 of the scoring; they never deduct by themselves.
 
 You never edit a standard document or `configs/standards.ini`: report what is wrong and let the user change it. You write a scan rule file only in generate mode, only after the user confirms it.
 

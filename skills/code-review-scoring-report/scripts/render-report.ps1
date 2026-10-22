@@ -12,6 +12,10 @@ ROOT/step5/report-path.txt. Use -NoPublish to write only the working copy; -Out 
 With the review plan ROOT/step1/standards/plan.tsv the report is that of the standard -Standard (default: the only
 one): it reads ROOT/step3/NAME/ and ROOT/step4/NAME/, shows only the code review comments on its files, writes
 ROOT/step5/NAME/ and is published as REPORTS/<YYYY-MM-DD>_<PR title>_<standard>.md.
+Report language: templates/ in the project root holds report-template.md and labels.tsv of one language (right in
+templates/ or in a single templates/<language>/ folder), which is always used, or of several templates/<language>/
+folders, of which [language] report of -Config (default: configs/settings.ini) picks one (default: zh-tw).
+-Template and -Labels use other files.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 1 inputs missing or inconsistent (rerun the scoring skill), 2 bad arguments.
 
@@ -27,7 +31,8 @@ param(
     [Alias('o')][string]$Out,
     [string]$Reports,
     [switch]$NoPublish,
-    [string]$Standard
+    [string]$Standard,
+    [string]$Config
 )
 
 $ErrorActionPreference = 'Stop'
@@ -37,9 +42,13 @@ Initialize-Utf8
 if (-not $Root) { $Root = Join-Path (Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)) 'tmp' }
 if (-not $Reports) { $Reports = Join-Path (Split-Path -Parent (Resolve-UserPath $Root)) 'reports' }
 
-$skillDir = Split-Path -Parent $PSScriptRoot
-if (-not $Template) { $Template = Join-Path $skillDir 'assets/report-template.md' }
-if (-not $Labels) { $Labels = Join-Path $skillDir 'assets/labels.tsv' }
+$projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
+if (-not $Config) { $Config = Join-Path $projectRoot 'configs/settings.ini' }
+if (-not $Template -or -not $Labels) {
+    $tdir = Get-ReportTemplateDir $projectRoot $Config
+    if (-not $Template) { $Template = Join-Path $tdir 'report-template.md' }
+    if (-not $Labels) { $Labels = Join-Path $tdir 'labels.tsv' }
+}
 # With a review plan (step 1 of the workflow), each standard has its own step folders.
 $cplan = ''; $sub = ''
 $cstd = Get-PlanStandard $Root $Standard

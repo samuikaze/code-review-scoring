@@ -52,7 +52,7 @@ PowerShell parameters are `-Git`, `-Repo`, `-InputPath`, `-Root`, `-Title`, `-Fo
 | `third-party-spec` | no | suspected third-party issues |
 | `change-log` | no | suspected ownership changes |
 | `static-analysis` | no | do not deduct issues the tools already report |
-| `vulnerability-scan` | no | checks of known vulnerable dependencies (usually evaluated only when this exists; see the standard's 特例規則) |
+| `vulnerability-scan` | no | checks of known vulnerable dependencies (usually evaluated only when this exists; see the standard's 特例規則 or Special rules) |
 
 Example questions (written for the user, in their language):
 

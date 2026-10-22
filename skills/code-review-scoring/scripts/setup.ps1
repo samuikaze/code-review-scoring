@@ -224,7 +224,7 @@ switch ($cmd) {
         else { [Console]::WriteLine("configs/standards.ini: missing $standardsFile") }
         if ($stds.Count -eq 0) {
             [Console]::WriteLine('next: ask the user to register their scoring standards: copy configs/standards.example.ini to configs/standards.ini')
-            [Console]::WriteLine('      and add the standard documents (template: docs/templates/scoring-rule-template.md); never create them yourself')
+            [Console]::WriteLine('      and add the standard documents (template: templates/<language>/scoring-rule-template.md); never create them yourself')
         }
         if ($missing) {
             $p = if ($opt.platform) { " --platform $($opt.platform)" } else { '' }

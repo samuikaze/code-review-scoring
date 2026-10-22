@@ -15,7 +15,7 @@ It covers, in the project root:
 
 When exit 7 comes with `legacy:` lines, the old `configs.ini` / `plugins.ini` is still in the project root (these files moved into `configs/`). Show the user the `legacy:` and `note:` lines and the move commands that `check` printed, ask them to move the files themselves, and run `check` again afterwards. Never move, merge or delete them yourself.
 
-When `configs/standards.ini` is reported as `missing` or `no standard registered`, tell the user to copy `configs/standards.example.ini` to `configs/standards.ini` and register their standard documents (written from `docs/templates/scoring-rule-template.md`), then run `standard lint` to check them. The wizard does not cover the standards, and you never write `standards.ini` or a standard document yourself. Run `check` again afterwards.
+When `configs/standards.ini` is reported as `missing` or `no standard registered`, tell the user to copy `configs/standards.example.ini` to `configs/standards.ini` and register their standard documents (written from `templates/<language>/scoring-rule-template.md`), then run `standard lint` to check them. The wizard does not cover the standards, and you never write `standards.ini` or a standard document yourself. Run `check` again afterwards.
 
 Otherwise exit 7 means a setting is missing. Tell the user what is missing and ask which way to create it (one question):
 

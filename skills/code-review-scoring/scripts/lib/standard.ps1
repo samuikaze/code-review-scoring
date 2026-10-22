@@ -7,6 +7,7 @@ $script:FW = [string][char]0xFF5C
 $script:Sev = @('Critical', 'Major', 'Minor', 'Nit')
 $script:Let = @('A', 'B', 'C', 'D', 'E', 'F', 'G')
 $script:Canon = @{ A = '正確性'; B = '安全性'; C = '測試品質'; D = '架構與設計'; E = '效能與資源使用'; F = '可讀性'; G = '可維護性' }
+$script:CanonEn = @{ A = 'Correctness'; B = 'Security'; C = 'Test quality'; D = 'Architecture and design'; E = 'Performance and resource use'; F = 'Readability'; G = 'Maintainability' }
 
 function New-StdMap { return [hashtable]::new([StringComparer]::Ordinal) }
 function Get-StdTrim([string]$s) { return $s.Trim([char[]]@(' ', "`t")) }
@@ -75,7 +76,7 @@ function Invoke-StdDoc([string]$Path, [string]$Role) {
 
     $sbCheck = {
         param([string]$text, $line, [string]$dim)
-        if ($text -ceq '無') { $dimnone[$dim] = 1; return }
+        if ($text -ceq '無' -or $text -ceq 'None') { $dimnone[$dim] = 1; return }
         $text = $text.Replace("`t", ' ')
         if ($text.IndexOf($FW, [StringComparison]::Ordinal) -lt 0) {
             if ($text.Contains('|')) { & $diag 'error' $line 'separate the fields with the full-width ｜, not |' }
@@ -172,13 +173,13 @@ function Invoke-StdDoc([string]$Path, [string]$Role) {
         if ($l -cmatch '^##[ \t]') {
             . $sbClose; $curdim = ''
             $t = Get-StdTrim $l.Substring(2)
-            $sec = switch -CaseSensitive ($t) { '面向' { 'dims' } '檢查項' { 'checks' } '事先確認事項' { 'confirms' } default { 'free' } }
+            $sec = switch -CaseSensitive ($t) { '面向' { 'dims' } 'Dimensions' { 'dims' } '檢查項' { 'checks' } 'Check items' { 'checks' } '事先確認事項' { 'confirms' } 'Confirmations' { 'confirms' } default { 'free' } }
             if ($sec -ne 'free') { if ($secl.ContainsKey($sec)) { & $diag 'error' $FNR "section ## $t appears more than once" } else { $secl[$sec] = $FNR } }
             continue
         }
         if ($sec -eq 'checks' -and $l -cmatch '^#') {
             . $sbClose
-            if ($l -cnotmatch '^###[ \t]+[A-G]\.[ \t]*[^ \t]') { & $diag 'error' $FNR 'headings under ## 檢查項 are ### X. name, with X from A to G'; $curdim = '?'; continue }
+            if ($l -cnotmatch '^###[ \t]+[A-G]\.[ \t]*[^ \t]') { & $diag 'error' $FNR 'headings under ## 檢查項 (Check items) are ### X. name, with X from A to G'; $curdim = '?'; continue }
             $t = $l -creplace '^###[ \t]+', ''; $curdim = $t.Substring(0, 1); $t = Get-StdTrim $t.Substring(2)
             if ($dimhl.ContainsKey($curdim)) { & $diag 'error' $FNR "dimension $curdim has more than one heading" }
             else { $dimhl[$curdim] = $FNR; $dimh[$curdim] = $t }
@@ -191,8 +192,8 @@ function Invoke-StdDoc([string]$Path, [string]$Role) {
             if ($l -cmatch '^[ \t]*$') { . $sbClose; continue }
             if ($l -cmatch '^  +[^ ]' -and $itk -ne '') { $it = Join-StdLine (Get-StdTrim $it) (Get-StdTrim $l); continue }
             . $sbClose
-            if ((Get-StdTrim $l) -ceq '無') { $dimnone[$curdim] = 1; continue }
-            & $diag 'error' $FNR 'unexpected text under a dimension heading; write check items (- code｜content｜severity), 無, or an HTML comment'
+            if ((Get-StdTrim $l) -ceq '無' -or (Get-StdTrim $l) -ceq 'None') { $dimnone[$curdim] = 1; continue }
+            & $diag 'error' $FNR 'unexpected text under a dimension heading; write check items (- code｜content｜severity), 無 (None), or an HTML comment'
             continue
         }
         if ($sec -eq 'confirms') {
@@ -212,20 +213,20 @@ function Invoke-StdDoc([string]$Path, [string]$Role) {
         elseif ($fm['name'] -cnotmatch '^[a-z0-9][a-z0-9-]*$') { & $diag 'error' $fml['name'] 'name may only contain lowercase letters, digits and -' }
         if (-not $fm['version']) { & $diag 'error' 1 'the front matter has no version' }
     }
-    if (-not $secl.ContainsKey('dims')) { & $diag 'error' '' 'section ## 面向 is missing' }
+    if (-not $secl.ContainsKey('dims')) { & $diag 'error' '' 'section ## 面向 (Dimensions) is missing' }
     else {
         foreach ($x in $Let) {
-            if (-not $dimrow.ContainsKey($x)) { & $diag 'error' $secl['dims'] "dimension $x ($($Canon[$x])) is missing from the ## 面向 table" }
-            elseif ($dimname[$x] -cne $Canon[$x]) { & $diag 'error' $dimrow[$x] "dimension $x must be named $($Canon[$x]) (dimension codes and names cannot be changed)" }
+            if (-not $dimrow.ContainsKey($x)) { & $diag 'error' $secl['dims'] "dimension $x ($($Canon[$x])) is missing from the ## 面向 (Dimensions) table" }
+            elseif ($dimname[$x] -cne $Canon[$x] -and $dimname[$x] -cne $CanonEn[$x]) { & $diag 'error' $dimrow[$x] "dimension $x must be named $($Canon[$x]) or $($CanonEn[$x]) (dimension codes and names cannot be changed)" }
         }
     }
-    if (-not $secl.ContainsKey('checks')) { & $diag 'error' '' 'section ## 檢查項 is missing' }
+    if (-not $secl.ContainsKey('checks')) { & $diag 'error' '' 'section ## 檢查項 (Check items) is missing' }
     else {
         foreach ($x in $Let) {
-            if (-not $dimhl.ContainsKey($x)) { & $diag 'warn' $secl['checks'] "### $x. $($Canon[$x]) is missing (keep the heading and write 無 when it has no check item)" }
+            if (-not $dimhl.ContainsKey($x)) { & $diag 'warn' $secl['checks'] "### $x. $($Canon[$x]) is missing (keep the heading and write 無 or None when it has no check item)" }
             else {
-                if ($dimh[$x] -cne $Canon[$x]) { & $diag 'warn' $dimhl[$x] "the heading should be ### $x. $($Canon[$x])" }
-                if (-not $cnt[$x] -and -not $dimnone[$x]) { & $diag 'warn' $dimhl[$x] "### $x has no check item; write 無 if that is intended" }
+                if ($dimh[$x] -cne $Canon[$x] -and $dimh[$x] -cne $CanonEn[$x]) { & $diag 'warn' $dimhl[$x] "the heading should be ### $x. $($Canon[$x]) or ### $x. $($CanonEn[$x])" }
+                if (-not $cnt[$x] -and -not $dimnone[$x]) { & $diag 'warn' $dimhl[$x] "### $x has no check item; write 無 or None if that is intended" }
             }
         }
         if ($nchk -eq 0 -and $nbad -eq 0) { & $diag 'error' $secl['checks'] 'the document has no check item' }

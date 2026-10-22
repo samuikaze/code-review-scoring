@@ -117,3 +117,31 @@ function Test-CommentOwner([string]$Plan, [string]$Standard, [string]$Locations)
     }
     return (-not $any -and $Standard -ceq $script:planFirst)
 }
+
+# The folder of the report language under templates/ in the project root: the only folder that holds a
+# report-template.md (templates/ itself or one templates/<language>/), or, with several, the one [language] report of
+# the settings names (default zh-tw). Exits 2 when there is none or the language has no folder.
+function Get-ReportTemplateDir([string]$ProjectRoot, [string]$Config) {
+    $t = Join-Path $ProjectRoot 'templates'
+    $dirs = New-Object System.Collections.Generic.List[string]; $names = New-Object System.Collections.Generic.List[string]
+    if (Test-Path -LiteralPath (Join-Path $t 'report-template.md') -PathType Leaf) { $dirs.Add($t); $names.Add('templates/') }
+    if (Test-Path -LiteralPath $t -PathType Container) {
+        foreach ($d in (Get-ChildItem -LiteralPath $t -Directory | Sort-Object Name)) {
+            if (Test-Path -LiteralPath (Join-Path $d.FullName 'report-template.md') -PathType Leaf) { $dirs.Add($d.FullName); $names.Add($d.Name) }
+        }
+    }
+    if ($dirs.Count -eq 0) { Exit-WithError "no report template (report-template.md) in $t" }
+    if ($dirs.Count -eq 1) { return $dirs[0] }
+    $want = ''
+    if ($Config -and (Test-UserFile $Config)) {
+        $sec = ''
+        foreach ($l in (Read-Utf8Lines $Config)) {
+            if ($l -cmatch '^[ \t]*\[(.*)\][ \t\r]*$') { $sec = $Matches[1]; continue }
+            if ($sec -ceq 'language' -and $l -cmatch '^[ \t]*report[ \t]*=[ \t]*(.*?)[ \t\r]*$') { $want = $Matches[1] -replace '^"|"$', '' }
+        }
+    }
+    if (-not $want) { $want = 'zh-tw' }
+    $i = $names.IndexOf($want)
+    if ($i -lt 0) { Exit-WithError "no report template for the language `"$want`" ([language] report of $Config); available: $($names -join ' ')" }
+    return $dirs[$i]
+}

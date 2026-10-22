@@ -7,6 +7,7 @@ Load the `code-review-scoring-code-analysis` skill and follow its workflow mode 
 - Scoring standard: `{{STANDARD}}`, document `{{STANDARD_DOC}}`; common standard for the files no framework standard covers: `{{COMMON_DOC}}`. Use only the check items of these documents (their codes, rules and severities); when several standards score this PR, the other standards' files are reviewed in their own step 3.
 - Inputs: `{{ROOT}}/step1/spec-context.md`, the code review results `{{ROOT}}/step2/plan.tsv` and `{{ROOT}}/step2/<plugin>/cr.txt` (`prepare-diff` lists this standard's comments and its part of the diff in `prepared.txt`; do not read `step1/pr.diff` separately)
 - Outputs: `{{DIR}}/prepared.txt`, `{{DIR}}/findings.txt`
+- Report language: write all narrative text of `findings.txt` in {{REPORT_LANGUAGE}}
 
 Tasks:
 

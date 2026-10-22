@@ -27,6 +27,8 @@ BEGIN {
     split("A B C D E F G", LET, " ")
     split("正確性 安全性 測試品質 架構與設計 效能與資源使用 可讀性 可維護性", t, " ")
     for (i = 1; i <= 7; i++) canon[LET[i]] = t[i]
+    split("Correctness|Security|Test quality|Architecture and design|Performance and resource use|Readability|Maintainability", t, "|")
+    for (i = 1; i <= 7; i++) canonen[LET[i]] = t[i]
     sec = "free"
     if (mode == "scan") {
         while ((getline l < codes) > 0) { split(l, a, "\t"); if (a[1] == "check") known[a[2]] = 1 }
@@ -95,13 +97,13 @@ function doc_line(l,   k, v, t, had) {
     if (l ~ /^##[ \t]/) {
         close_item(); curdim = ""
         t = trim(substr(l, 3))
-        sec = (t == "面向") ? "dims" : (t == "檢查項") ? "checks" : (t == "事先確認事項") ? "confirms" : "free"
+        sec = (t == "面向" || t == "Dimensions") ? "dims" : (t == "檢查項" || t == "Check items") ? "checks" : (t == "事先確認事項" || t == "Confirmations") ? "confirms" : "free"
         if (sec != "free") { if (secl[sec]) diag("error", FNR, "section ## " t " appears more than once"); else secl[sec] = FNR }
         return
     }
     if (sec == "checks" && l ~ /^#/) {
         close_item()
-        if (l !~ /^###[ \t]+[A-G]\.[ \t]*[^ \t]/) { diag("error", FNR, "headings under ## 檢查項 are ### X. name, with X from A to G"); curdim = "?"; return }
+        if (l !~ /^###[ \t]+[A-G]\.[ \t]*[^ \t]/) { diag("error", FNR, "headings under ## 檢查項 (Check items) are ### X. name, with X from A to G"); curdim = "?"; return }
         t = l; sub(/^###[ \t]+/, "", t); curdim = substr(t, 1, 1); t = trim(substr(t, 3))
         if (curdim in dimhl) diag("error", FNR, "dimension " curdim " has more than one heading")
         else { dimhl[curdim] = FNR; dimh[curdim] = t }
@@ -114,8 +116,8 @@ function doc_line(l,   k, v, t, had) {
         if (l ~ /^[ \t]*$/) { close_item(); return }
         if (l ~ /^  +[^ ]/ && itk != "") { it = joinl(trim(it), trim(l)); return }
         close_item()
-        if (trim(l) == "無") { dimnone[curdim] = 1; return }
-        diag("error", FNR, "unexpected text under a dimension heading; write check items (- code｜content｜severity), 無, or an HTML comment")
+        if (trim(l) == "無" || trim(l) == "None") { dimnone[curdim] = 1; return }
+        diag("error", FNR, "unexpected text under a dimension heading; write check items (- code｜content｜severity), 無 (None), or an HTML comment")
         return
     }
     if (sec == "confirms") {
@@ -143,7 +145,7 @@ function close_item(   k) {
 }
 
 function check_item(text, line, dim,   n, f, i, code, ok, letter, a, na, s, adj) {
-    if (text == "無") { dimnone[dim] = 1; return }
+    if (text == "無" || text == "None") { dimnone[dim] = 1; return }
     gsub(/\t/, " ", text)
     if (!index(text, FW)) {
         if (index(text, "|")) diag("error", line, "separate the fields with the full-width ｜, not |")
@@ -212,20 +214,20 @@ function doc_end(   i, x, per) {
         else if (fm["name"] !~ /^[a-z0-9][a-z0-9-]*$/) diag("error", fml["name"], "name may only contain lowercase letters, digits and -")
         if (fm["version"] == "") diag("error", 1, "the front matter has no version")
     }
-    if (!secl["dims"]) diag("error", "", "section ## 面向 is missing")
+    if (!secl["dims"]) diag("error", "", "section ## 面向 (Dimensions) is missing")
     else for (i = 1; i <= 7; i++) {
         x = LET[i]
-        if (!(x in dimrow)) diag("error", secl["dims"], "dimension " x " (" canon[x] ") is missing from the ## 面向 table")
-        else if (dimname[x] != canon[x]) diag("error", dimrow[x], "dimension " x " must be named " canon[x] " (dimension codes and names cannot be changed)")
+        if (!(x in dimrow)) diag("error", secl["dims"], "dimension " x " (" canon[x] ") is missing from the ## 面向 (Dimensions) table")
+        else if (dimname[x] != canon[x] && dimname[x] != canonen[x]) diag("error", dimrow[x], "dimension " x " must be named " canon[x] " or " canonen[x] " (dimension codes and names cannot be changed)")
     }
-    if (!secl["checks"]) diag("error", "", "section ## 檢查項 is missing")
+    if (!secl["checks"]) diag("error", "", "section ## 檢查項 (Check items) is missing")
     else {
         for (i = 1; i <= 7; i++) {
             x = LET[i]
-            if (!(x in dimhl)) diag("warn", secl["checks"], "### " x ". " canon[x] " is missing (keep the heading and write 無 when it has no check item)")
+            if (!(x in dimhl)) diag("warn", secl["checks"], "### " x ". " canon[x] " is missing (keep the heading and write 無 or None when it has no check item)")
             else {
-                if (dimh[x] != canon[x]) diag("warn", dimhl[x], "the heading should be ### " x ". " canon[x])
-                if (!cnt[x] && !dimnone[x]) diag("warn", dimhl[x], "### " x " has no check item; write 無 if that is intended")
+                if (dimh[x] != canon[x] && dimh[x] != canonen[x]) diag("warn", dimhl[x], "the heading should be ### " x ". " canon[x] " or ### " x ". " canonen[x])
+                if (!cnt[x] && !dimnone[x]) diag("warn", dimhl[x], "### " x " has no check item; write 無 or None if that is intended")
             }
         }
         if (!nchk && !nbad) diag("error", secl["checks"], "the document has no check item")
