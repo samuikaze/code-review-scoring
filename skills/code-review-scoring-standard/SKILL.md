@@ -6,9 +6,9 @@ compatibility: Works with or without a subagent tool. Requires the code-review-s
 
 # Code Review Scoring – Maintain Scoring Standards
 
-A scoring standard is a Markdown document (written from `templates/<language>/scoring-rule-template.md` in the project root) registered in `configs/standards.ini`, optionally with a scan rule file (TSV, `scan=`). The people who write standards maintain only the document; the scan rules are generated and reviewed here, so nobody writes regexes by hand. The scan rules only list candidate lines for step 3 of the scoring; they never deduct by themselves.
+A scoring standard is a rule of the rules project that `[rules] root` of `configs/settings.ini` names: a folder registered in `rules.ini` (`path`, `enable`) with its `rule.ini` (written from `templates/<language>/rule-template.ini`: the document, scan rules, `applies`, points, severity scale and grades), a Markdown document (written from `templates/<language>/scoring-rule-template.md` in the project root) and optionally a scan rule file (TSV, `scan=` of `rule.ini`). What `rule.ini` does not set comes from `defaults.ini` of the rules project. The people who write standards maintain only the document; the scan rules are generated and reviewed here, so nobody writes regexes by hand. The scan rules only list candidate lines for step 3 of the scoring; they never deduct by themselves.
 
-You never edit a standard document or `configs/standards.ini`: report what is wrong and let the user change it. You write a scan rule file only in generate mode, only after the user confirms it.
+You never edit a standard document, `rules.ini`, `defaults.ini` or a `rule.ini`: report what is wrong and let the user change it. You write a scan rule file only in generate mode, only after the user confirms it.
 
 ## Script
 
@@ -16,8 +16,8 @@ You never edit a standard document or `configs/standards.ini`: report what is wr
 
 | Command | Use |
 | --- | --- |
-| `lint [NAME ...]` | check `configs/standards.ini` and the documents and scan rule files it lists |
-| `lint --file DOC.md [--scan RULES.tsv] [--common]` | check one document, with a scan rule file such as a draft |
+| `lint [NAME ...]` | check the rules project: `rules.ini`, `defaults.ini` and the `rule.ini`, document and scan rule file of every rule, enabled or not (or only the NAMEs given) |
+| `lint --file DOC.md [--scan RULES.tsv] [--common]` | check one document, with a scan rule file such as a draft; its severities are checked against the `rule.ini` in its folder, or `defaults.ini` |
 | `diff OLD.md NEW.md` | the dimensions, check items and confirmations that changed between two versions |
 | `stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--common]` | write a reviewed draft to its place with the source line of the document |
 
@@ -25,7 +25,7 @@ You never edit a standard document or `configs/standards.ini`: report what is wr
 
 ## Modes
 
-Ask which mode when the request does not make it clear. Find the standard's document and scan rule file in `configs/standards.ini` (paths relative to `configs/`); for a document that is not registered yet, ask the user for its path.
+Ask which mode when the request does not make it clear. Find the standard's folder in `rules.ini` of the rules project (`path`, relative to the rules project), and its document and scan rule file in the `rule.ini` there (`standard` and `scan`, relative to that folder); `lint` prints the `rule.ini` of every rule. For a document that is not registered yet, ask the user for its path.
 
 ### Check mode
 
@@ -41,7 +41,7 @@ Produce a new or updated scan rule file. Work in `tmp/scan-rules/<standard>/` in
 - [ ] 4. Review the draft against the document with every item of [references/review-checklist.md](references/review-checklist.md), and write `review.md` in its format. Read the checklist each round; do not review from memory.
 - [ ] 5. Lint errors or `result: changes needed`: dispatch the generator again with the same prompt plus the review (`{{REVIEW}}`), then repeat steps 3 and 4. At most **3** rounds in all; if round 3 still fails, stop, show the user the open items of `review.md`, and write nothing.
 - [ ] 6. Show the user the changes against the current scan rule file (`git diff --no-index <current file> tmp/scan-rules/<standard>/draft.tsv`, or the whole draft when there is none), grouped as added, changed and removed rules, with the review summary and the check items left without rules (from `notes.md`). Ask for confirmation.
-- [ ] 7. Only after the user confirms: `stamp --file <document> --scan tmp/scan-rules/<standard>/draft.tsv --out <scan path> [--common]`, then `lint <standard>` to confirm. When `standards.ini` has no `scan=` for the standard yet, ask the user where to save the file and tell them to add `scan="<path>"` to the section themselves.
+- [ ] 7. Only after the user confirms: `stamp --file <document> --scan tmp/scan-rules/<standard>/draft.tsv --out <scan path> [--common]`, then `lint <standard>` to confirm. When the `rule.ini` of the standard has no `scan=` yet, ask the user where to save the file (usually its folder) and tell them to add `scan="<path>"` to `[rule]` themselves.
 
 ### Review mode
 

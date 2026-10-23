@@ -1,7 +1,7 @@
 ﻿<#
 .SYNOPSIS
-Setup check for the code review scoring workflow: configs/plugins.ini, configs/settings.ini and configs/standards.ini
-in the project root.
+Setup check for the code review scoring workflow: configs/plugins.ini and configs/settings.ini (with [rules] root, the
+rules project of the scoring standards) in the project root.
 
 .DESCRIPTION
 "check" tells the agent what is missing; the missing files are created either by the user with the
@@ -11,7 +11,9 @@ Uses the same GNU-style arguments as setup.sh:
   setup.ps1 check [--platform NAME]
       report whether configs/plugins.ini exists, whether configs/settings.ini sets subagent=true|false
       and, when it is true and --platform is given, whether it has a [NAME] section (give --platform only
-      when the platform has a subagent tool), and whether configs/standards.ini registers a scoring standard.
+      when the platform has a subagent tool), and whether [rules] root of configs/settings.ini names a rules
+      project with an enabled rule (the legacy configs/standards.ini and [points], [deductions] and [grades] of
+      the settings are reported too).
       Prints the execution style. Exit 7 when something is missing,
       or when the old configs.ini / plugins.ini is still in the project root (all commands stop then)
   setup.ps1 wizard [--platform NAME]
@@ -25,7 +27,6 @@ Uses the same GNU-style arguments as setup.sh:
 
 Options: --plugins FILE (default: configs/plugins.ini in the project root)
          --config FILE  (default: configs/settings.ini in the project root)
-         --standards FILE (default: configs/standards.ini in the project root; check only)
 Settings in configs/settings.ini are saved with: review-state config --subagent true|false
                                    and review-state config --platform NAME --model TEXT --reasoning TEXT
 After the plugins change, run scripts/link-skills in the project root.
@@ -49,12 +50,12 @@ $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
 $opt = @{ plugins = (Join-Path $projectRoot 'configs/plugins.ini'); config = (Join-Path $projectRoot 'configs/settings.ini')
-    standards = (Join-Path $projectRoot 'configs/standards.ini')
     platform = ''; name = ''; path = ''; applies = ''; mode = 'mapped'; none = $false }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -in '--plugins', '--config', '--standards', '--platform', '--name', '--path', '--applies', '--mode') {
+    if ($a -eq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--config)' }
+    if ($a -in '--plugins', '--config', '--platform', '--name', '--path', '--applies', '--mode') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]; $i += 2
     }
@@ -215,16 +216,46 @@ switch ($cmd) {
             if (Test-Platform) { [Console]::WriteLine("configs/settings.ini [$($opt.platform)]: ok $configFile") }
             else { [Console]::WriteLine("configs/settings.ini [$($opt.platform)]: missing $configFile"); $missing = $true }
         }
-        # Scoring needs at least one standard; the user registers them (the wizard does not create standards.ini).
-        $standardsFile = Resolve-UserPath $opt.standards
-        $stds = @()
-        if ([IO.File]::Exists($standardsFile)) { $stds = @(Read-Utf8Lines $standardsFile | Where-Object { $_ -match '^[ \t]*\[([^\]]*)\]' } | ForEach-Object { $Matches[1] }) }
-        if ($stds.Count -gt 0) { [Console]::WriteLine("configs/standards.ini: ok ($($stds.Count) standard(s): $($stds -join ', ')) $standardsFile") }
-        elseif ([IO.File]::Exists($standardsFile)) { [Console]::WriteLine("configs/standards.ini: no standard registered $standardsFile") }
-        else { [Console]::WriteLine("configs/standards.ini: missing $standardsFile") }
-        if ($stds.Count -eq 0) {
-            [Console]::WriteLine('next: ask the user to register their scoring standards: copy configs/standards.example.ini to configs/standards.ini')
-            [Console]::WriteLine('      and add the standard documents (template: templates/<language>/scoring-rule-template.md); never create them yourself')
+        # Scoring needs a rules project with an enabled rule; the user sets it up (the wizard does not create it).
+        # configs/standards.ini and the scoring sections of the settings are no longer read.
+        $noStd = $false
+        $legacyStd = Join-Path (Split-Path -Parent $configFile) 'standards.ini'
+        if ([IO.File]::Exists($legacyStd)) {
+            [Console]::WriteLine("legacy: $legacyStd is no longer read; its standards become rules of the rules project ([rules] root)")
+            $noStd = $true
+        }
+        $old = New-Object System.Collections.Generic.List[string]
+        if ([IO.File]::Exists($configFile)) {
+            foreach ($l in (Read-Utf8Lines $configFile)) {
+                if ($l -match '^\s*\[(.*)\]\s*$' -and $Matches[1] -cin 'points', 'deductions', 'grades' -and -not $old.Contains("[$($Matches[1])]")) { $old.Add("[$($Matches[1])]") }
+            }
+        }
+        if ($old.Count -gt 0) {
+            [Console]::WriteLine("legacy: $($old -join ', ') of $configFile are no longer read; points, severities and grades are set in defaults.ini or rule.ini of the rules project")
+            $noStd = $true
+        }
+        $rroot = [string](Get-IniSection 'rules')['root']
+        if (-not $rroot) { [Console]::WriteLine("configs/settings.ini [rules] root: missing $configFile"); $noStd = $true }
+        else {
+            if (-not ([IO.Path]::IsPathRooted($rroot))) { $rroot = Join-Path (Split-Path -Parent $configFile) $rroot }
+            $rulesIni = Join-Path $rroot 'rules.ini'
+            if (-not [IO.File]::Exists($rulesIni)) { [Console]::WriteLine("configs/settings.ini [rules] root: no rules.ini in $rroot"); $noStd = $true }
+            elseif (-not [IO.File]::Exists((Join-Path $rroot 'defaults.ini'))) { [Console]::WriteLine("configs/settings.ini [rules] root: no defaults.ini in $rroot"); $noStd = $true }
+            else {
+                $rroot = ([IO.Path]::GetFullPath($rroot)).TrimEnd('\', '/').Replace('\', '/')
+                $on = New-Object System.Collections.Generic.List[string]; $sec = $null
+                foreach ($l in (Read-Utf8Lines $rulesIni)) {
+                    if ($l -match '^[ \t]*\[(.*?)\][ \t]*$') { $sec = $Matches[1]; continue }
+                    if ($null -ne $sec -and $l -cmatch '^[ \t]*enable[ \t]*=[ \t]*"?(.*?)"?[ \t]*$') { if ($Matches[1] -ceq 'true') { if (-not $on.Contains($sec)) { $on.Add($sec) } } else { [void]$on.Remove($sec) } }
+                }
+                if ($on.Count -gt 0) { [Console]::WriteLine("configs/settings.ini [rules] root: ok ($($on.Count) enabled rule(s): $($on -join ', ')) $rroot") }
+                else { [Console]::WriteLine("configs/settings.ini [rules] root: no enabled rule in $rulesIni"); $noStd = $true }
+            }
+        }
+        if ($noStd) {
+            [Console]::WriteLine('next: ask the user to set up their scoring rules: a rules project (e.g. a clone of code-review-scoring-rules) with')
+            [Console]::WriteLine('      rules.ini, defaults.ini and a rule.ini and document per rule, and [rules] root in configs/settings.ini naming')
+            [Console]::WriteLine('      its folder (template: templates/<language>/scoring-rule-template.md); never create them yourself')
         }
         if ($missing) {
             $p = if ($opt.platform) { " --platform $($opt.platform)" } else { '' }
@@ -232,7 +263,7 @@ switch ($cmd) {
             [Console]::WriteLine("      ($selfCmd wizard$p) or by answering your questions")
             exit 7
         }
-        if ($stds.Count -eq 0) { exit 7 }
+        if ($noStd) { exit 7 }
         if ($sub -eq 'true' -and $opt.platform) { [Console]::WriteLine("execution: subagent (each step runs in its own subagent with the [$($opt.platform)] settings)") }
         elseif ($sub -eq 'true') { [Console]::WriteLine('execution: inline (subagent=true, but no --platform was given, so the main agent runs every step)') }
         else { [Console]::WriteLine('execution: inline (subagent=false, so the main agent runs every step)') }

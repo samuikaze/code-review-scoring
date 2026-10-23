@@ -1,7 +1,7 @@
 # Validator and calculator shared by score.sh and score.zsh (POSIX awk). Run with LC_ALL=C.
-# Variables: rules=output of "standard resolve" (standard, common, points and check records)
+# Variables: rules=output of "standard resolve" (standard, common, points, merge, severity, grade, cseverity and check
+#                  records): the points, severity scale and grades of the rule all come from it
 #            idxfile=output of diff-index.awk ("" = skip location checks)
-#            config=configs/settings.ini with the [points], [deductions] (incl. merge) and [grades] sections ("" or missing file = defaults)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = skip the code review comment checks)
 #            cplan=the review plan (ROOT/step1/standards/plan.tsv) and cstd=the standard: check only its comments
 #            tsvout / jsonout = output files  checkonly=1: validate only, write nothing
@@ -12,20 +12,38 @@ function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
 function err(msg) { nerr++; errs = errs "  - line " NR ": " msg "\n" }
 function warn(msg) { nwarn++; warns = warns "  - " msg "\n" }
 function jstr(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); gsub(/\t/, "\\t", s); return "\"" s "\"" }
-function sevrank(s) { return s == "Critical" ? 1 : (s == "Major" ? 2 : (s == "Minor" ? 3 : 4)) }
+# Position of a severity in the scale (1 = the most severe); unknown codes sort last.
+function sevrank(s) { return (s in srank) ? srank[s] : nsv + 1 }
+function inlist(s, list) { return index("," list ",", "," s ",") > 0 }
 
 # Checks that the record just finished has the continuation fields it needs.
 function close_record() {
     if (rec == "F") {
         if (!(("problem") in fld)) err2(recline, recid " is missing \"problem:\"")
         if (!(("suggestion") in fld)) err2(recline, recid " is missing \"suggestion:\"")
+        if (recfrom) check_from()
+        else if (("from") in fld) err2(recline, recid ": from: is only used for check items of the common standard when its severity scale differs from that of the standard")
     } else if (rec == "U") {
         if (!(("content") in fld)) err2(recline, "upstream record is missing \"content:\"")
     }
-    rec = ""; split("", fld)
+    rec = ""; recfrom = 0; split("", fld)
 }
 function err2(ln, msg) { nerr++; errs = errs "  - line " ln ": " msg "\n" }
 function err0(msg) { nerr++; errs = errs "  - " msg "\n" }
+
+# A check item of the common standard when its scale differs from that of the standard: column 3 holds the closest
+# severity of the standard's scale, any one of it. from: is recommended but optional; when present it names the
+# severity on the common scale (the default, an allowed adjustment with its condition in column 5, or the lowest).
+function check_from(    f) {
+    if (!(("from") in fld)) return
+    f = fld["from"]
+    if (!(f in crank)) { err2(recline, recid ": from: " f " is not a severity of the common standard (" clist ")"); return }
+    if (f != def[recid] && f != clowest) {
+        if (!inlist(f, adj[recid])) { err2(recline, recid ": from: must be the default " def[recid] (adj[recid] != "-" ? ", the allowed adjustment " adj[recid] : "") " or " clowest ", not " f); return }
+        if (recreason == "") { err2(recline, recid ": from: " f " is not the default severity and needs the matching adjustment condition in column 5"); return }
+    }
+    ffrom[recn] = f
+}
 
 # Comment ids are <plugin>#<n>: the n-th C record of the plugin's cr.txt (prepare-diff lists them in prepared.txt).
 # Whether a code review comment with these locations belongs to the standard cstd of the review plan cplan: one of its
@@ -75,62 +93,35 @@ function use_sources(val,    n, s, i, e) {
     gsub(/,/, "、", val); n = split(val, s, "、")
     for (i = 1; i <= n; i++) { e = trim(s[i]); if (e != "" && comment_ok(e, "source ")) used[e] = 1 }
 }
-function cfgerr(msg) { ncfg++; cfgerrs = cfgerrs "  - " msg "\n" }
-
-# Reads the scoring settings of configs/settings.ini; keys that are not set keep their defaults.
-function load_config(file,    l, sec, k, v, sum, i, g) {
-    if (file != "") {
-        while ((getline l < file) > 0) {
-            sub(/\r$/, "", l)
-            if (l ~ /^[ \t]*[;#]/ || l ~ /^[ \t]*$/) continue
-            if (l ~ /^[ \t]*\[/) { sec = l; gsub(/^[ \t]*\[|\][ \t]*$/, "", sec); continue }
-            if ((sec != "points" && sec != "deductions" && sec != "grades") || l !~ /=/) continue
-            k = l; sub(/=.*/, "", k); k = trim(k)
-            v = l; sub(/^[^=]*=/, "", v); v = trim(v); gsub(/^"|"$/, "", v)
-            if (sec == "deductions" && k == "merge") {
-                v = tolower(v)
-                if (v != "true" && v != "false") cfgerr("[deductions] merge: \"" v "\" is not true or false")
-                else merge = (v == "true")
-                continue
-            }
-            if (sec == "points" && !(k in dmax)) { cfgerr("[points] " k ": unknown dimension (allowed: A, B, C, D, E, F, G)"); continue }
-            if (sec == "deductions" && !(k in pts)) { cfgerr("[deductions] " k ": unknown key (allowed: Critical, Major, Minor, Nit, merge)"); continue }
-            if (sec == "grades" && !(k in gmin)) { cfgerr("[grades] " k ": unknown grade (allowed: S, A, B, C)"); continue }
-            if (v !~ /^[0-9]+$/) { cfgerr("[" sec "] " k ": \"" v "\" is not a whole number"); continue }
-            if (sec == "points") dmax[k] = v + 0
-            else if (sec == "deductions") pts[k] = v + 0
-            else gmin[k] = v + 0
-        }
-        close(file)
-    }
-    # The [points] overrides of the standard in configs/standards.ini win over the settings.
-    for (k in ovr) dmax[k] = ovr[k]
-    sum = 0
-    for (i = 1; i <= 7; i++) sum += dmax[dims[i]]
-    if (sum != 100) cfgerr("[points] the seven dimensions must add up to 100, not " sum (novr ? " (with the points overrides of [" stdname "] in standards.ini)" : ""))
-    if (gmin["S"] > 100) cfgerr("[grades] S must be at most 100")
-    split("S A B C", g, " ")
-    for (i = 1; i < 4; i++) if (gmin[g[i]] <= gmin[g[i + 1]]) cfgerr("[grades] " g[i] " (" gmin[g[i]] ") must be higher than " g[i + 1] " (" gmin[g[i + 1]] ")")
-}
 
 BEGIN {
     FS = "|"
     split("A B C D E F G", dims, " ")
-    # Defaults; configs/settings.ini can change them
-    dmax["A"] = 25; dmax["B"] = 15; dmax["C"] = 15; dmax["D"] = 15; dmax["E"] = 10; dmax["F"] = 10; dmax["G"] = 10
-    pts["Critical"] = 10; pts["Major"] = 5; pts["Minor"] = 2; pts["Nit"] = 1
-    gmin["S"] = 95; gmin["A"] = 85; gmin["B"] = 70; gmin["C"] = 55
-    # Check items of the standard and of the common standard, as printed by "standard resolve".
+    # The rule as "standard resolve" printed it: points, merge, severity scale, grades and check items of the rule and
+    # of the common rule (whose check items start with CM-), and the severity scale of the common rule.
     while ((getline l < rules) > 0) {
         split(l, a, "\t")
         if (a[1] == "check") { def[a[2]] = a[3]; adj[a[2]] = a[4] }
-        else if (a[1] == "points") { ovr[a[2]] = a[3] + 0; novr++ }
-        else if (a[1] == "standard") { stdname = a[2]; stdver = a[3]; stdhash = a[4] }
-        else if (a[1] == "common") { cmname = a[2]; cmver = a[3]; cmhash = a[4] }
+        else if (a[1] == "points") { dmax[a[2]] = a[3] + 0; npts++ }
+        else if (a[1] == "merge") merge = (a[2] == "true")
+        else if (a[1] == "severity") {
+            scode[++nsv] = a[2]; srank[a[2]] = nsv; pts[a[2]] = a[3] + 0; scap[a[2]] = (a[4] == "-" ? "" : a[4]); sname[a[2]] = a[5]
+            sevlist = sevlist (nsv > 1 ? ", " : "") a[2]
+        }
+        else if (a[1] == "grade") { gcode[++ngr] = a[2]; grank[a[2]] = ngr; gmin[a[2]] = a[3] + 0; gname[a[2]] = a[4] }
+        else if (a[1] == "cseverity") { ccode[++ncs] = a[2]; crank[a[2]] = ncs; clist = clist (ncs > 1 ? ", " : "") a[2] }
+        else if (a[1] == "standard") { stdname = a[2]; stdver = a[3]; stdhash = a[4]; owner = "s" }
+        else if (a[1] == "common") { cmname = a[2]; cmver = a[3]; cmhash = a[4]; owner = "c" }
+        else if (a[1] == "ruleini") { if (owner == "c") cmrule = a[3]; else stdrule = a[3] }
+        else if (a[1] == "defaults") defhash = a[3]
     }
     close(rules)
-    load_config(config)
-    if (ncfg > 0) { printf "invalid scoring settings in %s:\n%s", config, cfgerrs > "/dev/stderr"; cfgfail = 1; exit 2 }
+    if (npts != 7 || !nsv || !ngr) { printf "error: %s has no points, severity scale or grades of the standard; run standard lint and standard resolve again\n", rules > "/dev/stderr"; cfgfail = 1; exit 2 }
+    lowest = scode[nsv]
+    # The common rule uses the scale of the standard when its scale has the same codes in the same order.
+    samescale = 1
+    if (ncs) { if (ncs != nsv) samescale = 0; else for (i = 1; i <= nsv; i++) if (ccode[i] != scode[i]) samescale = 0 }
+    clowest = ncs ? ccode[ncs] : lowest
     load_comments()
     utype["spec-gap"] = "missing,wrong,ambiguous"
     utype["third-party"] = "spec-missing,spec-wrong,behavior-mismatch,not-delivered,bug"
@@ -151,7 +142,7 @@ BEGIN {
 /^[ \t]*[a-z]+:/ && $0 !~ /^[A-Z]\|/ {
     if (rec == "skip") next
     line = trim($0); key = line; sub(/:.*/, "", key); val = line; sub(/^[a-z]+:[ \t]*/, "", val)
-    if (rec == "F" && key !~ /^(problem|suggestion|assumption|source)$/) { err("unknown field \"" key "\" for F (allowed: problem, suggestion, assumption, source)"); next }
+    if (rec == "F" && key !~ /^(problem|suggestion|assumption|source|from)$/) { err("unknown field \"" key "\" for F (allowed: problem, suggestion, assumption, source, from)"); next }
     if (rec == "U" && key !~ /^(content|code|ticket|source)$/) { err("unknown field \"" key "\" for U (allowed: content, code, ticket, source)"); next }
     if (rec == "") { err("field \"" key "\" is not under an F or U record"); next }
     if (val == "") { err("field \"" key "\" is empty"); next }
@@ -166,13 +157,15 @@ BEGIN {
     t = $1
     if (t == "F") {
         id = $2; sev = $3; locs = $4; reason = $5
-        rec = "skip"; recid = id; recline = NR
+        rec = "skip"; recid = id; recline = NR; recreason = reason
         # Check id "-": no check item of the standard covers the problem; deducted from the total by its severity.
         other = (id == "-")
         if (!other && !(id in def)) { err("unknown check id " id " (use - when no check covers the problem)"); next }
-        if (!(sev in pts)) { err(id ": severity \"" sev "\" is not Critical/Major/Minor/Nit"); next }
-        if (!other && sev != def[id] && sev != "Nit") {
-            if (("," adj[id] ",") !~ ("," sev ",")) { err(id ": severity must be the default " def[id] (adj[id] != "-" ? ", the allowed adjustment " adj[id] : "") " or Nit, not " sev); next }
+        if (!(sev in pts)) { err(id ": severity \"" sev "\" is not one of the scale of the standard (" sevlist ")"); next }
+        # A check item of the common standard on another scale: its own severity is checked with from: (close_record).
+        fromcheck = (!other && substr(id, 1, 3) == "CM-" && !samescale)
+        if (!other && !fromcheck && sev != def[id] && sev != lowest) {
+            if (!inlist(sev, adj[id])) { err(id ": severity must be the default " def[id] (adj[id] != "-" ? ", the allowed adjustment " adj[id] : "") " or " lowest ", not " sev); next }
             if (reason == "") { err(id ": non-default severity " sev " needs the matching adjustment condition in column 5"); next }
         }
         if (locs == "") { err(id ": missing file:line location"); next }
@@ -196,7 +189,7 @@ BEGIN {
         }
         if (!merge && !other && ((id SUBSEP clean) in seen)) { err(id " at " clean " is recorded twice; one problem at one location is deducted once"); next }
         idseen[id] = 1; seen[id SUBSEP clean] = 1
-        nf_++; forder[nf_] = nf_; fid[nf_] = id; fsev[nf_] = sev; floc[nf_] = clean; rec = "F"
+        nf_++; forder[nf_] = nf_; fid[nf_] = id; fsev[nf_] = sev; floc[nf_] = clean; rec = "F"; recn = nf_; recfrom = fromcheck
         next
     }
     if (t == "U") {
@@ -205,7 +198,7 @@ BEGIN {
         if (("," utype[$2] ",") !~ ("," $3 ",")) { err("upstream subtype for " $2 " must be one of: " utype[$2]); next }
         if ($2 == "spec-gap" && $4 !~ /^(high|medium|low)$/) { err("spec-gap needs impact high, medium or low"); next }
         if ($2 != "spec-gap" && $4 != "-" && $4 != "") { err("impact is only used for spec-gap; write - instead"); next }
-        if (!($5 in pts)) { err("upstream severity \"" $5 "\" is not Critical/Major/Minor/Nit"); next }
+        if (!($5 in pts)) { err("upstream severity \"" $5 "\" is not one of the scale of the standard (" sevlist ")"); next }
         if ($6 == "") { err("upstream record needs a reference (spec section/version, change-log date or vendor ticket); without one, do not list it"); next }
         nu++; ut[nu] = $2; us[nu] = $3; ui[nu] = $4; usev[nu] = $5; ur[nu] = $6; rec = "U"
         next
@@ -218,17 +211,30 @@ BEGIN {
         rejected[$2] = 1; nx++; xid[nx] = $2; xr[nx] = $3
         next
     }
+    # M|<plugin>#<n>|severity: the severity of the standard's scale closest to that of a code review comment.
+    if (t == "M") {
+        if ($2 == "" || $3 == "" || NF != 3) { err("format is M|<plugin>#<n>|severity"); next }
+        if ($2 !~ /^[^#]+#[0-9]+$/) { err("\"" $2 "\" is not a comment id <plugin>#<n> (listed in prepared.txt)"); next }
+        if (hascr && !($2 in cmode)) { err("mapped comment " $2 " is not a code review comment of step 2"); next }
+        if ($2 in msev) { err("comment " $2 " is mapped twice"); next }
+        if (!($3 in pts)) { err($2 ": severity \"" $3 "\" is not one of the scale of the standard (" sevlist ")"); next }
+        msev[$2] = $3; nm++; mid[nm] = $2
+        next
+    }
     if (t == "S") { if ($2 == "" || $3 == "") err("format is S|check-id|reason"); else { ns++; sid[ns] = $2; sr[ns] = $3 }; next }
     if (t == "H" || t == "N" || t == "I" || t == "R") { if ($2 == "") err(t " record has no text"); next }
-    err("unknown record type \"" t "\" (allowed: F, U, X, S, H, N, I, R)")
+    err("unknown record type \"" t "\" (allowed: F, U, X, M, S, H, N, I, R)")
 }
 
 END {
     if (cfgfail) exit 2
     close_record()
-    # Every comment of a mapped plugin is either deducted (source: of an F or U record) or rejected (X).
+    # Every comment of a mapped plugin is either deducted (source: of an F or U record) or rejected (X), and every
+    # comment of the report has its severity mapped to the scale of the standard (M).
     for (i = 1; i <= ncm; i++) {
-        e = cmid[i]; if (cmode[e] != "mapped") continue
+        e = cmid[i]
+        if (!(e in msev)) err0("comment " e " has no M|" e "|<severity> line with the closest severity of the standard (" sevlist ")")
+        if (cmode[e] != "mapped") continue
         if ((e in used) && (e in rejected)) err0("comment " e " is both deducted (source:) and rejected (X)")
         else if (!(e in used) && !(e in rejected)) err0("comment " e " is neither deducted (an F or U record with source: " e ") nor rejected (X|" e "|reason)")
     }
@@ -260,27 +266,46 @@ END {
         sc[d] = dmax[d] - ded; if (sc[d] < 0) sc[d] = 0
         total += sc[d]
     }
-    # Records without a check id and upstream factors are deducted from the total.
+    # Records without a check id and upstream factors are deducted from the total. The severities found cap the grade.
     othded = 0; upded = 0
-    for (i = 1; i <= nf_; i++) { if (fid[i] == "-") othded += pts[fsev[i]]; if (fsev[i] == "Critical") crit = 1 }
-    for (i = 1; i <= nu; i++) { upded += pts[usev[i]]; if (usev[i] == "Critical") crit = 1 }
+    for (i = 1; i <= nf_; i++) { if (fid[i] == "-") othded += pts[fsev[i]]; used_sev[fsev[i]] = 1 }
+    for (i = 1; i <= nu; i++) { upded += pts[usev[i]]; used_sev[usev[i]] = 1 }
     total -= othded + upded; if (total < 0) total = 0
-    grade = total >= gmin["S"] ? "S" : (total >= gmin["A"] ? "A" : (total >= gmin["B"] ? "B" : (total >= gmin["C"] ? "C" : "D")))
+    grade = gcode[ngr]
+    for (i = 1; i <= ngr; i++) if (total >= gmin[gcode[i]]) { grade = gcode[i]; break }
+    # The strictest cap (the lowest grade) of the severities found; the most severe of them names it.
+    capi = 0; capsev = ""
+    for (i = 1; i <= nsv; i++) { s = scode[i]; if ((s in used_sev) && scap[s] != "" && grank[scap[s]] > capi) { capi = grank[scap[s]]; capsev = s } }
     capped = 0
-    if (crit && (grade == "S" || grade == "A")) { grade = "B"; capped = 1 }
+    if (capi && grank[grade] < capi) { grade = gcode[capi]; capped = 1 }
 
-    printf "total\t%d\ngrade\t%s\ncapped\t%d\ncritical\t%d\n", total, grade, capped, crit ? 1 : 0 > tsvout
+    printf "total\t%d\ngrade\t%s\ncapped\t%d\n", total, grade, capped > tsvout
+    if (capped) printf "cap\t%s\t%s\n", capsev, grade > tsvout
     printf "standard\t%s\t%s\t%s\n", stdname, stdver, stdhash > tsvout
     if (cmname != "") printf "common\t%s\t%s\t%s\n", cmname, cmver, cmhash > tsvout
+    # sha256 of the settings in effect: the rule.ini of the standard and of the common rule, and defaults.ini
+    printf "ruleini\tstandard\t%s\n", stdrule > tsvout
+    if (cmname != "") printf "ruleini\tcommon\t%s\n", cmrule > tsvout
+    printf "defaults\t%s\n", defhash > tsvout
     for (k = 1; k <= 7; k++) printf "dim\t%s\t%d\t%d\n", dims[k], sc[dims[k]], dmax[dims[k]] > tsvout
     for (i = 1; i <= nf_; i++) { x = forder[i]; printf "finding\t%s\t%s\t%d\t%s\t%d\n", fid[x], fsev[x], pts[fsev[x]], floc[x], x > tsvout }
     for (i = 1; i <= nu; i++) printf "upstream\t%d\t%s\t%d\n", i, usev[i], pts[usev[i]] > tsvout
+    for (i = 1; i <= nsv; i++) { s = scode[i]; printf "severity\t%s\t%s\t%d\t%s\n", s, sname[s], pts[s], (scap[s] == "" ? "-" : scap[s]) > tsvout }
+    for (i = 1; i <= ngr; i++) { g = gcode[i]; printf "gradedef\t%s\t%s\t%d\n", g, gname[g], gmin[g] > tsvout }
     close(tsvout)
 
-    printf "{\n  \"total\": %d,\n  \"grade\": \"%s\",\n  \"hasCritical\": %s,\n", total, grade, (crit ? "true" : "false") > jsonout
-    printf "  \"standard\": { \"name\": %s, \"version\": %s, \"hash\": %s },\n", jstr(stdname), jstr(stdver), jstr(stdhash) > jsonout
-    if (cmname != "") printf "  \"common\": { \"name\": %s, \"version\": %s, \"hash\": %s },\n", jstr(cmname), jstr(cmver), jstr(cmhash) > jsonout
+    printf "{\n  \"total\": %d,\n  \"grade\": \"%s\",\n", total, grade > jsonout
+    if (capped) printf "  \"cap\": { \"severity\": %s, \"grade\": %s },\n", jstr(capsev), jstr(grade) > jsonout
+    else printf "  \"cap\": null,\n" > jsonout
+    printf "  \"standard\": { \"name\": %s, \"version\": %s, \"hash\": %s, \"ruleIniHash\": %s },\n", jstr(stdname), jstr(stdver), jstr(stdhash), jstr(stdrule) > jsonout
+    if (cmname != "") printf "  \"common\": { \"name\": %s, \"version\": %s, \"hash\": %s, \"ruleIniHash\": %s },\n", jstr(cmname), jstr(cmver), jstr(cmhash), jstr(cmrule) > jsonout
     else printf "  \"common\": null,\n" > jsonout
+    printf "  \"defaultsHash\": %s,\n", jstr(defhash) > jsonout
+    printf "  \"severities\": [" > jsonout
+    for (i = 1; i <= nsv; i++) { s = scode[i]; printf "%s\n    { \"code\": %s, \"name\": %s, \"points\": %d, \"cap\": %s }", (i > 1 ? "," : ""), jstr(s), jstr(sname[s]), pts[s], (scap[s] == "" ? "null" : jstr(scap[s])) > jsonout }
+    printf "\n  ],\n  \"grades\": [" > jsonout
+    for (i = 1; i <= ngr; i++) { g = gcode[i]; printf "%s\n    { \"code\": %s, \"name\": %s, \"min\": %d }", (i > 1 ? "," : ""), jstr(g), jstr(gname[g]), gmin[g] > jsonout }
+    printf "\n  ],\n" > jsonout
     printf "  \"dimensions\": { \"A\": %d, \"B\": %d, \"C\": %d, \"D\": %d, \"E\": %d, \"F\": %d, \"G\": %d },\n", sc["A"], sc["B"], sc["C"], sc["D"], sc["E"], sc["F"], sc["G"] > jsonout
     printf "  \"otherDeduction\": %d,\n  \"upstreamDeduction\": %d,\n", othded, upded > jsonout
     printf "  \"findings\": [" > jsonout
@@ -289,13 +314,16 @@ END {
         x = forder[i]
         n = (floc[x] == "-") ? 0 : split(floc[x], la, ","); ls = ""
         for (j = 1; j <= n; j++) ls = ls (j > 1 ? ", " : "") jstr(la[j])
-        printf "%s\n    { \"id\": %s, \"severity\": %s, \"deduction\": %d, \"locations\": [%s] }", sep, (fid[x] == "-" ? "null" : jstr(fid[x])), jstr(fsev[x]), pts[fsev[x]], ls > jsonout
+        printf "%s\n    { \"id\": %s, \"severity\": %s, \"from\": %s, \"deduction\": %d, \"locations\": [%s] }", sep, (fid[x] == "-" ? "null" : jstr(fid[x])), jstr(fsev[x]), (x in ffrom ? jstr(ffrom[x]) : "null"), pts[fsev[x]], ls > jsonout
         sep = ","
     }
     printf "%s],\n", (sep == "" ? "" : "\n  ") > jsonout
     printf "  \"upstream\": [" > jsonout
     for (i = 1; i <= nu; i++) printf "%s\n    { \"type\": %s, \"subtype\": %s, \"impact\": %s, \"severity\": %s, \"deduction\": %d, \"reference\": %s }", (i > 1 ? "," : ""), jstr(ut[i]), jstr(us[i]), ((ui[i] == "" || ui[i] == "-") ? "null" : jstr(ui[i])), jstr(usev[i]), pts[usev[i]], jstr(ur[i]) > jsonout
     printf "%s],\n", (nu > 0 ? "\n  " : "") > jsonout
+    printf "  \"mappedComments\": [" > jsonout
+    for (i = 1; i <= nm; i++) printf "%s\n    { \"comment\": %s, \"severity\": %s }", (i > 1 ? "," : ""), jstr(mid[i]), jstr(msev[mid[i]]) > jsonout
+    printf "%s],\n", (nm > 0 ? "\n  " : "") > jsonout
     printf "  \"rejectedComments\": [" > jsonout
     for (i = 1; i <= nx; i++) printf "%s\n    { \"comment\": %s, \"reason\": %s }", (i > 1 ? "," : ""), jstr(xid[i]), jstr(xr[i]) > jsonout
     printf "%s],\n", (nx > 0 ? "\n  " : "") > jsonout
@@ -304,7 +332,7 @@ END {
     printf "%s]\n}\n", (ns > 0 ? "\n  " : "") > jsonout
     close(jsonout)
 
-    printf "grade %s, total %d/100%s\n", grade, total, (capped ? " (capped at B because of a Critical finding)" : "")
+    printf "grade %s, total %d/100%s\n", grade, total, (capped ? " (capped at " grade " because of a " capsev " finding)" : "")
     for (k = 1; k <= 7; k++) printf "%s %d/%d  ", dims[k], sc[dims[k]], dmax[dims[k]]
     printf "\ndeductions: %d (without a check id: %d), upstream: %d, rejected comments: %d, skipped checks: %d\n", nf_, cnt_other(), nu, nx, ns
     printf "standard: %s %s%s\n", stdname, stdver, (cmname != "" ? ", common: " cmname " " cmver : "")
