@@ -1,0 +1,27 @@
+# The common standard has another severity scale than scaled: from: gives the severity on the common scale, column 3
+# the closest one of scaled. from: is optional: without it (CM-A1) column 3 may be any severity of scaled.
+# merge=true: one record per check id with all its locations.
+F|CM-A1|Critical|config/application.yml:3
+problem: x
+suggestion: y
+F|CM-B1|Blocker|config/application.yml:8,config/application.yml:12|機密已推到遠端
+problem: x
+suggestion: y
+from: Critical
+F|CM-F1|Trivial|README.md:10
+problem: x
+suggestion: y
+from: Nit
+F|A2|Blocker|src/main/kotlin/Order.kt:3
+problem: x
+suggestion: y
+F|A7|Trivial|src/main/kotlin/Order.kt:5,src/main/kotlin/Order.kt:9
+problem: x
+suggestion: y
+F|-|Minor|-
+problem: x
+suggestion: y
+U|third-party|bug|-|Trivial|廠商回報 CS-1
+content: x
+M|backend-code-review#1|Blocker
+M|backend-code-review#2|Trivial

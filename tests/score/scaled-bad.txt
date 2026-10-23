@@ -1,0 +1,27 @@
+# Severities of another scale, wrong from: values and M records
+F|A1|Critical|a.kt:1
+problem: x
+suggestion: y
+F|A1|Major|a.kt:2
+problem: x
+suggestion: y
+from: Major
+F|CM-A1|Major|a.yml:1
+problem: x
+suggestion: y
+from: Critical
+F|CM-B1|Blocker|a.yml:3
+problem: x
+suggestion: y
+from: Critical
+F|CM-F1|Minor|a.yml:4
+problem: x
+suggestion: y
+from: Blocker
+U|spec-gap|missing|high|Nit|規格 v1
+content: x
+M|backend-code-review#1|Blocker
+M|backend-code-review#1|Major
+M|backend-code-review#2|Critical
+M|backend-code-review#3
+M|nope|Major

@@ -8,7 +8,8 @@ code review results in ROOT/step2/, fills the template placeholders and writes R
 ROOT defaults to tmp in the project root. Without ROOT/step2/plan.tsv the code review section says that no code review was run.
 The final report is published as REPORTS/<YYYY-MM-DD>_<PR title>.md (REPORTS defaults to reports next to ROOT; the same
 name is overwritten when the same PR is rendered again on the same day) and its path is recorded in
-ROOT/step5/report-path.txt. Use -NoPublish to write only the working copy; -Out - prints to stdout only.
+ROOT/step5/report-path.txt. Use -NoPublish to write only the working copy; -Out:- prints to stdout only (write
+it with the colon: Windows PowerShell 5.1 rejects a lone - as an argument of -File).
 With the review plan ROOT/step1/standards/plan.tsv the report is that of the standard -Standard (default: the only
 one): it reads ROOT/step3/NAME/ and ROOT/step4/NAME/, shows only the code review comments on its files, writes
 ROOT/step5/NAME/ and is published as REPORTS/<YYYY-MM-DD>_<PR title>_<standard>.md.
@@ -92,6 +93,7 @@ function Format-Where([string]$Locs) { if ($Locs -eq '-') { return L 'loc.pr_wid
 # findings.txt (already validated by the scoring skill)
 $fv = @{}; $fIds = New-Object System.Collections.Generic.List[string]
 $rejects = New-Object System.Collections.Generic.List[object]
+$maps = New-Object System.Collections.Generic.List[object]
 $ups = New-Object System.Collections.Generic.List[object]
 $lists = @{ S = @(); H = @(); N = @(); I = @(); R = @() }
 $cur = ''
@@ -109,13 +111,19 @@ foreach ($raw in (Read-Utf8Lines $findingsPath)) {
         'F' { $fIds.Add($a[1]); $cur = "F:$($fIds.Count)" }
         'U' { $ups.Add([pscustomobject]@{ Type = $a[1]; Sub = $a[2]; Impact = $a[3]; Sev = $a[4]; Ref = $a[5]; Pts = '' }); $cur = "U:$($ups.Count)" }
         'X' { $rejects.Add([pscustomobject]@{ Id = $a[1]; Reason = $a[2] }) }
+        'M' { $maps.Add([pscustomobject]@{ Id = $a[1]; Sev = $a[2] }) }
         'S' { $lists['S'] += ($a[1] + (L 'sep.colon') + $a[2]) }
         { $_ -cin 'H', 'N', 'I', 'R' } { $lists[$a[0]] += $a[1] }
     }
 }
 
 # score.tsv / score.json
-$total = ''; $grade = ''; $capped = '0'; $upCount = 0; $stdLabel = ''; $commonLabel = ''
+$total = ''; $grade = ''; $capped = '0'; $capSev = ''; $capGrade = ''; $upCount = 0; $stdLabel = ''; $commonLabel = ''
+# The severity scale and grades of the standard: codes from the most severe / the highest, and display names.
+$sevOrder = New-Object System.Collections.Generic.List[string]
+$sevName = [hashtable]::new([StringComparer]::Ordinal); $gradeName = [hashtable]::new([StringComparer]::Ordinal)
+function Get-SevName([string]$s) { if ($sevName.ContainsKey($s)) { return $sevName[$s] } return $s }
+function Get-GradeName([string]$g) { if ($gradeName.ContainsKey($g)) { return $gradeName[$g] } return $g }
 $dims = New-Object System.Collections.Generic.List[object]
 $scored = New-Object System.Collections.Generic.List[object]
 foreach ($l in (Read-Utf8Lines (Join-Path $step4 'score.tsv'))) {
@@ -124,6 +132,9 @@ foreach ($l in (Read-Utf8Lines (Join-Path $step4 'score.tsv'))) {
         'total' { $total = $a[1] }
         'grade' { $grade = $a[1] }
         'capped' { $capped = $a[1] }
+        'cap' { $capSev = $a[1]; $capGrade = $a[2] }
+        'severity' { $sevOrder.Add($a[1]); $sevName[$a[1]] = $a[2] }
+        'gradedef' { $gradeName[$a[1]] = $a[2] }
         'dim' { $dims.Add([pscustomobject]@{ Code = $a[1]; Score = $a[2]; Max = $a[3] }) }
         'finding' { $scored.Add([pscustomobject]@{ Id = $a[1]; Sev = $a[2]; Pts = $a[3]; Locs = $a[4]; Seq = [int]$a[5] }) }
         'upstream' { $upCount++; if ([int]$a[1] -le $ups.Count) { $ups[[int]$a[1] - 1].Pts = $a[3] } }
@@ -131,7 +142,7 @@ foreach ($l in (Read-Utf8Lines (Join-Path $step4 'score.tsv'))) {
         'common' { $commonLabel = "$($a[1]) $($a[2])" }
     }
 }
-if ($dims.Count -ne 7 -or -not $grade) { Exit-WithError 'score.tsv is missing or incomplete; run the scoring skill first' 1 }
+if ($dims.Count -ne 7 -or -not $grade -or $sevOrder.Count -eq 0) { Exit-WithError 'score.tsv is missing or incomplete; run the scoring skill first' 1 }
 if ($scored.Count -ne $fIds.Count -or $upCount -ne $ups.Count) { Exit-WithError 'findings.txt and score.tsv list different records; rerun the scoring skill' 1 }
 foreach ($s in $scored) { if ($s.Seq -lt 1 -or $s.Seq -gt $fIds.Count -or $fIds[$s.Seq - 1] -cne $s.Id) { Exit-WithError "finding $($s.Id) of score.tsv does not match findings.txt; rerun the scoring skill" 1 } }
 $json = (Read-Utf8Text (Join-Path $step4 'score.json')).TrimEnd("`r", "`n")
@@ -153,17 +164,17 @@ $blk = @{}
 $sb = New-Object System.Text.StringBuilder
 foreach ($d in $dims) {
     # Dimension of a check id: its first letter, or the letter after CM- for the common standard (CM-B1 is B).
-    $items = @($scored | Where-Object { $(if ($_.Id.StartsWith('CM-')) { $_.Id.Substring(3, 1) } else { $_.Id.Substring(0, 1) }) -ceq $d.Code } | ForEach-Object { "$($_.Id) $($_.Sev) -$($_.Pts)" }) -join (L 'sep.list')
+    $items = @($scored | Where-Object { $(if ($_.Id.StartsWith('CM-')) { $_.Id.Substring(3, 1) } else { $_.Id.Substring(0, 1) }) -ceq $d.Code } | ForEach-Object { "$($_.Id) $(Get-SevName $_.Sev) -$($_.Pts)" }) -join (L 'sep.list')
     if (-not $items) { $items = L 'none' }
     [void]$sb.Append("| $($d.Code) $(L "dim.$($d.Code)") | $($d.Score)/$($d.Max) | $items |`n")
 }
 # Records without a check id and upstream factors are deducted from the total.
 $other = @($scored | Where-Object { $_.Id -eq '-' })
 $sum = 0; foreach ($x in $other) { $sum += [int]$x.Pts }
-$items = @($other | ForEach-Object { "$($_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
+$items = @($other | ForEach-Object { "$(Get-SevName $_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
 [void]$sb.Append("| $(L 'row.other') | $(if ($sum) { "-$sum" } else { 0 }) | $items |`n")
 $sum = 0; foreach ($u in $ups) { $sum += [int]$u.Pts }
-$items = @($ups | ForEach-Object { "$($_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
+$items = @($ups | ForEach-Object { "$(Get-SevName $_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
 [void]$sb.Append("| $(L 'row.upstream') | $(if ($sum) { "-$sum" } else { 0 }) | $items |`n")
 $blk['SCORE_ROWS'] = $sb.ToString()
 
@@ -171,7 +182,7 @@ $sb = New-Object System.Text.StringBuilder; $i = 0
 foreach ($s in $scored) {
     $i++
     $idText = if ($s.Id -eq '-') { L 'check.none' } else { $s.Id }
-    [void]$sb.Append("$i. **[$idText$b$($s.Sev)$b-$($s.Pts)]** $(Format-Where $s.Locs)`n")
+    [void]$sb.Append("$i. **[$idText$b$(Get-SevName $s.Sev)$b-$($s.Pts)]** $(Format-Where $s.Locs)`n")
     $key = "F:$($s.Seq)"
     [void]$sb.Append("   - $(L 'field.problem')$c$($fv["$key|problem"])`n")
     [void]$sb.Append("   - $(L 'field.suggestion')$c$($fv["$key|suggestion"])`n")
@@ -189,7 +200,7 @@ foreach ($u in $ups) {
     $i++
     $tag = (L "upstream.$($u.Type)") + $b + (L "sub.$($u.Sub)")
     if ($u.Impact -and $u.Impact -ne '-') { $tag += $b + (L "impact.$($u.Impact)") }
-    $tag += "$b$($u.Sev)$b-$($u.Pts)"
+    $tag += "$b$(Get-SevName $u.Sev)$b-$($u.Pts)"
     [void]$sb.Append("$i. **[$tag]** $($u.Ref)`n")
     [void]$sb.Append("   - $(L 'field.content')$c$($fv["U:$i|content"])`n")
     if ($fv.ContainsKey("U:$i|code")) { [void]$sb.Append("   - $(L 'field.code')$c$(Format-Codes $fv["U:$i|code"])`n") }
@@ -201,10 +212,11 @@ foreach ($pair in @(@('HIGHLIGHTS', 'H'), @('SKIPPED', 'S'), @('IGNORED', 'I'), 
 }
 $blk['SCORE_JSON'] = "$json`n"
 
-# Code review results (ROOT/step2): plan, skipped plugins and every plugin's normalized cr.txt
-$sevOrder = @('Critical', 'Major', 'Minor', 'Nit')
+# Code review results (ROOT/step2): plan, skipped plugins and every plugin's normalized cr.txt. The comments are counted
+# and sorted by the severity of the standard's scale they were mapped to (M records of findings.txt); the plugin's own
+# severity is shown with a comment when it differs.
 $crDir = Join-Path $Root 'step2'
-$crTotals = @{ Critical = 0; Major = 0; Minor = 0; Nit = 0 }
+$crTotals = [hashtable]::new([StringComparer]::Ordinal)
 if (-not (Test-UserFile (Join-Path $crDir 'plan.tsv'))) {
     $blk['CR_OVERVIEW'] = (L 'cr.not_run') + "`n"; $blk['CR_DETAILS'] = ''; $blk['CR_SKIPPED'] = ''; $crTotalsText = L 'cr.not_run'
 }
@@ -213,7 +225,7 @@ else {
     $results = @()
     foreach ($pl in $plugins) {
         $crFile = Join-Path $crDir "$($pl.Name)/cr.txt"
-        $r = [pscustomobject]@{ Plugin = $pl; Ok = (Test-UserFile $crFile); Summary = ''; Comments = New-Object System.Collections.Generic.List[object]; Highlights = @(); Count = @{ Critical = 0; Major = 0; Minor = 0; Nit = 0 } }
+        $r = [pscustomobject]@{ Plugin = $pl; Ok = (Test-UserFile $crFile); Summary = ''; Comments = New-Object System.Collections.Generic.List[object]; Highlights = @(); Count = [hashtable]::new([StringComparer]::Ordinal) }
         if ($r.Ok) {
             $curC = $null
             foreach ($raw in (Read-Utf8Lines $crFile)) {
@@ -228,9 +240,8 @@ else {
                     'C' {
                         # Comments of other standards keep their number but are hidden.
                         $curC = [pscustomobject]@{ Sev = $a[1]; Locs = $a[2]; Rule = $(if ($a[3]) { $a[3] } else { '-' }); Fields = @{}; Index = $r.Comments.Count; Links = New-Object System.Collections.Generic.List[string]; Reject = $null
-                            Hidden = -not (Test-CommentOwner $cplan $cstd $a[2]) }
+                            Hidden = -not (Test-CommentOwner $cplan $cstd $a[2]); Mapped = '' }
                         $r.Comments.Add($curC)
-                        if (-not $curC.Hidden) { $r.Count[$a[1]]++; $crTotals[$a[1]]++ }
                     }
                 }
             }
@@ -257,14 +268,20 @@ else {
         }
     }
     foreach ($x in $rejects) { $cm = Get-Comment $x.Id; if ($cm) { $cm.Reject = $x.Reason } }
-    $crTotalsText = if ($plugins.Count -eq 0) { L 'cr.no_plugins' } else { (@($sevOrder | ForEach-Object { "$_ $($crTotals[$_])" }) -join (L 'sep.list')) }
+    foreach ($x in $maps) { $cm = Get-Comment $x.Id; if ($cm) { $cm.Mapped = $x.Sev } }
+    foreach ($r in $results) {
+        foreach ($cm in $r.Comments) { if (-not $cm.Hidden -and $cm.Mapped) { $r.Count[$cm.Mapped] = 1 + [int]$r.Count[$cm.Mapped]; $crTotals[$cm.Mapped] = 1 + [int]$crTotals[$cm.Mapped] } }
+    }
+    $crTotalsText = if ($plugins.Count -eq 0) { L 'cr.no_plugins' } else { (@($sevOrder | ForEach-Object { "$(Get-SevName $_) $([int]$crTotals[$_])" }) -join (L 'sep.list')) }
     if ($plugins.Count -eq 0) { $blk['CR_OVERVIEW'] = (L 'cr.no_plugins') + "`n"; $blk['CR_DETAILS'] = '' }
     else {
         $sb = New-Object System.Text.StringBuilder
-        [void]$sb.Append("| $(L 'cr.col.plugin') | $(L 'cr.col.files') | Critical | Major | Minor | Nit | $(L 'cr.col.summary') |`n| --- | --- | --- | --- | --- | --- | --- |`n")
+        $hd = (@($sevOrder | ForEach-Object { "$(Get-SevName $_) | " }) -join ''); $sep = (@($sevOrder | ForEach-Object { ' --- |' }) -join '')
+        [void]$sb.Append("| $(L 'cr.col.plugin') | $(L 'cr.col.files') | $hd$(L 'cr.col.summary') |`n| --- | --- |$sep --- |`n")
         foreach ($r in $results) {
             $summary = if ($r.Ok) { $r.Summary } else { L 'cr.missing' }
-            [void]$sb.Append("| $($r.Plugin.Name) | $($r.Plugin.Files) | $($r.Count.Critical) | $($r.Count.Major) | $($r.Count.Minor) | $($r.Count.Nit) | $summary |`n")
+            $counts = (@($sevOrder | ForEach-Object { "$([int]$r.Count[$_]) | " }) -join '')
+            [void]$sb.Append("| $($r.Plugin.Name) | $($r.Plugin.Files) | $counts$summary |`n")
         }
         $blk['CR_OVERVIEW'] = $sb.ToString()
         $sb = New-Object System.Text.StringBuilder
@@ -275,7 +292,7 @@ else {
             if (-not $r.Ok) { [void]$sb.Append((L 'cr.missing') + "`n"); continue }
             [void]$sb.Append("**$(L 'cr.summary')**$c$($r.Summary)`n`n")
             # comments sorted by severity, keeping the plugin's order within a severity
-            $sorted = @($r.Comments | Where-Object { -not $_.Hidden } | Sort-Object @{ Expression = { [array]::IndexOf($sevOrder, $_.Sev) } }, @{ Expression = { $_.Index } })
+            $sorted = @($r.Comments | Where-Object { -not $_.Hidden } | Sort-Object @{ Expression = { $i = $sevOrder.IndexOf($_.Mapped); if ($i -lt 0) { $sevOrder.Count } else { $i } } }, @{ Expression = { $_.Index } })
             if ($sorted.Count -eq 0) { [void]$sb.Append((L 'cr.no_comments') + "`n") }
             $j = 0
             foreach ($cm in $sorted) {
@@ -283,7 +300,9 @@ else {
                 $ts = " $(L 'cr.tag_sep') "
                 # Deducted: the linked check ids; otherwise rejected, advisory (never deducted) or not judged yet.
                 $status = if ($cm.Links.Count -gt 0) { $cm.Links -join (L 'sep.list') } elseif ($null -ne $cm.Reject) { L 'cr.rejected' } elseif ($r.Plugin.Mode -eq 'advisory') { L 'cr.advisory' } else { L 'cr.unjudged' }
-                [void]$sb.Append("$j. [$($cm.Sev)$ts$($cm.Rule)$ts$status]`n")
+                $sv = if ($cm.Mapped) { Get-SevName $cm.Mapped } else { $cm.Sev }
+                [void]$sb.Append("$j. [$sv$ts$($cm.Rule)$ts$status]`n")
+                if ($cm.Mapped -and $cm.Sev -cne $cm.Mapped) { [void]$sb.Append("   - $(L 'cr.plugin_severity')$c$($cm.Sev)`n") }
                 [void]$sb.Append("   - $(L 'field.problem')$c$($cm.Fields['problem'])`n")
                 if ($cm.Fields.ContainsKey('suggestion')) { [void]$sb.Append("   - $(L 'field.suggestion')$c$($cm.Fields['suggestion'])`n") }
                 if ($null -ne $cm.Reject) { [void]$sb.Append("   - $(L 'cr.reason')$c$($cm.Reject)`n") }
@@ -306,8 +325,8 @@ else {
     $blk['CR_SKIPPED'] = $sb.ToString()
 }
 
-$inl = [ordered]@{ PR_TITLE = $Title; REVIEW_DATE = (Get-Date -Format 'yyyy-MM-dd'); GRADE = $grade; TOTAL = $total
-    CAPPED_NOTE = $(if ($capped -eq '1') { L 'capped_note' } else { '' }); CR_TOTALS = $crTotalsText
+$inl = [ordered]@{ PR_TITLE = $Title; REVIEW_DATE = (Get-Date -Format 'yyyy-MM-dd'); GRADE = (Get-GradeName $grade); TOTAL = $total
+    CAPPED_NOTE = $(if ($capped -eq '1') { (L 'capped_note').Replace('{severity}', (Get-SevName $capSev)).Replace('{grade}', (Get-GradeName $capGrade)) } else { '' }); CR_TOTALS = $crTotalsText
     STANDARD = $(if ($stdLabel) { $stdLabel } else { L 'none' }) + $(if ($commonLabel) { (L 'standard.common').Replace('{common}', $commonLabel) } else { '' }) }
 
 $outSb = New-Object System.Text.StringBuilder

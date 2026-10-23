@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Setup check for the code review scoring workflow: configs/plugins.ini, configs/settings.ini and configs/standards.ini
-# in the project root.
+# Setup check for the code review scoring workflow: configs/plugins.ini and configs/settings.ini (with [rules] root, the
+# rules project of the scoring standards) in the project root.
 # "check" tells the agent what is missing; the missing files are created either by the user with the
 # interactive "wizard", or by the agent with "plugins --none", "plugin" and "review-state config".
 set -euo pipefail
@@ -13,7 +13,9 @@ Commands:
   check    [--platform NAME]
            report whether configs/plugins.ini exists, whether configs/settings.ini sets subagent=true|false
            and, when it is true and --platform is given, whether it has a [NAME] section (give --platform only
-           when the platform has a subagent tool), and whether configs/standards.ini registers a scoring standard.
+           when the platform has a subagent tool), and whether [rules] root of configs/settings.ini names a rules
+           project with an enabled rule (the legacy configs/standards.ini and [points], [deductions] and [grades] of
+           the settings are reported too).
            Prints the execution style. Exit 7 when something is missing,
            or when the old configs.ini / plugins.ini is still in the project root (all commands stop then)
   wizard   [--platform NAME]
@@ -27,7 +29,6 @@ Commands:
 
 Options: --plugins FILE (default: configs/plugins.ini in the project root)
          --config FILE  (default: configs/settings.ini in the project root)
-         --standards FILE (default: configs/standards.ini in the project root; check only)
 Settings in configs/settings.ini are saved with: review-state config --subagent true|false
                                    and review-state config --platform NAME --model TEXT --reasoning TEXT
 After the plugins change, run scripts/link-skills in the project root.
@@ -47,14 +48,14 @@ state_cmd=(bash "$script_dir/review-state.sh")
 [[ $# -eq 0 ]] && { usage; exit 2; }
 cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
-plugins_file="$project_root/configs/plugins.ini" config="$project_root/configs/settings.ini" standards_file="$project_root/configs/standards.ini"
+plugins_file="$project_root/configs/plugins.ini" config="$project_root/configs/settings.ini"
 platform="" name="" pdir="" applies="" mode="mapped" none=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --platform) platform="${2:?--platform needs a value}"; shift 2 ;;
     --plugins) plugins_file="${2:?--plugins needs a value}"; shift 2 ;;
     --config) config="${2:?--config needs a value}"; shift 2 ;;
-    --standards) standards_file="${2:?--standards needs a value}"; shift 2 ;;
+    --standards) echo "error: --standards was removed: the rules come from [rules] root of the settings (--config)" >&2; exit 2 ;;
     --name) name="${2:?--name needs a value}"; shift 2 ;;
     --path) pdir="${2:?--path needs a value}"; shift 2 ;;
     --applies) applies="${2:?--applies needs a value}"; shift 2 ;;
@@ -180,15 +181,41 @@ case "$cmd" in
       if platform_ok; then echo "configs/settings.ini [$platform]: ok $config"
       else echo "configs/settings.ini [$platform]: missing $config"; missing=1; fi
     fi
-    # Scoring needs at least one standard; the user registers them (the wizard does not create standards.ini).
+    # Scoring needs a rules project with an enabled rule; the user sets it up (the wizard does not create it).
+    # configs/standards.ini and the scoring sections of the settings are no longer read.
     nostd=0
-    stds="$( [[ -f "$standards_file" ]] && awk -F'[][]' '/^[ \t]*\[/ { print $2 }' "$standards_file" || true)"
-    if [[ -n "$stds" ]]; then echo "configs/standards.ini: ok ($(grep -c . <<<"$stds") standard(s): $(paste -sd ',' - <<<"$stds" | sed 's/,/, /g')) $standards_file"
-    elif [[ -f "$standards_file" ]]; then echo "configs/standards.ini: no standard registered $standards_file"; nostd=1
-    else echo "configs/standards.ini: missing $standards_file"; nostd=1; fi
+    if [[ -f "$(dirname "$config")/standards.ini" ]]; then
+      echo "legacy: $(dirname "$config")/standards.ini is no longer read; its standards become rules of the rules project ([rules] root)"
+      nostd=1
+    fi
+    old="$( [[ -f "$config" ]] && LC_ALL=C awk '/^[ \t]*\[/ { s = $0; gsub(/^[ \t]*\[|\][ \t\r]*$/, "", s)
+      if ((s == "points" || s == "deductions" || s == "grades") && !(s in seen)) { seen[s] = 1; o = o (o == "" ? "" : ", ") "[" s "]" } }
+      END { print o }' "$config" || true)"
+    if [[ -n "$old" ]]; then
+      echo "legacy: $old of $config are no longer read; points, severities and grades are set in defaults.ini or rule.ini of the rules project"
+      nostd=1
+    fi
+    rroot="$( [[ -f "$config" ]] && LC_ALL=C awk '{ sub(/\r$/, "") } /^[ \t]*\[/ { s = $0; gsub(/^[ \t]*\[|\][ \t]*$/, "", s); next }
+      s == "rules" && /^[ \t]*root[ \t]*=/ { v = $0; sub(/^[^=]*=[ \t]*/, "", v); sub(/[ \t]*$/, "", v); gsub(/^"|"$/, "", v); r = v }
+      END { print r }' "$config" || true)"
+    if [[ -z "$rroot" ]]; then echo "configs/settings.ini [rules] root: missing $config"; nostd=1
+    else
+      [[ "$rroot" = /* || "$rroot" =~ ^[A-Za-z]: ]] || rroot="$(dirname "$config")/$rroot"
+      if [[ ! -f "$rroot/rules.ini" ]]; then echo "configs/settings.ini [rules] root: no rules.ini in $rroot"; nostd=1
+      elif [[ ! -f "$rroot/defaults.ini" ]]; then echo "configs/settings.ini [rules] root: no defaults.ini in $rroot"; nostd=1
+      else
+        rroot="$(abspath "$rroot")"
+        on="$(LC_ALL=C awk '{ sub(/\r$/, "") } /^[ \t]*\[/ { s = $0; gsub(/^[ \t]*\[|\][ \t]*$/, "", s); n[++k] = s; next }
+          k && /^[ \t]*enable[ \t]*=/ { v = $0; sub(/^[^=]*=[ \t]*/, "", v); sub(/[ \t]*$/, "", v); gsub(/^"|"$/, "", v); on[k] = (v == "true") }
+          END { for (i = 1; i <= k; i++) if (on[i]) print n[i] }' "$rroot/rules.ini")"
+        if [[ -n "$on" ]]; then echo "configs/settings.ini [rules] root: ok ($(grep -c . <<<"$on") enabled rule(s): $(paste -sd ',' - <<<"$on" | sed 's/,/, /g')) $rroot"
+        else echo "configs/settings.ini [rules] root: no enabled rule in $rroot/rules.ini"; nostd=1; fi
+      fi
+    fi
     if [[ $nostd -eq 1 ]]; then
-      echo "next: ask the user to register their scoring standards: copy configs/standards.example.ini to configs/standards.ini"
-      echo "      and add the standard documents (template: templates/<language>/scoring-rule-template.md); never create them yourself"
+      echo "next: ask the user to set up their scoring rules: a rules project (e.g. a clone of code-review-scoring-rules) with"
+      echo "      rules.ini, defaults.ini and a rule.ini and document per rule, and [rules] root in configs/settings.ini naming"
+      echo "      its folder (template: templates/<language>/scoring-rule-template.md); never create them yourself"
     fi
     if [[ $missing -eq 1 ]]; then
       echo "next: ask the user whether to create the missing settings with the wizard in a terminal"

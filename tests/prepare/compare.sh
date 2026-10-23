@@ -9,15 +9,16 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 2
 scripts="../../skills/code-review-scoring-code-analysis/scripts"
 
 cases=(
-  "--input pr.diff --config none.ini --standards standards.ini"
-  "--input no-test.diff --mode scan --config none.ini --standards standards.ini"
-  "--input pr.diff --mode scan --config none.ini --standards standards.ini --standard common"
-  "--input pr.diff --mode summary --config none.ini --standards standards-noscan.ini"
-  "--input pr.diff --mode scan --config none.ini --standards standards-noscan.ini"
+  "--input pr.diff --config settings.ini"
+  "--input no-test.diff --mode scan --config settings.ini"
+  "--input pr.diff --mode scan --config settings.ini --standard common"
+  "--input pr.diff --mode summary --config settings-noscan.ini"
+  "--input pr.diff --mode scan --config settings-noscan.ini"
+  "--input pr.diff --mode summary --config ../score/settings.ini --standard scaled"
   "--input pr.diff --mode scan --config none.ini --scan legacy.tsv"
   "--input pr.diff --mode scan --config none.ini --scan bad.tsv"
-  "--input pr.diff --config none.ini --standards missing.ini"
-  "--input pr.diff --config none.ini --standards standards.ini --standard nope"
+  "--input pr.diff --config none.ini"
+  "--input pr.diff --config settings.ini --standard nope"
 )
 
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"
@@ -27,7 +28,7 @@ psargs() {
   local a
   for a in "$@"; do
     case "$a" in
-      --input) echo -InputPath ;; --mode) echo -Mode ;; --config) echo -Config ;; --standards) echo -Standards ;;
+      --input) echo -InputPath ;; --mode) echo -Mode ;; --config) echo -Config ;;
       --standard) echo -Standard ;; --scan) echo -Scan ;; *) echo "$a" ;;
     esac
   done
