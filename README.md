@@ -244,7 +244,8 @@ To change them, edit this file directly, or run
 `review-state config --platform <name> --model "<model>" --reasoning "<level>"`.
 Before the first use, you can also copy the template
 `configs/settings.example.ini` to `configs/settings.ini`, then uncomment and
-edit the sections you need.
+edit the sections you need. Every section and key is explained in
+[docs/en/configurations.md](docs/en/configurations.md).
 
 > [!WARNING]
 > **Known limitations of GitHub Copilot**
@@ -304,8 +305,10 @@ configs/                                  # configuration (only *.example.ini is
   settings.example.ini                    # template for execution mode, subagent model and reasoning, report language and the rules project (settings.ini is generated on first use)
   plugins.example.ini                     # template for the plugin skill list (copy to plugins.ini)
 docs/
+  en/configurations.md                    # every section and key of settings.ini and plugins.ini
   en/notices.md                           # notices (scoring standards, GitHub Copilot compatibility)
   zh-tw/README.md                         # Traditional Chinese version of this README
+  zh-tw/configurations.md                 # Traditional Chinese version of the configuration guide
   zh-tw/notices.md                        # Traditional Chinese version of the notices
 templates/                                # one folder per language; see "Report language"
   en/                                     # English
@@ -431,17 +434,17 @@ scoring workflow read the same document:
 ### Using the existing scoring standards
 
 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
-is a rules project. It currently provides the following rules. Each rule
-folder has one `rule.ini` and the standard document (`.md`) and scan rule file
-(`.tsv`) in two languages, English (`en/`) and Traditional Chinese
-(`zh-tw/`). The `rule.ini` of each rule uses the Traditional Chinese files; to
-use English, change `zh-tw/` to `en/` in its `standard` and `scan`. A standard
-does not have to match the report language:
+is a rules project. It currently provides the following rules, each in two
+rule folders, English (`en/`) and Traditional Chinese (`zh-tw/`), with their
+own `rule.ini`, standard document (`.md`) and scan rule file (`.tsv`), all
+written in the language of the folder. Its `rules.ini` registers the
+Traditional Chinese folders; to use English, change `zh-tw` to `en` in their
+`path`. A standard does not have to match the report language:
 
 | Rule | Type | Applies to | Rule folder |
 | --- | --- | --- | --- |
-| `springboot-3` | Framework rule | Java / Spring Boot 3 projects | `springboot3-rule/` |
-| `common` | Common rule | Other files, e.g. README, CI, Dockerfile | `common-rule/` |
+| `springboot-3` | Framework rule | Java / Spring Boot 3 projects | `springboot3-rule/<language>/` |
+| `common` | Common rule | Other files, e.g. README, CI, Dockerfile | `common-rule/<language>/` |
 
 1. Clone the rules project anywhere on your machine:
 
@@ -450,7 +453,8 @@ does not have to match the report language:
    ```
 
 2. Add a `[rules]` section to `configs/settings.ini` of this project, with
-   `root` pointing to the cloned folder (see `configs/settings.example.ini`):
+   `root` pointing to the cloned folder (see
+   [docs/en/configurations.md](docs/en/configurations.md#the-rules-section)):
 
    ```ini
    [rules]
@@ -630,7 +634,8 @@ You do not need to create `configs/plugins.ini` in advance: the first full
 workflow run guides you through it in the setup check (see
 [Setup check](#setup-check-before-every-full-workflow-run)). You can also run
 `setup wizard` first, or copy the template `configs/plugins.example.ini` and
-edit it.
+edit it; see [docs/en/configurations.md](docs/en/configurations.md#pluginsini)
+for every key.
 
 `link-skills` syncs the skill directories each tool reads from `skills/` and
 `configs/plugins.ini`: it creates missing links and removes the links of

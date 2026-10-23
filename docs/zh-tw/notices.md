@@ -10,7 +10,7 @@
 
 ## 評分標準
 
-- **規則專案的位置因人而異**：`configs/settings.ini` 不進版控，規則專案（`rules.ini`、`defaults.ini` 與各規則目錄）放在本專案以外。換電腦或換人時，請各自在 `configs/settings.ini` 的 `[rules]` 區段設定 `root`（見 `configs/settings.example.ini`）；Windows 的路徑請使用斜線。
+- **規則專案的位置因人而異**：`configs/settings.ini` 不進版控，規則專案（`rules.ini`、`defaults.ini` 與各規則目錄）放在本專案以外。換電腦或換人時，請各自在 `configs/settings.ini` 的 `[rules]` 區段設定 `root`（見 [configurations.md](configurations.md#rules-區段)）；Windows 的路徑請使用斜線。
 - **舊的評分設定不再讀取**：3.0.0 起，`configs/standards.ini` 與 `configs/settings.ini` 的 `[points]`、`[deductions]`、`[grades]` 區段由規則專案取代。setup check 會以 `legacy:` 列出這些設定並停止，請搬到 `rules.ini`、`defaults.ini` 或各規則的 `rule.ini` 後刪除。
 - **評分途中不要修改標準**：步驟 1 會把標準的內容與 sha256 存成快照，步驟 3～5 都以快照評分。標準文件、掃描規則檔、該規則的 `rule.ini` 或 `defaults.ini` 在評分途中被修改時，狀態腳本會拒絕繼續；請還原修改，或以 `review-state init --reset` 重新開始。
 - **修改標準後先執行 lint**：評分流程不執行 lint，格式有誤時評分腳本只會停止並提示。修改後執行 `standard lint`，並以 `standard diff <舊版> <新版>` 確認實際改變的檢查項；lint 只能檢查格式，規則內容是否正確仍需人工審查。
