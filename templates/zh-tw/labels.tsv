@@ -3,7 +3,7 @@
 language	Traditional Chinese with Taiwan usage
 none	無
 title.missing	（未提供）
-capped_note	（有 {severity} 扣分項，等級上限為 {grade}）
+capped_note	（有 Critical 扣分項，等級上限為 B）
 standard.common	；通用檔案使用 {common}
 sep.list	、
 sep.bracket	｜
@@ -55,7 +55,6 @@ cr.tag_sep	|
 cr.upstream	上游因素
 cr.rejected	不成立
 cr.reason	不成立原因
-cr.plugin_severity	外掛嚴重度
 cr.advisory	僅供參考
 cr.unjudged	未判定
 cr.code	程式碼位置

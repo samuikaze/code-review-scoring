@@ -45,13 +45,6 @@ function link_comments(    r, i, k, n, src, e, hdr, lbl) {
         }
     }
     for (r = 1; r <= nxr; r++) if ((hdr = comment_hdr(xid[r])) != "") crej[hdr] = xr[r]
-    # The severity of the standard's scale that step 3 mapped each comment to (M records), counted per plugin.
-    for (r = 1; r <= nmr; r++) if ((hdr = comment_hdr(mid[r])) != "") cmap[hdr] = msev[r]
-    for (i = 1; i <= np; i++) for (r = 1; r <= nc[i]; r++) {
-        hdr = i SUBSEP r
-        if ((hdr in chide) || !(hdr in cmap)) continue
-        cnt[i, cmap[hdr]]++; tot[cmap[hdr]]++
-    }
 }
 
 function comment_hdr(id,    p, n) {
@@ -66,12 +59,7 @@ function where(locs) { return locs == "-" ? L("loc.pr_wide") : codes(locs) }
 # Dimension of a check id: its first letter, or the letter after CM- for the common standard (CM-B1 is B).
 function dimof(id) { return (id ~ /^CM-/) ? substr(id, 4, 1) : substr(id, 1, 1) }
 
-# The severity scale and grades of the standard (score.tsv): position (1 = the most severe) and display names.
-function sevrank(s) { return (s in srank) ? srank[s] : nsv + 1 }
-function sevname(s) { return (s in sname) ? sname[s] : s }
-function gradename(g) { return (g in gname) ? gname[g] : g }
-# The severity a comment was mapped to ("" when it has no M record; reading cmap directly would add the key).
-function mapped(hdr) { return (hdr in cmap) ? cmap[hdr] : "" }
+function sevrank(s) { return s == "Critical" ? 1 : (s == "Major" ? 2 : (s == "Minor" ? 3 : 4)) }
 
 # Whether a code review comment with these locations belongs to the standard cstd of the review plan cplan: one of its
 # files is a file of cstd, or none of its files is in the plan (a comment on the whole PR, location -) and cstd is the
@@ -123,7 +111,7 @@ function load_cr(    l, a, n, i, f, t, cur, key, val) {
             else if (a[1] == "C") {
                 nc[i]++; cur = i SUBSEP nc[i]
                 csev[cur] = a[2]; cloc[cur] = a[3]; crule[cur] = (a[4] == "" ? "-" : a[4])
-                if (!cm_mine(a[3])) chide[cur] = 1
+                if (cm_mine(a[3])) { cnt[i, a[2]]++; tot[a[2]]++ } else chide[cur] = 1
             }
         }
         close(f)
@@ -137,24 +125,17 @@ function comment_status(hdr, i) {
     return pmode[i] == "advisory" ? L("cr.advisory") : L("cr.unjudged")
 }
 
-# The comments are counted and sorted by the severity of the standard's scale they were mapped to (M records of
-# findings.txt); the plugin's own severity is shown with a comment when it differs.
-function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, ts, s, hd, sep, sv) {
-    b = L("sep.bracket"); c = L("sep.colon")
+function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, ts, sevs, s) {
+    b = L("sep.bracket"); c = L("sep.colon"); split("Critical Major Minor Nit", sevs, " ")
     if (crstate == "not_run") { blk["CR_OVERVIEW"] = L("cr.not_run") "\n"; blk["CR_DETAILS"] = ""; inl["CR_TOTALS"] = L("cr.not_run"); blk["CR_SKIPPED"] = ""; return }
     out = ""
-    for (k = 1; k <= nsv; k++) { s = scode[k]; out = out (out == "" ? "" : L("sep.list")) sevname(s) " " (tot[s] + 0) }
+    for (k = 1; k <= 4; k++) { s = sevs[k]; out = out (out == "" ? "" : L("sep.list")) s " " (tot[s] + 0) }
     inl["CR_TOTALS"] = (np == 0) ? L("cr.no_plugins") : out
     if (np == 0) { blk["CR_OVERVIEW"] = L("cr.no_plugins") "\n"; blk["CR_DETAILS"] = "" }
     else {
-        hd = ""; sep = ""
-        for (k = 1; k <= nsv; k++) { hd = hd sevname(scode[k]) " | "; sep = sep " --- |" }
-        out = "| " L("cr.col.plugin") " | " L("cr.col.files") " | " hd L("cr.col.summary") " |\n| --- | --- |" sep " --- |\n"
-        for (i = 1; i <= np; i++) {
-            out = out "| " pname[i] " | " pfiles[i] " | "
-            for (k = 1; k <= nsv; k++) out = out (cnt[i, scode[k]] + 0) " | "
-            out = out (pok[i] ? psum[i] : L("cr.missing")) " |\n"
-        }
+        out = "| " L("cr.col.plugin") " | " L("cr.col.files") " | Critical | Major | Minor | Nit | " L("cr.col.summary") " |\n| --- | --- | --- | --- | --- | --- | --- |\n"
+        for (i = 1; i <= np; i++)
+            out = out "| " pname[i] " | " pfiles[i] " | " (cnt[i, "Critical"] + 0) " | " (cnt[i, "Major"] + 0) " | " (cnt[i, "Minor"] + 0) " | " (cnt[i, "Nit"] + 0) " | " (pok[i] ? psum[i] : L("cr.missing")) " |\n"
         blk["CR_OVERVIEW"] = out
         out = ""
         for (i = 1; i <= np; i++) {
@@ -164,13 +145,11 @@ function cr_blocks(    i, j, k, out, b, c, order, m, tmp, hdr, ts, s, hd, sep, s
             # comments sorted by severity, keeping the plugin's order within a severity
             m = 0; ts = " " L("cr.tag_sep") " "
             for (j = 1; j <= nc[i]; j++) if (!((i SUBSEP j) in chide)) { m++; order[m] = j }
-            for (j = 2; j <= m; j++) { tmp = order[j]; k = j - 1; while (k >= 1 && sevrank(mapped(i SUBSEP order[k])) > sevrank(mapped(i SUBSEP tmp))) { order[k + 1] = order[k]; k-- } order[k + 1] = tmp }
+            for (j = 2; j <= m; j++) { tmp = order[j]; k = j - 1; while (k >= 1 && sevrank(csev[i, order[k]]) > sevrank(csev[i, tmp])) { order[k + 1] = order[k]; k-- } order[k + 1] = tmp }
             if (m == 0) out = out L("cr.no_comments") "\n"
             for (j = 1; j <= m; j++) {
                 hdr = i SUBSEP order[j]
-                sv = (hdr in cmap) ? sevname(cmap[hdr]) : csev[hdr]
-                out = out j ". [" sv ts crule[hdr] ts comment_status(hdr, i) "]\n"
-                if ((hdr in cmap) && csev[hdr] != cmap[hdr]) out = out "   - " L("cr.plugin_severity") c csev[hdr] "\n"
+                out = out j ". [" csev[hdr] ts crule[hdr] ts comment_status(hdr, i) "]\n"
                 out = out "   - " L("field.problem") c cv[hdr, "problem"] "\n"
                 if ((hdr, "suggestion") in cv) out = out "   - " L("field.suggestion") c cv[hdr, "suggestion"] "\n"
                 if (hdr in crej) out = out "   - " L("cr.reason") c crej[hdr] "\n"
@@ -212,8 +191,6 @@ function load_findings(    l, t, a, n, key, val) {
             nu++; cur = "U:" nu; ut[nu] = a[2]; us[nu] = a[3]; ui[nu] = a[4]; usev[nu] = a[5]; ur[nu] = a[6]
         } else if (t == "X") {
             nxr++; xid[nxr] = a[2]; xr[nxr] = a[3]
-        } else if (t == "M") {
-            nmr++; mid[nmr] = a[2]; msev[nmr] = a[3]
         } else if (t == "S") {
             nl["S"]++; lt["S", nl["S"]] = a[2] L("sep.colon") a[3]
         } else if (t == "H" || t == "N" || t == "I" || t == "R") {
@@ -237,9 +214,6 @@ BEGIN {
         if (a[1] == "total") total = a[2]
         else if (a[1] == "grade") grade = a[2]
         else if (a[1] == "capped") capped = a[2]
-        else if (a[1] == "cap") { capsev = a[2]; capgrade = a[3] }
-        else if (a[1] == "severity") { scode[++nsv] = a[2]; srank[a[2]] = nsv; sname[a[2]] = a[3] }
-        else if (a[1] == "gradedef") gname[a[2]] = a[3]
         else if (a[1] == "dim") { nd++; dcode[nd] = a[2]; dsc[nd] = a[3]; dmx[nd] = a[4] }
         else if (a[1] == "finding") { nf++; sid[nf] = a[2]; ssev[nf] = a[3]; spts[nf] = a[4]; sloc[nf] = a[5]; sseq[nf] = a[6] }
         else if (a[1] == "upstream") { nus++; upts[a[2]] = a[4] }
@@ -247,7 +221,7 @@ BEGIN {
         else if (a[1] == "common") cmlabel = a[2] " " a[3]
     }
     close(scoretsv)
-    if (nd != 7 || grade == "" || !nsv) fail("score.tsv is missing or incomplete; run the scoring skill first")
+    if (nd != 7 || grade == "") fail("score.tsv is missing or incomplete; run the scoring skill first")
     if (nf != nfr || nus != nu) fail("findings.txt and score.tsv list different records; rerun the scoring skill")
     for (i = 1; i <= nf; i++) if (frid[sseq[i]] != sid[i]) fail("finding " sid[i] " of score.tsv does not match findings.txt; rerun the scoring skill")
 
@@ -266,20 +240,20 @@ BEGIN {
     blk["SCORE_ROWS"] = ""
     for (k = 1; k <= nd; k++) {
         items = ""
-        for (i = 1; i <= nf; i++) if (dimof(sid[i]) == dcode[k]) items = items (items == "" ? "" : L("sep.list")) sid[i] " " sevname(ssev[i]) " -" spts[i]
+        for (i = 1; i <= nf; i++) if (dimof(sid[i]) == dcode[k]) items = items (items == "" ? "" : L("sep.list")) sid[i] " " ssev[i] " -" spts[i]
         blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " dcode[k] " " L("dim." dcode[k]) " | " dsc[k] "/" dmx[k] " | " (items == "" ? L("none") : items) " |\n"
     }
     # Records without a check id and upstream factors are deducted from the total.
     items = ""; sum = 0
-    for (i = 1; i <= nf; i++) if (sid[i] == "-") { items = items (items == "" ? "" : L("sep.list")) sevname(ssev[i]) " -" spts[i]; sum += spts[i] }
+    for (i = 1; i <= nf; i++) if (sid[i] == "-") { items = items (items == "" ? "" : L("sep.list")) ssev[i] " -" spts[i]; sum += spts[i] }
     blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " L("row.other") " | " (sum ? "-" sum : 0) " | " (items == "" ? L("none") : items) " |\n"
     items = ""; sum = 0
-    for (i = 1; i <= nu; i++) { items = items (items == "" ? "" : L("sep.list")) sevname(usev[i]) " -" upts[i]; sum += upts[i] }
+    for (i = 1; i <= nu; i++) { items = items (items == "" ? "" : L("sep.list")) usev[i] " -" upts[i]; sum += upts[i] }
     blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " L("row.upstream") " | " (sum ? "-" sum : 0) " | " (items == "" ? L("none") : items) " |\n"
     b = L("sep.bracket"); c = L("sep.colon"); out = ""
     for (i = 1; i <= nf; i++) {
         key = "F:" sseq[i]
-        out = out i ". **[" (sid[i] == "-" ? L("check.none") : sid[i]) b sevname(ssev[i]) b "-" spts[i] "]** " where(sloc[i]) "\n"
+        out = out i ". **[" (sid[i] == "-" ? L("check.none") : sid[i]) b ssev[i] b "-" spts[i] "]** " where(sloc[i]) "\n"
         out = out "   - " L("field.problem") c fv[key, "problem"] "\n"
         out = out "   - " L("field.suggestion") c fv[key, "suggestion"] "\n"
         if ((key, "assumption") in fv) out = out "   - " L("field.assumption") c fv[key, "assumption"] "\n"
@@ -289,7 +263,7 @@ BEGIN {
     blk["SUGGESTIONS"] = bullets("N")
     out = ""
     for (i = 1; i <= nu; i++) {
-        tag = L("upstream." ut[i]) b L("sub." us[i]) ((ui[i] != "" && ui[i] != "-") ? b L("impact." ui[i]) : "") b sevname(usev[i]) b "-" upts[i]
+        tag = L("upstream." ut[i]) b L("sub." us[i]) ((ui[i] != "" && ui[i] != "-") ? b L("impact." ui[i]) : "") b usev[i] b "-" upts[i]
         out = out i ". **[" tag "]** " ur[i] "\n"
         out = out "   - " L("field.content") c fv["U:" i, "content"] "\n"
         if (("U:" i, "code") in fv) out = out "   - " L("field.code") c codes(fv["U:" i, "code"]) "\n"
@@ -305,8 +279,8 @@ BEGIN {
     link_comments()
     cr_blocks()
 
-    inl["PR_TITLE"] = title; inl["REVIEW_DATE"] = today; inl["GRADE"] = gradename(grade); inl["TOTAL"] = total
-    inl["CAPPED_NOTE"] = (capped == 1) ? replace_all(replace_all(L("capped_note"), "{severity}", sevname(capsev)), "{grade}", gradename(capgrade)) : ""
+    inl["PR_TITLE"] = title; inl["REVIEW_DATE"] = today; inl["GRADE"] = grade; inl["TOTAL"] = total
+    inl["CAPPED_NOTE"] = (capped == 1) ? L("capped_note") : ""
     inl["STANDARD"] = (stdlabel == "" ? L("none") : stdlabel) (cmlabel == "" ? "" : replace_all(L("standard.common"), "{common}", cmlabel))
 }
 

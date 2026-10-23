@@ -1,7 +1,7 @@
 <!--
 Prompt of the scan rule generator (generate mode of code-review-scoring-standard). Fill every placeholder, remove this
 comment, and pass the rest unchanged:
-  {{STANDARD}}   name of the standard (its section in rules.ini of the rules project)
+  {{STANDARD}}   section name of the standard in configs/standards.ini
   {{DOC}}        absolute path of the standard document
   {{COMMON}}     "yes" for the common standard (role="common", check ids CM-…), otherwise "no"
   {{EXISTING}}   absolute path of the current scan rule file, or "none"

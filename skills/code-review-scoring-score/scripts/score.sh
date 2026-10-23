@@ -19,16 +19,16 @@ Usage: score.sh [--root DIR] [options]
   -o, --out-dir DIR    where score.tsv / score.json are written (default: ROOT/step4 or the findings dir)
       --check          validate findings.txt only (same checks, exit codes 0/1/2/3), write nothing; step 3 runs it
                        before reporting success
-      --config FILE    the settings whose [rules] root names the rules project (default: configs/settings.ini in the
-                       project root). The points, severity scale, grades and merge come from the rule.ini of the
-                       standard or defaults.ini of the rules project
-      --standard NAME  the scoring standard (an enabled rule of rules.ini); default: the only enabled framework rule, or
-                       the common rule when no framework rule is enabled. Its check items and those of the common
-                       rule are used
+      --config FILE    scoring settings: [points], [deductions] (incl. merge) and [grades] (default: configs/settings.ini in the
+                       project root; settings that are not given keep the defaults)
+      --standard NAME  the scoring standard (a section of standards.ini); default: the only framework standard, or the
+                       common standard when no framework standard is registered. Its check items, those of the common
+                       standard and its points overrides are used
+      --standards FILE the registered standards (default: configs/standards.ini in the project root)
   -h, --help           show this help
 
 Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun),
-            2 bad arguments, invalid rules project or standards (run standard lint), 3 spec-context.md still has unresolved inputs or questions.
+            2 bad arguments, invalid scoring settings or standards (run standard lint), 3 spec-context.md still has unresolved inputs or questions.
 USAGE
 }
 
@@ -36,7 +36,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Project root (two levels above the physical skill folder) holds tmp/, reports/ and configs/settings.ini.
 project_root="$(dirname "$(dirname "$(cd "$script_dir/.." && pwd -P)")")"
 skills_dir="$(dirname "$(cd "$script_dir/.." && pwd -P)")"
-standard=""
+standards="$project_root/configs/standards.ini" standard=""
 root="" findings="" diff="" git_range="" repo="." out_dir="" cplan="" cstd="" sub="" config="$project_root/configs/settings.ini" crdir="" check=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -48,7 +48,7 @@ while [[ $# -gt 0 ]]; do
     -o|--out-dir) out_dir="${2:?--out-dir needs a value}"; shift 2 ;;
     --config) config="${2:?--config needs a value}"; shift 2 ;;
     --standard) standard="${2:?--standard needs a value}"; shift 2 ;;
-    --standards) echo "error: --standards was removed: the rules come from [rules] root of the settings (--config)" >&2; exit 2 ;;
+    --standards) standards="${2:?--standards needs a value}"; shift 2 ;;
     --check) check=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
@@ -95,13 +95,12 @@ fi
 idx=""
 tmp="$(mktemp)" rules="$(mktemp)"
 trap 'rm -f "$tmp" "$rules" ${idx:+"$idx"}' EXIT
-# The standard as "standard resolve" prints it (code-review-scoring/scripts/standard.sh): check items, points, severity
-# scale and grades. With the review plan, the standard as step 1 planned it (the workflow refuses to go on when it has
-# changed since).
+# Check items and points overrides of the standard (code-review-scoring/scripts/standard.sh resolve); with the review
+# plan, the standard as step 1 planned it (the workflow refuses to go on when it has changed since).
 if [[ -n "$cstd" ]]; then
   tr -d '\r' < "$root/step1/standards/$cstd.resolve" > "$rules"
 else
-  bash "$skills_dir/code-review-scoring/scripts/standard.sh" resolve --settings "$config" ${standard:+"$standard"} \
+  bash "$skills_dir/code-review-scoring/scripts/standard.sh" resolve --standards "$standards" --settings "$config" ${standard:+"$standard"} \
     > "$rules" || exit 2  # resolve has printed the error
 fi
 if [[ -n "$diff" || -n "$git_range" ]]; then
@@ -119,7 +118,7 @@ else
 fi
 
 [[ $check -eq 1 ]] || rm -f "$out_dir/score.tsv" "$out_dir/score.json"
-LC_ALL=C awk -v rules="$rules" -v idxfile="$idx" -v crdir="$crdir" -v cplan="$cplan" -v cstd="$cstd" \
+LC_ALL=C awk -v rules="$rules" -v idxfile="$idx" -v config="$config" -v crdir="$crdir" -v cplan="$cplan" -v cstd="$cstd" \
   -v tsvout="$out_dir/score.tsv" -v jsonout="$out_dir/score.json" -v checkonly="$check" \
   -f "$script_dir/lib/score.awk" "$findings"
 [[ $check -eq 1 ]] || echo "wrote ${out_dir}/score.tsv and ${out_dir}/score.json"

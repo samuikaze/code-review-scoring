@@ -17,8 +17,7 @@ Uses the same GNU-style arguments as review-state.sh so subagent prompts work on
   review-state.ps1 cr-plan [--plugins FILE] [--root DIR]
   review-state.ps1 prompt --step 1|2|3 [--plugin NAME] [--standard NAME] [--inline] [--root DIR]
   review-state.ps1 set --step N [--plugin NAME] [--standard NAME] --state working|pending|success|failed [--message TEXT] [--root DIR]
-Every command also takes --config FILE (default: configs/settings.ini in the project root; its [rules] root names the
-rules project of the scoring standards).
+Every command also takes --standards FILE (default: configs/standards.ini in the project root).
   review-state.ps1 config [--subagent true|false] [--config FILE]
   review-state.ps1 config --platform NAME [--model TEXT --reasoning TEXT] [--config FILE]
 
@@ -44,7 +43,7 @@ Gates enforced by "set":
            (step 1: the review plan ROOT/step1/standards/plan.tsv; step 3: findings.txt must pass the scoring
            checks of score -Check)
 Steps 3 to 5 also refuse to go on when a scoring standard changed after step 1 planned the review (its document,
-rule.ini, scan rules or the defaults.ini of the rules project).
+scan rules or settings in standards.ini).
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
@@ -65,14 +64,13 @@ $skillsDir = Split-Path -Parent $skillDir
 $argv = @($args)
 if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
-$opt = @{ root = (Join-Path $projectRoot 'tmp'); step = ''; plugin = ''; standard = ''; state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
+$opt = @{ root = (Join-Path $projectRoot 'tmp'); step = ''; plugin = ''; standard = ''; standards = (Join-Path $projectRoot 'configs/standards.ini'); state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
     config = (Join-Path $projectRoot 'configs/settings.ini'); subagent = ''; platform = ''; model = ''; reasoning = ''
     plugins = (Join-Path $projectRoot 'configs/plugins.ini'); inline = $null; retry = $false }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -eq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--config)' }
-    if ($a -in '--root', '--step', '--plugin', '--standard', '--state', '--message', '--git', '--repo', '--title', '--config', '--plugins', '--platform', '--model', '--reasoning', '--subagent') {
+    if ($a -in '--root', '--step', '--plugin', '--standard', '--standards', '--state', '--message', '--git', '--repo', '--title', '--config', '--plugins', '--platform', '--model', '--reasoning', '--subagent') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]
         $i += 2
@@ -259,7 +257,7 @@ function Test-CrFile([string]$Path) {
         switch -CaseSensitive ($a[0]) {
             'C' {
                 $script:rec = 'C'; $script:recLine = $no
-                if (-not $a[1]) { $problems.Add("  - line ${no}: C record needs the severity the plugin gave") }
+                if ($a[1] -cnotin 'Critical', 'Major', 'Minor', 'Nit') { $problems.Add("  - line ${no}: severity must be Critical, Major, Minor or Nit") }
                 if (-not $a[2]) { $problems.Add("  - line ${no}: C record needs locations (file:line, comma-separated) or -") }
             }
             'S' { if (-not $a[1]) { $problems.Add("  - line ${no}: S record has no text") } else { $summary++ } }
@@ -282,13 +280,13 @@ function Invoke-Child([string]$Path, [string[]]$ArgList) {
 function Invoke-Tool([string]$Skill, [string]$Script, [string[]]$ArgList) {
     return Invoke-Child (Join-Path $skillsDir "$Skill/scripts/$Script.ps1") $ArgList
 }
-# The scoring standard $Name must be the one step 1 planned with: its document, rule.ini, scan rules and defaults.ini (the
-# resolve output without the paths, which differ between shells) must not have changed.
+# The scoring standard $Name must be the one step 1 planned with: its document, scan rules and settings in
+# standards.ini (the resolve output without the paths, which differ between shells) must not have changed.
 function Get-ResKey([string]$Text) {
     $lines = foreach ($l in ($Text.Replace("`r", '') -split "`n")) {
         $f = $l.Split("`t")
         if (($f[0] -ceq 'standard' -or $f[0] -ceq 'common') -and $f.Count -gt 4) { $f[4] = '' }
-        elseif (($f[0] -ceq 'scan' -or $f[0] -ceq 'ruleini' -or $f[0] -ceq 'defaults') -and $f.Count -gt 1) { $f[1] = '' }
+        elseif ($f[0] -ceq 'scan' -and $f.Count -gt 1) { $f[1] = '' }
         $f -join "`t"
     }
     return ($lines -join "`n").TrimEnd("`n")
@@ -296,14 +294,13 @@ function Get-ResKey([string]$Text) {
 function Assert-StdGate([string]$Name) {
     $saved = P "step1/standards/$Name.resolve"
     if (-not [IO.File]::Exists($saved)) { Stop-Refused "missing $saved; step 1 has not planned the review" }
-    $r = Invoke-Child (Join-Path $PSScriptRoot 'standard.ps1') @('resolve', '--settings', (Resolve-UserPath $opt.config), $Name)
+    $r = Invoke-Child (Join-Path $PSScriptRoot 'standard.ps1') @('resolve', '--standards', (Resolve-UserPath $opt.standards), '--settings', (Resolve-UserPath $opt.config), $Name)
     if ($r.Code -ne 0) { Stop-Refused "the scoring standard $Name cannot be read: $(($r.Text -split "`n")[0])" }
     if ((Get-ResKey (Read-Utf8Text $saved)) -cne (Get-ResKey $r.Text)) {
-        Stop-Refused "the scoring standard $Name changed after step 1 planned the review (its document, rule.ini, scan rules or defaults.ini); restore it, or start the review again (init --reset)"
+        Stop-Refused "the scoring standard $Name changed after step 1 planned the review (its document, scan rules or settings in standards.ini); restore it, or start the review again (init --reset)"
     }
 }
-# request.md records the scoring standards of the review: name, version, sha256 and path of each document, and the
-# sha256 and path of the settings in effect (the rule.ini of each rule and defaults.ini).
+# request.md records the scoring standards of the review: name, version, sha256 and path of each document.
 function Write-RequestStandards {
     $out = New-Object System.Collections.Generic.List[string]
     $skip = $false
@@ -315,13 +312,10 @@ function Write-RequestStandards {
     while ($out.Count -gt 0 -and -not $out[$out.Count - 1]) { $out.RemoveAt($out.Count - 1) }
     $out.Add(''); $out.Add('## Scoring standards')
     foreach ($n in (Get-StdNames)) {
-        $o = ''
         foreach ($l in (Read-Utf8Lines (P "step1/standards/$n.resolve"))) {
             $f = $l.Split("`t")
-            if ($f[0] -ceq 'standard') { $out.Add("- ${n}: $($f[1]) $($f[2]) $($f[3]) $($f[4])"); $o = '' }
-            elseif ($f[0] -ceq 'common') { $out.Add("  - common standard: $($f[1]) $($f[2]) $($f[3]) $($f[4])"); $o = 'common ' }
-            elseif ($f[0] -ceq 'ruleini') { $out.Add("  - ${o}rule.ini: $($f[2]) $($f[1])") }
-            elseif ($f[0] -ceq 'defaults') { $out.Add("  - defaults.ini: $($f[2]) $($f[1])") }
+            if ($f[0] -ceq 'standard') { $out.Add("- ${n}: $($f[1]) $($f[2]) $($f[3]) $($f[4])") }
+            elseif ($f[0] -ceq 'common') { $out.Add("  - common standard: $($f[1]) $($f[2]) $($f[3]) $($f[4])") }
         }
     }
     Write-Utf8File (P 'request.md') (($out -join "`n") + "`n")
@@ -331,7 +325,7 @@ function Get-StdDoc([string]$Name, [string]$Kind) {
     foreach ($l in (Read-Utf8Lines (P "step1/standards/$Name.resolve"))) { $f = $l.Split("`t"); if ($f[0] -ceq $Kind) { return $f[4] } }
     return ''
 }
-# Options that the prompts pass on to the scripts: --config when it is not the default.
+# Options that the prompts pass on to the scripts: --standards and --config when they are not the defaults.
 function Get-FileOpt([string]$Name, [string]$File, [string]$Default) {
     $f = Resolve-UserPath $File
     if ($f -ceq (Resolve-UserPath $Default)) { return '' }
@@ -354,6 +348,7 @@ function Get-ReportLanguage {
 function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
     $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"; $sDoc = ''; $cDoc = 'none'; $lang = ''
     if ($N -ge $CR) { $lang = Get-ReportLanguage }
+    $sOpt = Get-FileOpt '--standards' $opt.standards (Join-Path $projectRoot 'configs/standards.ini')
     $cOpt = Get-FileOpt '--config' $opt.config (Join-Path $projectRoot 'configs/settings.ini')
     if ($N -eq $CR) { $pPath = Get-PlanField $Plugin 1; $pMode = Get-PlanField $Plugin 2; $unitArgs += " --plugin $Plugin"; $dir = P "step$CR/$Plugin" }
     elseif ($N -gt $CR) {
@@ -367,7 +362,7 @@ function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
         $l
     }
     $text = ($lines -join "`n")
-    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"$cOpt").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{COMMON_DOC}}', $cDoc).Replace('{{REPORT_LANGUAGE}}', $lang).Replace('{{CONFIG_OPT}}', $cOpt)
+    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"$sOpt$cOpt").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{COMMON_DOC}}', $cDoc).Replace('{{REPORT_LANGUAGE}}', $lang).Replace('{{STANDARDS_OPT}}', $sOpt).Replace('{{CONFIG_OPT}}', $cOpt)
 }
 # Writes the action "next" prints for a unit ("1", "2-<plugin>" or "3-<standard>") in state $S; returns $false when it
 # needs nothing.
@@ -517,7 +512,7 @@ switch ($cmd) {
                 switch ($f[0]) {
                     'grade' { $g = $f[1] }
                     'total' { $t = $f[1] }
-                    'cap' { $c = " (capped at $($f[2]) because of a $($f[1]) finding)" }
+                    'capped' { if ($f[1] -eq '1') { $c = ' (capped at B because of a Critical finding)' } }
                     'dim' { $dims += "$($f[1]) $($f[2])/$($f[3])  " }
                 }
             }
@@ -531,7 +526,7 @@ switch ($cmd) {
         if ((Get-StepState 3) -ne 'success') { Stop-Refused 'step 3 has not succeeded; steps cannot be skipped' }
         $stds = @(Get-StdNames)
         foreach ($n in $stds) { Assert-StdGate $n }
-        $stdArgs = @('--root', $rootAbs, '--config', (Resolve-UserPath $opt.config))
+        $stdArgs = @('--root', $rootAbs, '--standards', (Resolve-UserPath $opt.standards))
         # Records the failure of step $N of standard $Std and stops
         function Stop-Finish([int]$N, [string]$Std, [string]$Message) {
             [void](Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', "$N", '--standard', $Std, '--state', 'failed', '--message', $Message)))
@@ -544,7 +539,7 @@ switch ($cmd) {
         foreach ($n in $stds) {
             if ((Get-UnitState "5-$n") -eq 'success') { continue }
             [void](Invoke-Child $PSCommandPath (@('set') + $stdArgs + @('--step', '4', '--standard', $n, '--state', 'working')))
-            $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standard', $n, '-Config', $opt.config)
+            $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standards', (Resolve-UserPath $opt.standards), '-Standard', $n, '-Config', $opt.config)
             if ($r.Code -ne 0) {
                 [IO.File]::AppendAllText((P "step4/$n/errors.log"), "[$(Get-Now)] score exited $($r.Code):`n$($r.Text)`n", $script:Utf8NoBom)
                 if ($r.Code -eq 1) { Stop-Finish 4 $n 'findings.txt failed validation; redo step 3' }
@@ -664,7 +659,7 @@ switch ($cmd) {
                         $open = @(Read-Utf8Lines (P "$d/spec-context.md") | Where-Object { $_ -cmatch '^- [a-z-]+: (unknown|pending)\s*$' -or $_.StartsWith('- [ ] ') })
                         if ($open.Count -gt 0) { Stop-Refused 'spec-context.md still has unresolved inputs or open questions' }
                         if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
-                        if (-not (Test-NonEmpty 'step1/standards/plan.tsv')) { Stop-Refused "missing ${stdPlan}: the review was not planned; check [rules] root of the settings and the rules project (setup check), then run standard plan --diff `"$(P "$d/pr.diff")`" --out `"$(P "$d/standards")`" of code-review-scoring and add its confirm.tsv to the Severity facts of spec-context.md" }
+                        if (-not (Test-NonEmpty 'step1/standards/plan.tsv')) { Stop-Refused "missing ${stdPlan}: the review was not planned; check configs/standards.ini (setup check), then run standard plan --diff `"$(P "$d/pr.diff")`" --out `"$(P "$d/standards")`" of code-review-scoring and add its confirm.tsv to the Severity facts of spec-context.md" }
                         Write-RequestStandards
                     }
                     2 {
@@ -676,7 +671,7 @@ switch ($cmd) {
                     3 {
                         foreach ($f in 'prepared.txt', 'findings.txt') { if (-not (Test-NonEmpty "$d/$f")) { Stop-Refused "missing $(P "$d/$f")" } }
                         if (Test-Unanswered $unit) { Stop-Refused "$(P "$d/questions.md") has not been answered" }
-                        $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standard', $std, '-Config', $opt.config, '-Check')
+                        $r = Invoke-Tool 'code-review-scoring-score' 'score' @('-Root', $rootAbs, '-Standards', (Resolve-UserPath $opt.standards), '-Standard', $std, '-Config', $opt.config, '-Check')
                         if ($r.Code -ne 0) { Stop-Refused "findings.txt does not pass the scoring checks; fix it, then set success again:`n$($r.Text)" }
                     }
                     4 {
@@ -720,7 +715,7 @@ switch ($cmd) {
         }
         else {
             if ($platform -notmatch '^[A-Za-z0-9_-]+$') { Exit-WithError '--platform may only contain letters, digits, - and _' }
-            if (@('workflow', 'language', 'rules') -contains $platform) { Exit-WithError "$platform is reserved and cannot be a platform name" }
+            if (@('workflow', 'language') -contains $platform) { Exit-WithError "$platform is reserved and cannot be a platform name" }
             if (-not $opt.model -and -not $opt.reasoning) {
                 $m = Get-IniValue $cfg $platform 'model'
                 $r = Get-IniValue $cfg $platform 'reasoning'

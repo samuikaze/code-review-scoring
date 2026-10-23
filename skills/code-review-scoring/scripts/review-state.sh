@@ -43,8 +43,7 @@ Commands:
            (default file of both: configs/settings.ini in the project root)
 
 Common options: --root DIR (default: tmp in the project root)
-                --config FILE (default: configs/settings.ini in the project root; its [rules] root names the rules
-                project of the scoring standards)
+                --standards FILE (default: configs/standards.ini in the project root)
 
 Gates enforced by "set":
   working  the previous step must be success; clears the status of every later step
@@ -53,7 +52,7 @@ Gates enforced by "set":
            (step 1: the review plan ROOT/step1/standards/plan.tsv; step 3: findings.txt must pass the scoring
            checks of score --check)
 Steps 3 to 5 also refuse to go on when a scoring standard changed after step 1 planned the review (its document,
-rule.ini, scan rules or the defaults.ini of the rules project).
+scan rules or settings in standards.ini).
   failed   the unit must be working; needs --message; appends the message to the unit's errors.log
 Step 2 is success when cr-plan has run and every planned plugin is success (no plugins = success).
 
@@ -78,14 +77,14 @@ cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && { usage; exit 0; }
 root="$project_root/tmp" step="" plugin="" state="" message="" git_range="" repo="." title="" reset=0
 config="$project_root/configs/settings.ini" subagent="" platform="" model="" reasoning="" plugins_file="$project_root/configs/plugins.ini"
-inline="" retry=0 standard=""
+inline="" retry=0 standard="" standards="$project_root/configs/standards.ini"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
     --step) step="${2:?--step needs a value}"; shift 2 ;;
     --plugin) plugin="${2:?--plugin needs a value}"; shift 2 ;;
     --standard) standard="${2:?--standard needs a value}"; shift 2 ;;
-    --standards) echo "error: --standards was removed: the rules come from [rules] root of the settings (--config)" >&2; exit 2 ;;
+    --standards) standards="${2:?--standards needs a value}"; shift 2 ;;
     --state) state="${2:?--state needs a value}"; shift 2 ;;
     --message) message="${2:?--message needs a value}"; shift 2 ;;
     --git) git_range="${2:?--git needs a value}"; shift 2 ;;
@@ -222,28 +221,25 @@ require_prev() {
   fi
   return 0
 }
-# The scoring standard $1 must be the one step 1 planned with: its document, rule.ini, scan rules and defaults.ini (the
-# resolve output without the paths, which differ between shells) must not have changed.
-res_key() { tr -d '\r' | awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "standard" || $1 == "common" { $5 = "" } $1 == "scan" || $1 == "ruleini" || $1 == "defaults" { $2 = "" } { print }'; }
+# The scoring standard $1 must be the one step 1 planned with: its document, scan rules and settings in standards.ini
+# (the resolve output without the paths, which differ between shells) must not have changed.
+res_key() { tr -d '\r' | awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "standard" || $1 == "common" { $5 = "" } $1 == "scan" { $2 = "" } { print }'; }
 std_gate() {
   local saved="$root/step1/standards/$1.resolve" now
   [[ -f "$saved" ]] || refuse "missing $saved; step 1 has not planned the review"
-  now="$(bash "$script_dir/standard.sh" resolve --settings "$config" "$1" 2>&1)" \
+  now="$(bash "$script_dir/standard.sh" resolve --standards "$standards" --settings "$config" "$1" 2>&1)" \
     || refuse "the scoring standard $1 cannot be read: $(printf '%s\n' "$now" | head -1)"
   [[ "$(res_key < "$saved")" == "$(printf '%s\n' "$now" | res_key)" ]] \
-    || refuse "the scoring standard $1 changed after step 1 planned the review (its document, rule.ini, scan rules or defaults.ini); restore it, or start the review again (init --reset)"
+    || refuse "the scoring standard $1 changed after step 1 planned the review (its document, scan rules or settings in standards.ini); restore it, or start the review again (init --reset)"
 }
-# request.md records the scoring standards of the review: name, version, sha256 and path of each document, and the
-# sha256 and path of the settings in effect (the rule.ini of each rule and defaults.ini).
+# request.md records the scoring standards of the review: name, version, sha256 and path of each document.
 record_standards() {
   local f tmpf
   tmpf="$(mktemp)"
   awk '/^## Scoring standards/ { skip = 1; next } skip && /^## / { skip = 0 } !skip' "$root/request.md" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > "$tmpf"
   { echo; echo "## Scoring standards"
     for f in $(std_names); do
-      awk -F'\t' -v r="$f" '{ sub(/\r$/, "") } $1 == "standard" { print "- " r ": " $2 " " $3 " " $4 " " $5; o = "" }
-        $1 == "common" { print "  - common standard: " $2 " " $3 " " $4 " " $5; o = "common " }
-        $1 == "ruleini" { print "  - " o "rule.ini: " $3 " " $2 } $1 == "defaults" { print "  - defaults.ini: " $3 " " $2 }' "$root/step1/standards/$f.resolve"
+      awk -F'\t' -v r="$f" '$1 == "standard" { print "- " r ": " $2 " " $3 " " $4 " " $5 } $1 == "common" { print "  - common standard: " $2 " " $3 " " $4 " " $5 }' "$root/step1/standards/$f.resolve"
     done; } >> "$tmpf"
   mv "$tmpf" "$root/request.md"
 }
@@ -286,7 +282,7 @@ validate_cr() {  # checks the normalized code review result
       split($0, a, "|"); t = a[1]
       if (t == "C") {
         rec = "C"; recline = NR
-        if (a[2] == "") err("C record needs the severity the plugin gave")
+        if (a[2] !~ /^(Critical|Major|Minor|Nit)$/) err("severity must be Critical, Major, Minor or Nit")
         if (a[3] == "") err("C record needs locations (file:line, comma-separated) or -")
       } else if (t == "S") { if (a[2] == "") err("S record has no text"); else summary++ }
       else if (t == "H") { if (a[2] == "") err("H record has no text") }
@@ -315,7 +311,7 @@ report_language() {
   v="$([[ -f "$dir/labels.tsv" ]] && awk -F'\t' '$1 == "language" { print $2; exit }' "$dir/labels.tsv" | tr -d '\r')"
   printf '%s\n' "${v:-the language of the report template in $dir}"
 }
-# Options that the prompts pass on to the scripts: --config when it is not the default.
+# Options that the prompts pass on to the scripts: --standards and --config when they are not the defaults.
 file_opt() {  # $1 = option, $2 = file, $3 = default; prints ' $1 "<absolute file>"' or nothing
   local d
   [[ "$2" == "$3" ]] && return 0
@@ -325,7 +321,8 @@ file_opt() {  # $1 = option, $2 = file, $3 = default; prints ' $1 "<absolute fil
 # Prompt of step $step (plugin $plugin): the step template plus the shared status protocol. Lines marked
 # "[sub] " are only for subagents, lines marked "[inline] " only for the main agent ($1 = 1 for inline).
 render_prompt() {
-  local root_abs p_path="" p_mode="" unit_args="--step $step" dir s_doc="" c_doc="none" lang="" c_opt
+  local root_abs p_path="" p_mode="" unit_args="--step $step" dir s_doc="" c_doc="none" lang="" s_opt c_opt
+  s_opt="$(file_opt --standards "$standards" "$project_root/configs/standards.ini")"
   c_opt="$(file_opt --config "$config" "$project_root/configs/settings.ini")"
   root_abs="$(abs_root)"
   [[ "$step" -lt "$CR" ]] || lang="$(report_language)"
@@ -340,7 +337,7 @@ render_prompt() {
     unit_args+=" --standard $standard"; dir="$root_abs/step$step/$standard"
   fi
   cat "$skill_dir/assets/prompts/step$step.md" "$skill_dir/assets/prompts/protocol.md" |
-    LC_ALL=C awk -v inline="$1" -v root="$root_abs" -v sc="$self_cmd set --root \"$root_abs\"$c_opt" -v copt="$c_opt" -v repo="$(req_field Repository)" \
+    LC_ALL=C awk -v inline="$1" -v root="$root_abs" -v sc="$self_cmd set --root \"$root_abs\"$s_opt$c_opt" -v sopt="$s_opt" -v copt="$c_opt" -v repo="$(req_field Repository)" \
       -v range="$(req_field 'Diff range')" -v title="$(req_field Title)" -v skills="$skills_dir" -v plugin="$plugin" \
       -v ppath="$p_path" -v pmode="$p_mode" -v unit="$unit_args" -v dir="$dir" -v step="$step" \
       -v std="$standard" -v sdoc="$s_doc" -v cdoc="${c_doc:-none}" -v lang="$lang" '
@@ -351,7 +348,7 @@ render_prompt() {
         l = rep(l, "{{SKILLS_DIR}}", skills); l = rep(l, "{{PLUGIN_PATH}}", ppath); l = rep(l, "{{PLUGIN}}", plugin); l = rep(l, "{{MODE}}", pmode)
         l = rep(l, "{{UNIT}}", unit); l = rep(l, "{{DIR}}", dir); l = rep(l, "{{STEP}}", step)
         l = rep(l, "{{STANDARD}}", std); l = rep(l, "{{STANDARD_DOC}}", sdoc); l = rep(l, "{{COMMON_DOC}}", cdoc)
-        l = rep(l, "{{REPORT_LANGUAGE}}", lang); l = rep(l, "{{CONFIG_OPT}}", copt)
+        l = rep(l, "{{REPORT_LANGUAGE}}", lang); l = rep(l, "{{STANDARDS_OPT}}", sopt); l = rep(l, "{{CONFIG_OPT}}", copt)
         print rep(l, "{{TITLE}}", title) }'
 }
 # The action "next" prints for unit $1 (label $2) in state $3; returns 1 when the unit needs nothing.
@@ -490,7 +487,7 @@ case "$cmd" in
     fi
     echo "action: done"
     for n in $(std_names); do
-      awk -F'\t' -v n="$n" '$1 == "grade" { g = $2 } $1 == "total" { t = $2 } $1 == "cap" { c = " (capped at " $3 " because of a " $2 " finding)" }
+      awk -F'\t' -v n="$n" '$1 == "grade" { g = $2 } $1 == "total" { t = $2 } $1 == "capped" && $2 == 1 { c = " (capped at B because of a Critical finding)" }
         $1 == "dim" { d = d $2 " " $3 "/" $4 "  " } END { print "result (" n "): grade " g ", total " t "/100" c; print "dimensions: " d }' "$root/step4/$n/score.tsv"
       echo "report: $(head -1 "$root/step5/$n/report-path.txt")"
     done
@@ -503,7 +500,7 @@ case "$cmd" in
     for n in $(std_names); do std_gate "$n"; done
     # $1 = step, $2 = standard, $3 = message; records the failure and stops
     finish_failed() {
-      "${self[@]}" set --root "$root_abs" --config "$config" --step "$1" --standard "$2" --state failed --message "$3" > /dev/null
+      "${self[@]}" set --root "$root_abs" --standards "$standards" --step "$1" --standard "$2" --state failed --message "$3" > /dev/null
       echo "step $1 ($2) failed: $3"
       echo "details: $root_abs/step$1/$2/errors.log"
       echo "next: run next"
@@ -512,22 +509,22 @@ case "$cmd" in
     # Each standard in turn; the standards whose report is already published are kept.
     for n in $(std_names); do
       [[ "$(unit_state "5-$n")" != "success" ]] || continue
-      "${self[@]}" set --root "$root_abs" --config "$config" --step 4 --standard "$n" --state working > /dev/null
-      rc=0; out="$(run_tool code-review-scoring-score score --root "$root_abs" --config "$config" --standard "$n" 2>&1)" || rc=$?
+      "${self[@]}" set --root "$root_abs" --standards "$standards" --step 4 --standard "$n" --state working > /dev/null
+      rc=0; out="$(run_tool code-review-scoring-score score --root "$root_abs" --standards "$standards" --standard "$n" --config "$config" 2>&1)" || rc=$?
       if [[ $rc -ne 0 ]]; then
         printf '[%s] score exited %d:\n%s\n' "$(now)" "$rc" "$out" >> "$root/step4/$n/errors.log"
         [[ $rc -eq 1 ]] && finish_failed 4 "$n" "findings.txt failed validation; redo step 3"
         finish_failed 4 "$n" "scoring exited $rc: $(printf '%s\n' "$out" | head -1)"
       fi
       grade="$(printf '%s\n' "$out" | grep '^grade ' | head -1)"
-      "${self[@]}" set --root "$root_abs" --config "$config" --step 4 --standard "$n" --state success --message "$grade" > /dev/null
-      "${self[@]}" set --root "$root_abs" --config "$config" --step 5 --standard "$n" --state working > /dev/null
+      "${self[@]}" set --root "$root_abs" --standards "$standards" --step 4 --standard "$n" --state success --message "$grade" > /dev/null
+      "${self[@]}" set --root "$root_abs" --standards "$standards" --step 5 --standard "$n" --state working > /dev/null
       rc=0; rout="$(run_tool code-review-scoring-report render-report --root "$root_abs" --standard "$n" --config "$config" 2>&1)" || rc=$?
       if [[ $rc -ne 0 ]]; then
         printf '[%s] render-report exited %d:\n%s\n' "$(now)" "$rc" "$rout" >> "$root/step5/$n/errors.log"
         finish_failed 5 "$n" "render-report exited $rc: $(printf '%s\n' "$rout" | head -1)"
       fi
-      if ! sout="$("${self[@]}" set --root "$root_abs" --config "$config" --step 5 --standard "$n" --state success --message "report published" 2>&1)"; then
+      if ! sout="$("${self[@]}" set --root "$root_abs" --standards "$standards" --step 5 --standard "$n" --state success --message "report published" 2>&1)"; then
         printf '[%s] %s\n' "$(now)" "$sout" >> "$root/step5/$n/errors.log"
         finish_failed 5 "$n" "$(printf '%s\n' "$sout" | head -1)"
       fi
@@ -633,7 +630,7 @@ case "$cmd" in
               refuse "spec-context.md still has unresolved inputs or open questions"
             fi
             unanswered 1 && refuse "$d/questions.md has not been answered"
-            [[ -s "$std_plan" ]] || refuse "missing $std_plan: the review was not planned; check [rules] root of the settings and the rules project (setup check), then run standard plan --diff \"$d/pr.diff\" --out \"$d/standards\" of code-review-scoring and add its confirm.tsv to the Severity facts of spec-context.md"
+            [[ -s "$std_plan" ]] || refuse "missing $std_plan: the review was not planned; check configs/standards.ini (setup check), then run standard plan --diff \"$d/pr.diff\" --out \"$d/standards\" of code-review-scoring and add its confirm.tsv to the Severity facts of spec-context.md"
             record_standards
             ;;
           2)
@@ -644,7 +641,7 @@ case "$cmd" in
           3)
             for f in prepared.txt findings.txt; do [[ -s "$d/$f" ]] || refuse "missing $d/$f"; done
             unanswered "$unit" && refuse "$d/questions.md has not been answered"
-            if ! out="$(run_tool code-review-scoring-score score --root "$root" --standard "$standard" --config "$config" --check 2>&1)"; then
+            if ! out="$(run_tool code-review-scoring-score score --root "$root" --standards "$standards" --standard "$standard" --config "$config" --check 2>&1)"; then
               refuse "findings.txt does not pass the scoring checks; fix it, then set success again:"$'\n'"$out"
             fi
             ;;
@@ -687,7 +684,7 @@ case "$cmd" in
       echo "subagent=$v"
     else
       [[ "$platform" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "error: --platform may only contain letters, digits, - and _" >&2; exit 2; }
-      case "$(printf '%s' "$platform" | tr '[:upper:]' '[:lower:]')" in workflow|language|rules) echo "error: $platform is reserved and cannot be a platform name" >&2; exit 2 ;; esac
+      case "$(printf '%s' "$platform" | tr '[:upper:]' '[:lower:]')" in workflow|language) echo "error: $platform is reserved and cannot be a platform name" >&2; exit 2 ;; esac
       if [[ -z "$model" && -z "$reasoning" ]]; then
         m="$(ini_get "$platform" model)"
         r="$(ini_get "$platform" reasoning)"

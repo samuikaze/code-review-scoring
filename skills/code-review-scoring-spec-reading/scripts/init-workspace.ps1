@@ -4,10 +4,10 @@ Prepare step 1 of a review: save the PR diff and a spec-context.md skeleton unde
 
 .DESCRIPTION
 Writes ROOT/step1/pr.diff and ROOT/step1/spec-context.md (ROOT defaults to tmp in the project root) and prints the step1 path on the last line.
-Plans the review with "standard plan" of code-review-scoring: the standards that score the PR (the rules project that
-[rules] root of -Config names; -Config defaults to configs/settings.ini in the project root) go to ROOT/step1/standards/
-(one report per framework standard), and their confirmations go to the Severity facts of spec-context.md. Without
-[rules] root in the settings (standalone use) the plan is skipped with a warning.
+Plans the review with "standard plan" of code-review-scoring: the standards that score the PR (-Standards, default:
+configs/standards.ini in the project root) go to ROOT/step1/standards/ (one report per framework standard), and their
+confirmations go to the Severity facts of spec-context.md. Without standards.ini (standalone use) the plan is skipped
+with a warning.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 2 bad arguments or input.
 
@@ -22,7 +22,6 @@ param(
     [string]$Root,
     [Alias('t')][string]$Title = '',
     [Alias('f')][switch]$Force,
-    [string]$Config,
     [string]$Standards
 )
 
@@ -32,8 +31,7 @@ Initialize-Utf8
 
 $projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
 if (-not $Root) { $Root = Join-Path $projectRoot 'tmp' }
-if (-not $Config) { $Config = Join-Path $projectRoot 'configs/settings.ini' }
-if ($Standards) { Exit-WithError '-Standards was removed: the rules come from [rules] root of the settings (-Config)' }
+if (-not $Standards) { $Standards = Join-Path $projectRoot 'configs/standards.ini' }
 
 if ($Git -and $InputPath) { Exit-WithError 'use only one of -Git, -InputPath' }
 if (-not $Git -and -not $InputPath) { Exit-WithError '-Git or -InputPath is required (see Get-Help)' }
@@ -59,23 +57,15 @@ if (-not $diffText.Trim()) { $diffStatus = 'unknown'; [Console]::Error.WriteLine
 # The standards that score the PR (code-review-scoring/scripts/standard.ps1 plan) and what they need to know first.
 $planDir = Join-Path $Dir 'standards'
 if ([IO.Directory]::Exists($planDir)) { [IO.Directory]::Delete($planDir, $true) }
-$confirm = '- (no scoring standard is planned: the settings have no [rules] root)' + "`n"
-$hasRules = $false
-if (Test-UserFile $Config) {
-    $sec = ''
-    foreach ($l in (Read-Utf8Lines $Config)) {
-        if ($l -match '^\s*\[(.*)\]\s*$') { $sec = $Matches[1]; continue }
-        if ($sec -ceq 'rules' -and $l -cmatch '^\s*root\s*=\s*"?(.*?)"?\s*$' -and $Matches[1]) { $hasRules = $true }
-    }
-}
-if (-not $hasRules) {
-    [Console]::Error.WriteLine("warning: $Config has no [rules] root; the review is not planned (the workflow needs it, see setup check)")
+$confirm = '- (no scoring standard is planned: configs/standards.ini is missing)' + "`n"
+if (-not (Test-UserFile $Standards)) {
+    [Console]::Error.WriteLine("warning: $Standards not found; the review is not planned (the workflow needs it, see setup check)")
 }
 elseif ($diffStatus -eq 'provided') {
     $exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     $std = Join-Path $projectRoot 'skills/code-review-scoring/scripts/standard.ps1'
     $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try { & $exe -NoProfile -ExecutionPolicy Bypass -File $std plan --diff $diffPath --out $planDir --settings (Resolve-UserPath $Config) | ForEach-Object { Write-Output $_ } }
+    try { & $exe -NoProfile -ExecutionPolicy Bypass -File $std plan --diff $diffPath --out $planDir --standards (Resolve-UserPath $Standards) | ForEach-Object { Write-Output $_ } }
     finally { $ErrorActionPreference = $prev }
     if ($LASTEXITCODE -ne 0) { exit 2 }  # plan has printed the error
     $sb = New-Object System.Text.StringBuilder

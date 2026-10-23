@@ -10,9 +10,8 @@
 
 ## 評分標準
 
-- **規則專案的位置因人而異**：`configs/settings.ini` 不進版控，規則專案（`rules.ini`、`defaults.ini` 與各規則目錄）放在本專案以外。換電腦或換人時，請各自在 `configs/settings.ini` 的 `[rules]` 區段設定 `root`（見 `configs/settings.example.ini`）；Windows 的路徑請使用斜線。
-- **舊的評分設定不再讀取**：3.0.0 起，`configs/standards.ini` 與 `configs/settings.ini` 的 `[points]`、`[deductions]`、`[grades]` 區段由規則專案取代。setup check 會以 `legacy:` 列出這些設定並停止，請搬到 `rules.ini`、`defaults.ini` 或各規則的 `rule.ini` 後刪除。
-- **評分途中不要修改標準**：步驟 1 會把標準的內容與 sha256 存成快照，步驟 3～5 都以快照評分。標準文件、掃描規則檔、該規則的 `rule.ini` 或 `defaults.ini` 在評分途中被修改時，狀態腳本會拒絕繼續；請還原修改，或以 `review-state init --reset` 重新開始。
+- **標準文件的位置因人而異**：`configs/standards.ini` 不進版控，標準文件與掃描規則檔可以放在專案以外。換電腦或換人時，請各自複製 `configs/standards.example.ini` 並設定路徑；Windows 的路徑請使用斜線。
+- **評分途中不要修改標準**：步驟 1 會把標準的內容與 sha256 存成快照，步驟 3～5 都以快照評分。標準文件、掃描規則檔或 `standards.ini` 的設定在評分途中被修改時，狀態腳本會拒絕繼續；請還原修改，或以 `review-state init --reset` 重新開始。
 - **修改標準後先執行 lint**：評分流程不執行 lint，格式有誤時評分腳本只會停止並提示。修改後執行 `standard lint`，並以 `standard diff <舊版> <新版>` 確認實際改變的檢查項；lint 只能檢查格式，規則內容是否正確仍需人工審查。
 - **掃描規則檔可能過期**：掃描規則檔檔頭記錄產生時依據的標準版本與雜湊值，標準修改後 lint 會警告過期，請重新產生或審核掃描規則。
 - **同一個 PR 可能產出多份報告**：每套符合異動檔案的框架標準各一份，判斷不出歸屬的通用檔案（例如儲存庫根目錄的 README）會列在每一份報告中，落在這些檔案上的 CR 意見也會出現在每一份報告中。
