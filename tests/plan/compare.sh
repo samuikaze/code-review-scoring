@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs "standard plan" on the fixtures with every installed shell (bash, zsh, PowerShell) and compares the output and
-# the written files with expected.txt. standards.ini has two framework standards (springboot-3: *.java, angular: *.ts)
-# and the common standard; multi.diff changes both frameworks and common files at several levels.
+# the written files with expected.txt. The rules project rules/ has two framework rules (springboot-3: *.java, angular:
+# *.ts, with its own severity scale), the common rule and a disabled rule (docs: *.md); multi.diff changes both
+# frameworks and common files at several levels.
 #   bash tests/plan/compare.sh            compare
 #   bash tests/plan/compare.sh --update   rewrite expected.txt from the bash output
 set -uo pipefail
@@ -9,11 +10,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 2
 scripts="../../skills/code-review-scoring/scripts"
 
 cases=(
-  "--diff multi.diff --standards standards.ini"
-  "--diff common-only.diff --standards standards.ini"
-  "--diff java-only.diff --standards standards.ini"
-  "--diff empty.diff --standards standards.ini"
-  "--diff common-only.diff --standards standards-nocommon.ini"
+  "--diff multi.diff --settings settings.ini"
+  "--diff common-only.diff --settings settings.ini"
+  "--diff java-only.diff --settings settings.ini"
+  "--diff empty.diff --settings settings.ini"
+  "--diff common-only.diff --settings settings-nocommon.ini"
+  "--diff java-only.diff --settings none.ini"
 )
 
 out="$(cd "$(mktemp -d)" && pwd -P)"
@@ -31,7 +33,7 @@ run_all() {  # $sh = bash, zsh or powershell; prints every case with its exit co
     echo "### $c"
     rm -rf "${out:?}"/*
     # shellcheck disable=SC2086
-    set -- plan $c --settings none.ini --out "$out_w/plan"
+    set -- plan $c --out "$out_w/plan"
     case "$sh" in
       bash) bash "$scripts/standard.sh" "$@" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;
       zsh) zsh "$scripts/standard.zsh" "$@" 2>&1 | norm; rc=${PIPESTATUS[0]} ;;

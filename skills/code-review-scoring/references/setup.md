@@ -11,11 +11,13 @@ It covers, in the project root:
 - `configs/plugins.ini`: the code review plugins (it may list none);
 - `configs/settings.ini`, `[workflow]` section: `subagent=true` (each step runs in its own subagent) or `subagent=false` (you run every step yourself);
 - `configs/settings.ini`, `[<platform>]` section: the subagent model and reasoning, needed only when `subagent=true` and `--platform` is given;
-- `configs/standards.ini`: the scoring standards; step 1 plans the review with it (one report per framework standard whose `applies` matches a changed file, the common standard for the other files), so the workflow cannot run without it.
+- `configs/settings.ini`, `[rules]` section: `root`, the folder of the rules project (`rules.ini`, `defaults.ini` and a folder per rule with its `rule.ini`, document and scan rules); step 1 plans the review with its enabled rules (one report per framework rule whose `applies` matches a changed file, the common rule for the other files), so the workflow cannot run without it.
 
 When exit 7 comes with `legacy:` lines, the old `configs.ini` / `plugins.ini` is still in the project root (these files moved into `configs/`). Show the user the `legacy:` and `note:` lines and the move commands that `check` printed, ask them to move the files themselves, and run `check` again afterwards. Never move, merge or delete them yourself.
 
-When `configs/standards.ini` is reported as `missing` or `no standard registered`, tell the user to copy `configs/standards.example.ini` to `configs/standards.ini` and register their standard documents (written from `templates/<language>/scoring-rule-template.md`), then run `standard lint` to check them. The wizard does not cover the standards, and you never write `standards.ini` or a standard document yourself. Run `check` again afterwards.
+When `[rules] root` is reported as `missing`, `no rules.ini`, `no defaults.ini` or `no enabled rule`, tell the user to set up their rules project (for example a clone of code-review-scoring-rules; `rule.ini` from `templates/<language>/rule-template.ini`, documents from `templates/<language>/scoring-rule-template.md`), set `root` in the `[rules]` section of `configs/settings.ini` to its folder (see `configs/settings.example.ini`), then run `standard lint` to check it. The wizard does not cover the rules, and you never write the settings of the rules project or a standard document yourself. Run `check` again afterwards.
+
+When `legacy:` lines name `configs/standards.ini` or the `[points]`, `[deductions]` or `[grades]` sections of `configs/settings.ini`, these are no longer read: the standards become rules of the rules project (`rules.ini` and a `rule.ini` per rule), and points, severities and grades are set in `defaults.ini` or the `rule.ini` of a rule. Show the user these lines and ask them to move the settings and delete the old ones themselves; never move or delete them yourself.
 
 Otherwise exit 7 means a setting is missing. Tell the user what is missing and ask which way to create it (one question):
 

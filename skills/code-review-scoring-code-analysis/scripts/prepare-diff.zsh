@@ -17,13 +17,12 @@ Usage: prepare-diff.zsh [--root DIR | --input FILE | --git RANGE] [options]
   -m, --mode MODE      all (default) | summary | scan | view
       --max N          max locations listed per check (default 15)
   -o, --out FILE       write output to FILE (UTF-8) instead of stdout
-      --config FILE    configs/settings.ini whose [deductions] merge is shown in the summary
-                       (default: configs/settings.ini in the project root; missing = false)
-      --standard NAME  the scoring standard (a section of standards.ini) whose scan rules are used; default: the only
-                       framework standard, or the common standard when no framework standard is registered. Files its
-                       applies does not cover are scanned with the rules of the common standard
-      --standards FILE the registered standards (default: configs/standards.ini in the project root)
-      --scan FILE      use this scan rule file for every file instead of the registered standards
+      --config FILE    the settings whose [rules] root names the rules project (default: configs/settings.ini in the
+                       project root)
+      --standard NAME  the scoring standard (an enabled rule of rules.ini) whose scan rules, severity scale and merge
+                       are used; default: the only enabled framework rule, or the common rule when no framework rule is
+                       enabled. Files its applies does not cover are scanned with the rules of the common rule
+      --scan FILE      use this scan rule file for every file instead of the rules project (no severity scale)
   -h, --help           show this help
 
 Output: summary, code review comments of ROOT/step2 with their ids (root mode only), heuristic candidates
@@ -36,7 +35,7 @@ script_dir="${0:A:h}"
 # Project root (two levels above the physical skill folder) holds tmp/ and reports/.
 project_root="${script_dir:h:h:h}"
 skills_dir="${script_dir:h:h}"
-config="$project_root/configs/settings.ini" standards="$project_root/configs/standards.ini" standard="" scan="" crdir="" cplan="" cstd="" sub="" root="" input="" git_range="" repo="." mode="all" max=15 out=""
+config="$project_root/configs/settings.ini" standard="" scan="" crdir="" cplan="" cstd="" sub="" root="" input="" git_range="" repo="." mode="all" max=15 out=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --root) root="${2:?--root needs a value}"; shift 2 ;;
@@ -48,7 +47,7 @@ while [[ $# -gt 0 ]]; do
     -o|--out) out="${2:?--out needs a value}"; shift 2 ;;
     --config) config="${2:?--config needs a value}"; shift 2 ;;
     --standard) standard="${2:?--standard needs a value}"; shift 2 ;;
-    --standards) standards="${2:?--standards needs a value}"; shift 2 ;;
+    --standards) echo "error: --standards was removed: the rules come from [rules] root of the settings (--config)" >&2; exit 2 ;;
     --scan) scan="${2:?--scan needs a value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
@@ -77,19 +76,9 @@ if [[ -n "$root" ]]; then
   [[ -z "$out" ]] && { mkdir -p "$root/step3$sub"; out="$root/step3$sub/prepared.txt"; }
 fi
 
-# [deductions] merge decides how findings.txt is written; the scoring step validates it the same way.
-merge="false"
-if [[ -f "$config" ]]; then
-  merge="$(LC_ALL=C awk '
-    /^[ \t]*\[/ { s = $0; gsub(/^[ \t]*\[|\][ \t\r]*$/, "", s); next }
-    s == "deductions" && /^[ \t]*merge[ \t]*=/ { v = $0; sub(/^[^=]*=[ \t]*/, "", v); sub(/[ \t\r]*$/, "", v); gsub(/^"|"$/, "", v); val = tolower(v) }
-    END { print (val == "" ? "false" : val) }' "$config")"
-  [[ "$merge" == "true" || "$merge" == "false" ]] || { echo "error: [deductions] merge in $config must be true or false, not $merge" >&2; exit 2; }
-fi
-
 tmp="$(mktemp)" std="$(mktemp)"
 trap 'rm -f "$tmp" "$std"' EXIT
-# Scan rules and file scopes of the standard (code-review-scoring/scripts/standard resolve).
+# Scan rules, file scopes, severity scale and merge of the standard (code-review-scoring/scripts/standard resolve).
 if [[ -n "$scan" ]]; then
   [[ -z "$standard" ]] || { echo "error: use only one of --standard, --scan" >&2; exit 2; }
   [[ -f "$scan" ]] || { echo "error: scan rule file not found: $scan" >&2; exit 2; }
@@ -98,7 +87,7 @@ elif [[ -n "$cstd" ]]; then
   # The standard as step 1 planned it (the workflow refuses to go on when it has changed since).
   tr -d '\r' < "$root/step1/standards/$cstd.resolve" > "$std"
 else
-  zsh "$skills_dir/code-review-scoring/scripts/standard.zsh" resolve --standards "$standards" --settings "$config" ${standard:+"$standard"} \
+  zsh "$skills_dir/code-review-scoring/scripts/standard.zsh" resolve --settings "$config" ${standard:+"$standard"} \
     > "$std" || exit 2  # resolve has printed the error
 fi
 if [[ -n "$git_range" ]]; then
@@ -112,7 +101,7 @@ else
   cat -- "$input" > "$tmp"
 fi
 
-run() { LC_ALL=C awk -v std="$std" -v mode="$mode" -v maxper="$max" -v merge="$merge" -v crdir="$crdir" -v cplan="$cplan" -v cstd="$cstd" -f "$script_dir/lib/prepare.awk" "$tmp"; }
+run() { LC_ALL=C awk -v std="$std" -v mode="$mode" -v maxper="$max" -v crdir="$crdir" -v cplan="$cplan" -v cstd="$cstd" -f "$script_dir/lib/prepare.awk" "$tmp"; }
 if [[ -n "$out" ]]; then
   run > "$out"
   echo "wrote ${out} ($(wc -l < "$out" | tr -d ' ') lines)"
