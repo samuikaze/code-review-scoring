@@ -6,7 +6,7 @@ setopt err_exit no_unset pipe_fail
 usage() {
   cat <<'USAGE'
 Usage: init-workspace.zsh (--git RANGE [--repo DIR] | --input FILE) [--root DIR] [--title TEXT] [--force]
-                         [--standards FILE]
+                         [--config FILE]
 
   -g, --git RANGE    save git diff RANGE (e.g. origin/main...HEAD) as pr.diff
   -r, --repo DIR     repository for --git (default: current directory)
@@ -14,13 +14,14 @@ Usage: init-workspace.zsh (--git RANGE [--repo DIR] | --input FILE) [--root DIR]
       --root DIR     review root (default: tmp in the project root); files go to ROOT/step1/
   -t, --title TEXT   PR title written into spec-context.md
   -f, --force        overwrite pr.diff and spec-context.md if they already exist
-      --standards FILE the registered scoring standards (default: configs/standards.ini in the project root)
+      --config FILE    the settings whose [rules] root names the rules project of the scoring standards
+                       (default: configs/settings.ini in the project root)
   -h, --help         show this help
 
 Writes ROOT/step1/pr.diff and ROOT/step1/spec-context.md, and prints the step1 path on the last line.
 Plans the review with "standard plan" of code-review-scoring: the standards that score the PR go to
 ROOT/step1/standards/ (one report per framework standard), and their confirmations go to the Severity facts of
-spec-context.md. Without standards.ini (standalone use) the plan is skipped with a warning.
+spec-context.md. Without [rules] root in the settings (standalone use) the plan is skipped with a warning.
 Exit codes: 0 ok, 2 bad arguments or input.
 USAGE
 }
@@ -29,7 +30,7 @@ script_dir="${0:A:h}"
 # Project root (two levels above the physical skill folder) holds tmp/ and reports/.
 project_root="${script_dir:h:h:h}"
 skill_dir="${script_dir:h}"
-git_range="" repo="." input="" root="$project_root/tmp" title="" force=0 standards="$project_root/configs/standards.ini"
+git_range="" repo="." input="" root="$project_root/tmp" title="" force=0 config="$project_root/configs/settings.ini"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -g|--git) git_range="${2:?--git needs a value}"; shift 2 ;;
@@ -38,7 +39,8 @@ while [[ $# -gt 0 ]]; do
     --root) root="${2:?--root needs a value}"; shift 2 ;;
     -t|--title) title="${2:?--title needs a value}"; shift 2 ;;
     -f|--force) force=1; shift ;;
-    --standards) standards="${2:?--standards needs a value}"; shift 2 ;;
+    --config) config="${2:?--config needs a value}"; shift 2 ;;
+    --standards) echo "error: --standards was removed: the rules come from [rules] root of the settings (--config)" >&2; exit 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
@@ -67,11 +69,16 @@ diff_status="provided"
 
 # The standards that score the PR (code-review-scoring/scripts/standard plan) and what they need to know first.
 rm -rf "$dir/standards"
-confirm="" note="- (no scoring standard is planned: configs/standards.ini is missing)"
-if [[ ! -f "$standards" ]]; then
-  echo "warning: $standards not found; the review is not planned (the workflow needs it, see setup check)" >&2
+confirm="" note="- (no scoring standard is planned: the settings have no [rules] root)"
+has_rules="$([[ -f "$config" ]] && LC_ALL=C awk '
+  { sub(/\r$/, "") }
+  /^[ \t]*\[/ { s = $0; gsub(/^[ \t]*\[|\][ \t]*$/, "", s); next }
+  s == "rules" && /^[ \t]*root[ \t]*=/ { v = $0; sub(/^[^=]*=[ \t]*/, "", v); gsub(/^"|"[ \t]*$/, "", v); if (v != "") f = 1 }
+  END { print f + 0 }' "$config")"
+if [[ "$has_rules" != "1" ]]; then
+  echo "warning: $config has no [rules] root; the review is not planned (the workflow needs it, see setup check)" >&2
 elif [[ "$diff_status" == "provided" ]]; then
-  zsh "$(dirname "$skill_dir")/code-review-scoring/scripts/standard.zsh" plan --diff "$dir/pr.diff" --out "$dir/standards" --standards "$standards" \
+  zsh "$(dirname "$skill_dir")/code-review-scoring/scripts/standard.zsh" plan --diff "$dir/pr.diff" --out "$dir/standards" --settings "$config" \
     || exit 2  # plan has printed the error
   confirm="$dir/standards/confirm.tsv" note="- (the scoring standards list nothing to confirm)"
 else

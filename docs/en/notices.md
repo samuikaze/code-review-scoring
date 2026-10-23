@@ -10,15 +10,21 @@ English | [繁體中文](../zh-tw/notices.md)
 
 ## Scoring standards
 
-- **The location of the standard documents differs per person**:
-  `configs/standards.ini` is not under version control, and the standard
-  documents and scan rule files can live outside this project. On a new
-  machine or for a new person, copy `configs/standards.example.ini` and set
-  the paths; on Windows, use forward slashes in paths.
+- **The location of the rules project differs per person**:
+  `configs/settings.ini` is not under version control, and the rules project
+  (`rules.ini`, `defaults.ini` and the rule folders) lives outside this
+  project. On a new machine or for a new person, set `root` in the `[rules]`
+  section of `configs/settings.ini` (see [configurations.md](configurations.md#the-rules-section)); on
+  Windows, use forward slashes in paths.
+- **The old scoring settings are no longer read**: `configs/standards.ini`
+  and the `[points]`, `[deductions]` and `[grades]` sections of
+  `configs/settings.ini` were replaced by the rules project in 3.0.0. The setup
+  check reports them as `legacy:` and stops until they are moved into
+  `rules.ini`, `defaults.ini` or the `rule.ini` of a rule and removed.
 - **Do not change a standard during a scoring run**: step 1 saves a snapshot
   of each standard's content and sha256, and steps 3 to 5 score with that
-  snapshot. If a standard document, a scan rule file or the settings in
-  `standards.ini` change during the run, the status script refuses to
+  snapshot. If a standard document, a scan rule file, the `rule.ini` of the
+  rule or `defaults.ini` change during the run, the status script refuses to
   continue; revert the change, or start over with
   `review-state init --reset`.
 - **Run lint after changing a standard**: the scoring run does not run lint;
