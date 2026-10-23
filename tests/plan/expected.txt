@@ -1,4 +1,4 @@
-### --diff multi.diff --settings settings.ini
+### --diff multi.diff --standards standards.ini
 2 report(s):
   - springboot-3 v0.2: 4 file(s) (3 scored with the common standard)
   - angular v0.2: 5 file(s) (3 scored with the common standard)
@@ -32,59 +32,13 @@ diff --git a/README.md b/README.md
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
 --- angular.resolve
 standard	angular	v0.2	sha256:0465ef8820c3d07d2303488e209e50b40dd0fce5b0b295ced065091d62d72632	angular.md
-ruleini	rules/angular/rule.ini	sha256:598c7f8f9930f439ae84a24d6b8709998fa352b6ea697ee4be773ef0632e7fbf
 applies	((^|/)[^/]*/.ts$)|((^|/)[^/]*/.html$)
-points	A	25
-points	B	15
-points	C	15
-points	D	15
-points	E	10
-points	F	10
-points	G	10
-merge	false
-severity	Critical	15	C	嚴重	資料損毀、資安事件或服務中斷。
-severity	Major	5	-	主要	特定情境下會出錯。
-severity	Minor	2	-	次要	能運作，但有更好的寫法。
-severity	Info	0	-	參考	不影響品質的小地方。
-grade	S	90	優
-grade	C	60	普通
-grade	F	0	待加強
 common	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	ROOT/tests/standards/good-common.md
-ruleini	rules/common/rule.ini	sha256:da8b81c44d4f2c4c5660b10c6ffefadbafbc6f0511383104144bcf30965a6f28
-cseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
-cseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
-cseverity	Minor	Minor	能運作，但有更好的寫法。
-cseverity	Nit	Nit	風格偏好。
-defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
 --- springboot-3.resolve
 standard	springboot-3	v0.2	sha256:28801aba8ae9d5bb7d08cf4f8472cb5ca628efb871204f41bd9debfe6ac2b948	ROOT/tests/standards/good-v2.md
-ruleini	rules/springboot-3/rule.ini	sha256:368c72debcda7114aa365455a87a33989233691c27814d1b9cd34937e587c7d1
 applies	((^|/)[^/]*/.java$)|((^|/)[^/]*/.kt$)
-points	A	25
-points	B	15
-points	C	15
-points	D	15
-points	E	10
-points	F	10
-points	G	10
-merge	false
-severity	Critical	10	B	Critical	資料損毀、資安事件或服務中斷。
-severity	Major	5	-	Major	特定情境下會出錯，或明顯降低品質。
-severity	Minor	2	-	Minor	能運作，但有更好的寫法。
-severity	Nit	1	-	Nit	風格偏好。
-grade	A	95	A
-grade	B	85	B
-grade	C	70	C
-grade	D	60	D
-grade	F	0	F
 common	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	ROOT/tests/standards/good-common.md
-ruleini	rules/common/rule.ini	sha256:da8b81c44d4f2c4c5660b10c6ffefadbafbc6f0511383104144bcf30965a6f28
-cseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
-cseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
-cseverity	Minor	Minor	能運作，但有更好的寫法。
-cseverity	Nit	Nit	風格偏好。
-defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
-### --diff common-only.diff --settings settings.ini
+### --diff common-only.diff --standards standards.ini
 1 report(s):
   - common v0.1: 2 file(s)
 wrote OUT/plan/plan.tsv
@@ -99,26 +53,7 @@ diff --git a/README.md b/README.md
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
 --- common.resolve
 standard	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	ROOT/tests/standards/good-common.md
-ruleini	rules/common/rule.ini	sha256:da8b81c44d4f2c4c5660b10c6ffefadbafbc6f0511383104144bcf30965a6f28
-points	A	25
-points	B	15
-points	C	15
-points	D	15
-points	E	10
-points	F	10
-points	G	10
-merge	false
-severity	Critical	10	B	Critical	資料損毀、資安事件或服務中斷。
-severity	Major	5	-	Major	特定情境下會出錯，或明顯降低品質。
-severity	Minor	2	-	Minor	能運作，但有更好的寫法。
-severity	Nit	1	-	Nit	風格偏好。
-grade	A	95	A
-grade	B	85	B
-grade	C	70	C
-grade	D	60	D
-grade	F	0	F
-defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
-### --diff java-only.diff --settings settings.ini
+### --diff java-only.diff --standards standards.ini
 1 report(s):
   - springboot-3 v0.2: 2 file(s) (1 scored with the common standard)
 wrote OUT/plan/plan.tsv
@@ -134,38 +69,11 @@ diff --git a/src/main/java/A.java b/src/main/java/A.java
 diff --git a/docs/guide.md b/docs/guide.md
 --- springboot-3.resolve
 standard	springboot-3	v0.2	sha256:28801aba8ae9d5bb7d08cf4f8472cb5ca628efb871204f41bd9debfe6ac2b948	ROOT/tests/standards/good-v2.md
-ruleini	rules/springboot-3/rule.ini	sha256:368c72debcda7114aa365455a87a33989233691c27814d1b9cd34937e587c7d1
 applies	((^|/)[^/]*/.java$)|((^|/)[^/]*/.kt$)
-points	A	25
-points	B	15
-points	C	15
-points	D	15
-points	E	10
-points	F	10
-points	G	10
-merge	false
-severity	Critical	10	B	Critical	資料損毀、資安事件或服務中斷。
-severity	Major	5	-	Major	特定情境下會出錯，或明顯降低品質。
-severity	Minor	2	-	Minor	能運作，但有更好的寫法。
-severity	Nit	1	-	Nit	風格偏好。
-grade	A	95	A
-grade	B	85	B
-grade	C	70	C
-grade	D	60	D
-grade	F	0	F
 common	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	ROOT/tests/standards/good-common.md
-ruleini	rules/common/rule.ini	sha256:da8b81c44d4f2c4c5660b10c6ffefadbafbc6f0511383104144bcf30965a6f28
-cseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
-cseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
-cseverity	Minor	Minor	能運作，但有更好的寫法。
-cseverity	Nit	Nit	風格偏好。
-defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
-### --diff empty.diff --settings settings.ini
+### --diff empty.diff --standards standards.ini
 error: empty.diff: the diff lists no file
 exit=2
-### --diff common-only.diff --settings settings-nocommon.ini
-error: common-only.diff: no enabled framework rule covers the files of this PR and no common rule is enabled
+### --diff common-only.diff --standards standards-nocommon.ini
+error: common-only.diff: no framework standard covers the files of this PR and no common standard is registered
 exit=2
-### --diff java-only.diff --settings none.ini
-error: none.ini: file not found; run setup check
-exit=3

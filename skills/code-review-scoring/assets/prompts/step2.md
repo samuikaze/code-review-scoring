@@ -25,11 +25,11 @@ C|Major|src/web/order/OrderForm.vue:42,src/web/order/OrderForm.vue:57|FE-STATE-0
 problem: 表單送出後沒有處理 API 錯誤，使用者看不到失敗原因。
 suggestion: 在 catch 中顯示錯誤訊息，並恢復送出按鈕狀態。
 spec: docs/spec/order-sd.md:42
-C|Suggestion|-|-
+C|Nit|-|-
 problem: 建議為新元件補上 Storybook 範例。
 H|做得好的地方（選填）
 ```
 
-- `C|severity|locations|rule`: severity is the plugin's own severity of the comment (for example `Major` or `Suggestion`); locations are new-file `path:line` from the diff, comma-separated, all of them (or `-` for a PR-wide comment); rule is the plugin's rule id or `-`. `problem:` is required, `suggestion:` recommended, `spec:` lists the spec locations (`path:line` from `spec-context.md`) the comment relies on.
-- Keep the plugin's own severity; do not map it to a scoring scale. Step 3 maps every comment to the severity scale of the scoring standard that covers its files. When the plugin gives no severity, use the word it uses for the importance of the comment, or `-` when it has none. Keep the plugin's raw output in `raw/`.
+- `C|severity|locations|rule`: severity `Critical`, `Major`, `Minor` or `Nit`; locations are new-file `path:line` from the diff, comma-separated, all of them (or `-` for a PR-wide comment); rule is the plugin's rule id or `-`. `problem:` is required, `suggestion:` recommended, `spec:` lists the spec locations (`path:line` from `spec-context.md`) the comment relies on.
+- Map severities by meaning: Critical = data corruption, security incident or outage; Major = fails in specific situations or clearly lowers quality; Minor = works, but there is a better way; Nit = style or suggestion. Keep the plugin's own level in `raw/`.
 - `S|text`: overall conclusion. `H|text`: strengths visible in the diff. Never put `|` inside field text.

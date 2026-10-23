@@ -1,5 +1,5 @@
 ---
-# Standard code: only lowercase letters, digits and -; must equal the section name in rules.ini of the rules project
+# Standard code: only lowercase letters, digits and -; must equal the section name in configs/standards.ini
 name: example-standard
 # Standard version, recorded in the score report
 version: v1.0
@@ -18,16 +18,10 @@ How to write this document (delete this comment after copying the template):
   the scripts; the other sections are only for the AI and can be written
   freely.
 - Content in code blocks and HTML comments is never taken as a rule.
-- This document lives in the folder of its rule in the rules project and is
-  set by standard in the rule.ini of that folder; see rule-template.ini in
-  the template folder for how to write rule.ini.
 - Automatic scan rules (optional) are saved as a separate TSV file, set by
-  scan in rule.ini.
-- The files this standard applies to are set by applies in rule.ini, not in
-  this document.
-- The points of the dimensions, the severity scale and the grades are set in
-  rule.ini; what rule.ini does not set comes from defaults.ini of the rules
-  project.
+  scan in configs/standards.ini.
+- The files this standard applies to are set by applies in
+  configs/standards.ini, not in this document.
 - General rules such as the scoring scope, deductions requiring evidence and
   upstream factors are handled by the scoring workflow; write only what is
   specific to this standard here.
@@ -40,10 +34,10 @@ of scoring that this standard covers.
 
 ## Dimensions
 
-All standards share the following seven dimensions. Points are set by
-`[points]` in `rule.ini`, or by `[points]` in `defaults.ini` of the rules
-project when `rule.ini` does not set them. The first letter of a check code is
-its dimension. Codes and dimension names cannot be changed; the "Focus" text can
+All standards share the following seven dimensions. Points default to
+`[points]` in `configs/settings.ini` and can be overridden in this standard's
+section of `configs/standards.ini`. The first letter of a check code is its
+dimension. Codes and dimension names cannot be changed; the "Focus" text can
 be adapted to this standard's technology.
 
 | Code | Dimension | Focus |
@@ -71,14 +65,11 @@ Field rules:
   within the document. The common standard (`role="common"`) prefixes its
   codes with `CM-`, for example `CM-A1`; codes of framework standards cannot
   start with `CM`.
-- Severity: only the severity codes of this rule (case-sensitive), that is the
-  `[severity:CODE]` sections of `rule.ini`, or the scale of `defaults.ini`
-  when `rule.ini` does not set one. The examples below use the default
-  `Critical`, `Major`, `Minor` and `Nit`.
+- Severity: only `Critical`, `Major`, `Minor` or `Nit` (case-sensitive).
 - Adjustable to: the severities that may be used when the condition holds,
   separated by half-width commas.
-- Any check item can be lowered to the lowest severity (the last one of the
-  scale, `Nit` by default); it does not need to be listed in "adjustable to".
+- Any check item can be lowered to `Nit`; it does not need to be listed in
+  "adjustable to".
 - Content and conditions cannot contain the full-width `｜`; put code in
   backticks.
 - A long check item can wrap; indent continuation lines with two spaces.

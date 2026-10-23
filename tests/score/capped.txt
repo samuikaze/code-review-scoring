@@ -1,4 +1,0 @@
-# One Blocker leaves 85 points (grade A), but Blocker caps the grade at C
-F|A2|Blocker|src/main/kotlin/Order.kt:3
-problem: x
-suggestion: y

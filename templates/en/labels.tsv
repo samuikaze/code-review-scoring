@@ -3,7 +3,7 @@
 language	English
 none	None
 title.missing	(not provided)
-capped_note	 ({severity} deductions cap the grade at {grade})
+capped_note	 (Critical deductions cap the grade at B)
 standard.common	; common files use {common}
 sep.list	,
 sep.bracket	 |
@@ -55,7 +55,6 @@ cr.tag_sep	|
 cr.upstream	Upstream factor
 cr.rejected	Rejected
 cr.reason	Reason for rejection
-cr.plugin_severity	Plugin severity
 cr.advisory	For reference only
 cr.unjudged	Not judged
 cr.code	Code locations

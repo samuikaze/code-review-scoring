@@ -1,7 +1,7 @@
 # Diff preprocessor shared by prepare-diff.sh and prepare-diff.zsh (POSIX awk).
-# Variables: std=output of "standard resolve" (standard, common, applies, scan, merge, severity and cseverity records; a
-#            "scan" record before any standard record is a scan rule file given on its own; merge and the severity scale
-#            are shown in the summary for writing findings.txt)  mode=all|summary|scan|view  maxper=max locations listed per check
+# Variables: std=output of "standard resolve" (standard, common, applies and scan records; a "scan" record before any
+#            standard record is a scan rule file given on its own)  mode=all|summary|scan|view  maxper=max locations listed per check
+#            merge=true|false ([deductions] merge of configs/settings.ini, shown in the summary for writing findings.txt)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = no code review comments section)
 #            cplan=the review plan (ROOT/step1/standards/plan.tsv) and cstd=the standard: list only its comments
 # Run with LC_ALL=C; strings are handled as bytes.
@@ -102,7 +102,7 @@ function cm_mine(loc,    l, a, n, p, i, f, any) {
 # Lists every code review comment with its id <plugin>#<n> (the n-th C record of the plugin's cr.txt).
 function list_comments(    l, x, a, f, c, n, t, j, out, show) {
     if (crdir == "" || (getline l < (crdir "/plan.tsv")) <= 0) return
-    print "## Code review comments (cite the ids in source: of F/U lines or in X lines, and map each to the severity scale with an M line; see the skill)"
+    print "## Code review comments (cite the ids in source: of F/U lines or in X lines; see the skill)"
     out = ""
     do {
         if (l == "") continue
@@ -156,14 +156,8 @@ BEGIN {
         else if (a[1] == "common") { own = "c"; cname = a[2]; cver = a[3] }
         else if (a[1] == "applies") applies = a[2]
         else if (a[1] == "scan") load_rules(a[2], own)
-        else if (a[1] == "merge") merge = a[2]
-        else if (a[1] == "severity") { nsv++; sv[nsv] = a[2]; svpts[nsv] = a[3]; svcap[nsv] = a[4]; svname[nsv] = a[5]; svmean[nsv] = a[6] }
-        else if (a[1] == "cseverity") { ncs++; cs[ncs] = a[2]; csname[ncs] = a[3]; csmean[ncs] = a[4] }
     }
     close(std)
-    # The common rule uses the scale of the standard when its scale has the same codes in the same order.
-    samescale = 1
-    if (ncs) { if (ncs != nsv) samescale = 0; else for (i = 1; i <= nsv; i++) if (cs[i] != sv[i]) samescale = 0 }
 }
 
 {
@@ -245,21 +239,6 @@ function pr_hint(k,    n, c, i, j, o, s, x, hit) {
     return 1
 }
 
-# A severity of the scale as "code (display name)": the name only when it differs from the code.
-function sevlabel(code, name) { return code ((name == "" || name == code) ? "" : " (" name ")") }
-# The meaning of a severity: "-" is none; the lines of a multi-line meaning (separated by |) go on indented lines.
-function sevmean(m) { if (m == "-") return ""; gsub(/\|/, "\n    ", m); return m }
-
-# The severity scale of the standard, and that of the common standard when it differs (the summary).
-function print_scale(    i) {
-    if (!nsv) return
-    print "- severity scale (from the most severe; deducted per finding; the lowest, " sv[nsv] ", is always allowed and is used when a problem cannot be confirmed):"
-    for (i = 1; i <= nsv; i++) printf "  - %s: %s%s. %s\n", sevlabel(sv[i], svname[i]), (svpts[i] + 0 ? "-" svpts[i] : "0"), (svcap[i] == "-" ? "" : ", caps the grade at " svcap[i]), sevmean(svmean[i])
-    if (!ncs || samescale) return
-    print "- severity scale of the common standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):"
-    for (i = 1; i <= ncs; i++) printf "  - %s. %s\n", sevlabel(cs[i], csname[i]), sevmean(csmean[i])
-}
-
 function count_part(scope, label, n) { return (("s" SUBSEP scope) in hasscope) ? ", " label ": " n : "" }
 
 END {
@@ -280,7 +259,6 @@ END {
         print "## Summary"
         if (sname != "") print "- standard: " sname " " sver (applies == "" ? "" : (cname != "" ? "; the files it does not cover ([common]) use the common standard " cname " " cver : "; the files it does not cover are marked [no standard] and are not scored"))
         print "- deductions: " (merge == "true" ? "merged (merge=true): one F line per check id with all its locations; deducted once" : "not merged (merge=false): one F line per location; every occurrence is deducted")
-        print_scale()
         parts = count_part("main", "main code changed", nmain + 0) count_part("test", "test files", ntest + 0) count_part("migration", "migrations", nmig + 0)
         if (ncf > 0) parts = parts ", " (cname != "" ? "common standard files: " : "files without a standard: ") ncf
         printf "- reviewable files: %d, excluded: %d%s\n", nk, nx, (parts == "" ? "" : "; " substr(parts, 3))
@@ -296,7 +274,7 @@ END {
 
     if (mode == "all" || mode == "scan") {
         print "## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)"
-        if (nr == 0 && np == 0) print "- none: the standard has no scan rules (scan= in the rule.ini of the standard)"
+        if (nr == 0 && np == 0) print "- none: the standard has no scan rules (scan= in configs/standards.ini)"
         for (k = 1; k <= np; k++) if (pr_hint(k)) printf "- %s: %s\n%s", pid[k], phint[k], pmod[k]
         for (k = 1; k <= nid; k++) {
             id = idlist[k]; cnt = 0; out = ""

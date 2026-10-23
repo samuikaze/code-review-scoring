@@ -12,7 +12,7 @@ Prepare everything the code analysis needs. Do not review code or assign severit
 
 **Output:** `tmp/step1/pr.diff`, the review plan `tmp/step1/standards/` and a completed `tmp/step1/spec-context.md` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one).
 
-`init-workspace` plans the review with `standard plan` of `code-review-scoring`: every enabled framework rule of the rules project (`[rules] root` of `configs/settings.ini`) whose `applies` matches a changed file gets its own report, and the other files are scored with the common standard. It writes the plan to `tmp/step1/standards/` and puts the confirmations (事先確認事項) of those standards into **Severity facts** as `- <check ids> (<standard>) <what to confirm>:` lines. When it exits 2 with a standards error, report it (workflow mode: set failed with that error); the user fixes the standards with `standard lint`, never you. Without `configs/standards.ini` (standalone use) it skips the plan with a warning.
+`init-workspace` plans the review with `standard plan` of `code-review-scoring`: every framework standard of `configs/standards.ini` whose `applies` matches a changed file gets its own report, and the other files are scored with the common standard. It writes the plan to `tmp/step1/standards/` and puts the confirmations (事先確認事項) of those standards into **Severity facts** as `- <check ids> (<standard>) <what to confirm>:` lines. When it exits 2 with a standards error, report it (workflow mode: set failed with that error); the user fixes the standards with `standard lint`, never you. Without `configs/standards.ini` (standalone use) it skips the plan with a warning.
 
 ## Modes
 
@@ -28,7 +28,7 @@ Paths are relative to this skill's directory. All three variants behave identica
 | Save diff, create spec-context.md | `bash scripts/init-workspace.sh` | `zsh scripts/init-workspace.zsh` | `powershell -ExecutionPolicy Bypass -File scripts/init-workspace.ps1` |
 | Readiness check | `bash scripts/check-context.sh` | `zsh scripts/check-context.zsh` | `powershell -ExecutionPolicy Bypass -File scripts/check-context.ps1` |
 
-PowerShell parameters are `-Git`, `-Repo`, `-InputPath`, `-Root`, `-Title`, `-Force`, `-Config` (bash and zsh: `--config FILE`, default `configs/settings.ini` in the project root; its `[rules] root` names the rules project).
+PowerShell parameters are `-Git`, `-Repo`, `-InputPath`, `-Root`, `-Title`, `-Force`, `-Standards` (bash and zsh: `--standards FILE`, default `configs/standards.ini` in the project root).
 
 ## Procedure
 

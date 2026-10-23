@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-score
-description: Step 4 of code-review-scoring, usable on its own. Validates tmp/step3/findings.txt and computes the dimension scores, total and grade (on the severity scale and grades of the scoring standard) into tmp/step4/score.tsv and score.json with a script. Use when the user says 「打分數」、「計算 PR 分數」、「幫 PR 計分」、「重新計分」、「分數算一下」.
+description: Step 4 of code-review-scoring, usable on its own. Validates tmp/step3/findings.txt and computes the dimension scores, total and S–D grade into tmp/step4/score.tsv and score.json with a script. Use when the user says 「打分數」、「計算 PR 分數」、「幫 PR 計分」、「重新計分」、「分數算一下」.
 compatibility: Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "4/5"
@@ -30,7 +30,7 @@ Paths are relative to this skill's directory.
 
 `--check` (PowerShell `-Check`) only validates `findings.txt`, with the same rules and exit codes, and writes nothing; step 3 runs it before it reports success.
 
-The check ids, their severities, the severity scale, the points and the grades come from the scoring standard: an enabled rule of the rules project that `[rules] root` of `configs/settings.ini` in the project root names (`--config` for another settings file), read with `standard resolve` of `code-review-scoring` (the sibling skill must be installed). By default the script uses the only enabled framework rule, or the common rule when no framework rule is enabled; with several framework standards, name one with `--standard NAME` (PowerShell `-Standard`). The check items of the common standard (ids starting with `CM-`) are always allowed as well. The common rule always takes its points and grades from `defaults.ini`. `score.tsv` and `score.json` record the name, version and sha256 of the standards used, and the sha256 of the `rule.ini` of each and of `defaults.ini` (`ruleini` and `defaults` records; `ruleIniHash` and `defaultsHash`).
+The check ids, their severities and the points overrides come from the scoring standard registered in `configs/standards.ini` in the project root, read with `standard resolve` of `code-review-scoring` (the sibling skill must be installed). By default the script uses the only framework standard, or the common standard when no framework standard is registered; with several framework standards, name one with `--standard NAME` (PowerShell `-Standard`). The check items of the common standard (ids starting with `CM-`) are always allowed as well. `score.tsv` and `score.json` record the name, version and sha256 of the standards used.
 
 ## Procedure
 
@@ -39,36 +39,34 @@ The check ids, their severities, the severity scale, the points and the grades c
    - **0**: done. It prints the grade, the dimension scores and any warnings.
    - **1**: validation failed. Each error names the line in `findings.txt`. Standalone: fix it and run again until it passes. Workflow: `finish` records the failure and step 3 is redone. When an error questions a judgment (a severity that is not allowed, a location outside the diff), recheck the code and the check items of the scoring standard instead of only reformatting.
    - **3**: step 1 or step 3 still has unresolved inputs or unanswered questions. Standalone: ask the user in one round, record the replies, run again. Workflow: report failed.
-   - **2**: wrong arguments, missing files, a missing `[rules] root` in `configs/settings.ini`, or an invalid rules project or standard document (tell the user what the error says and, for the rules, that `standard lint` lists every problem; do not edit these files yourself).
+   - **2**: wrong arguments, missing files, invalid scoring settings in `configs/settings.ini`, or a missing or invalid `configs/standards.ini` or standard document (tell the user what the error says and, for the standards, that `standard lint` lists every problem; do not edit these files yourself).
 3. Treat warnings seriously. "unchanged context line" means the location is not new code: move the finding to the added line or drop it.
 
 ## Scoring rules (implemented by the script)
 
-The points, the severity scale (codes, deductions, grade caps), the grades and whether deductions are merged are settings of the rules project: the `[points]`, `[severity:CODE]`, `[grade:CODE]` and `[scoring]` sections of the standard's `rule.ini`, or of `defaults.ini` of the rules project for the groups that `rule.ini` does not set (see `templates/<language>/rule-template.ini`). `standard lint` checks them, and the script refuses a standard whose settings cannot be read with exit 2. Never change them on your own; they are the user's choice.
+The points, deductions (including whether they are merged) and grade thresholds are settings: the `[points]`, `[deductions]` and `[grades]` sections of `configs/settings.ini` in the project root (`--config` for another file). Anything not set there keeps the default below. The `points.A`–`points.G` overrides of the standard in `configs/standards.ini` win over `[points]`. The script refuses invalid settings with exit 2 (the seven dimensions must add up to 100, grade thresholds must be S > A > B > C). Never change them on your own; they are the user's choice.
 
-Defaults of the template (`rule-template.ini`):
+Defaults:
 
-| Dimension | Points | | Severity | Deduction | Caps the grade at | | Grade | Lowest total |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A Correctness | 25 | | Critical | 10 | B | | A | 95 |
-| B Security | 15 | | Major | 5 | | | B | 85 |
-| C Test quality | 15 | | Minor | 2 | | | C | 70 |
-| D Architecture and design | 15 | | Nit | 1 | | | D | 60 |
-| E Performance and resource use | 10 | | | | | | F | 0 |
-| F Readability | 10 | | | | | | | |
-| G Maintainability | 10 | | | | | | | |
+| Dimension | Points | | Severity | Deduction |
+| --- | --- | --- | --- | --- |
+| A Correctness | 25 | | Critical | 10 |
+| B Security | 15 | | Major | 5 |
+| C Test quality | 15 | | Minor | 2 |
+| D Architecture and design | 15 | | Nit | 1 |
+| E Performance and resource use | 10 | | | |
+| F Readability | 10 | | | |
+| G Maintainability | 10 | | | |
 
-- `[scoring] merge` decides how a check id found in several places is deducted:
+- `[deductions] merge` decides how a check id found in several places is deducted:
   - `false` (default): every `F` record is one occurrence with one location and is deducted on its own, so a check id found in three places is deducted three times. A record with several locations, or the same check id twice at the same location, fails validation.
   - `true`: one `F` record per check id with all its locations, deducted once. The same check id in two records fails validation.
-- Every `F` and `U` record is deducted, the lowest severity of the scale included. A severity outside the scale fails validation.
+- Every `F` and `U` record is deducted, `Nit` included.
 - A check id belongs to the dimension of its first letter; ids of the common standard to the letter after `CM-` (`CM-B1` is B).
 - Dimension score = points − sum of its deductions, never below 0. Total = sum of the seven dimension scores − deductions of `F` records without a check id (`-`) − deductions of suspected upstream factors (`U`), never below 0.
-- Grade: the first grade, from the highest, whose lowest total the total reaches.
-- A deduction whose severity has a cap limits the grade to that grade at most; with several, the lowest cap applies. `score.tsv` (`cap` record) and `score.json` (`cap`) name the severity and the grade.
-- Allowed severities per check come from the standard document: the default, the adjustment written for the check item, or the lowest severity of the scale. Records without a check id and `U` records take any severity of the scale.
-- When the common standard has its own severity scale (other codes, or another order), column 3 of its check items (`CM-…`) holds the closest severity of the standard's scale, any one of it. `from:` with their severity on the common scale is recommended but optional; when present, it is checked as above against the common document. With the same scale, `from:` is refused.
-- Every code review comment of the report (`mapped` and `advisory` plugins) needs one `M|<plugin>#<n>|<severity>` line with a severity of the standard's scale; the report counts and sorts the comments by it.
+- Grades: S 95–100, A 85–94, B 70–84, C 55–69, D 0–54 (lower bounds of S, A, B, C are configurable).
+- Any Critical deduction caps the grade at B, whatever the settings (a single deduction could not otherwise reflect a serious defect).
+- Allowed severities per check come from the standard document: the default, the adjustment written for the check item, or `Nit`. Records without a check id and `U` records take any severity.
 - With the review root, every comment of a `mapped` plugin in `tmp/step2` must be cited in `source:` (as `<plugin>#<n>`) or rejected in an `X` line, never both; comments of `advisory` plugins may be neither.
 
 ## Gotchas
