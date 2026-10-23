@@ -1,33 +1,39 @@
 ﻿<#
 .SYNOPSIS
-Checks and parses scoring standards: the Markdown documents and scan rule files listed in configs/standards.ini.
+Checks and parses scoring standards: the rules project that [rules] root of configs/settings.ini names (rules.ini,
+defaults.ini and the rule.ini, Markdown document and scan rule file of each rule).
 
 .DESCRIPTION
 "lint" is for the people who write standards and runs only when they ask for it; the scoring workflow uses
 "parse", which prints nothing about the format unless the document is broken.
 Uses the same GNU-style arguments as standard.sh:
 
-  standard.ps1 lint [--standards FILE] [--settings FILE] [NAME ...]
+  standard.ps1 lint [--settings FILE] [NAME ...]
   standard.ps1 lint --file DOC.md [--scan RULES.tsv] [--common]
-      check configs/standards.ini and the documents and scan rule files it lists (only the NAMEs given),
-      or one document that is not registered yet (--file). Prints what was parsed, then the errors and
+      check the rules project: rules.ini, defaults.ini and the rule.ini, document and scan rule file of every
+      rule (only the NAMEs given), or one document that is not registered yet (--file; its severities are
+      checked against the rule.ini in its folder, or defaults.ini). Prints what was parsed, then the errors and
       warnings with file and line. Regexes are compiled with .NET, and with awk when it is installed
   standard.ps1 parse --file DOC.md [--common]
       print the parsed document as TAB-separated records (name, version, dim, check, confirm);
       stops at the first format error (exit 3)
   standard.ps1 diff OLD.md NEW.md
       list the dimensions, check items and confirmations that differ between two versions of a document
-  standard.ps1 resolve [--standards FILE] [--settings FILE] [NAME]
-      for score: the standard NAME (default: the only framework standard, or the common one when there is
-      none) and the common standard, as TAB-separated records: "standard" / "common" (name, version,
-      sha256, path), "applies" (the regex of the files of NAME), "scan" (path, sha256 of the scan rules),
-      "points" (the overrides of NAME) and the "check" records of each document.
-      Stops when standards.ini or a document has a format error (exit 3)
-  standard.ps1 plan --diff PR.diff --out DIR [--standards FILE] [--settings FILE]
-      for the review workflow: the standards that score the PR. Each file goes to the framework standard whose
-      applies covers it; the other files are common files, scored with the common standard in the report of
-      their project (the framework of the nearest folder above them; every report when that is unclear), or on
-      their own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
+  standard.ps1 resolve [--settings FILE] [NAME]
+      for score: the enabled rule NAME (default: the only enabled framework rule, or the common one when there
+      is none) and the enabled common rule, as TAB-separated records: "standard" / "common" (name, version,
+      sha256, path of the document), "ruleini" (path, sha256), "applies" (the regex of the files of NAME), "scan"
+      (path, sha256 of the scan rules), "points" (dimension, points), "merge", "severity" (code, points, cap,
+      display name, meaning with its lines separated by |; from the most severe), "grade" (code, min, display
+      name; from the highest), "cseverity" (code, display name, meaning of the common rule's scale), the "check"
+      records of each document
+      and "defaults" (path, sha256 of defaults.ini).
+      Stops when the rules project or a document has a format error (exit 3)
+  standard.ps1 plan --diff PR.diff --out DIR [--settings FILE]
+      for the review workflow: the enabled rules that score the PR. Each file goes to the framework rule whose
+      applies covers it; the other files are common files, scored with the common rule in the report of their
+      project (the framework of the nearest folder above them; every report when that is unclear), or on their
+      own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
       report and kind framework|common|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
       each report, and DIR/confirm.tsv (standard, check codes, what to confirm before scoring)
   standard.ps1 stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--common]
@@ -35,13 +41,18 @@ Uses the same GNU-style arguments as standard.sh:
       "# source: <document file> <version> sha256:<hash>" of the document (--file), so lint can tell when the
       document changes later; an existing source line is replaced
 
-Options: --standards FILE  (default: configs/standards.ini in the project root)
-         --settings FILE   (default: configs/settings.ini in the project root; its [points] are checked with the overrides)
+The rules project: [rules] root of the settings names its folder (relative to the folder of the settings file). It
+holds rules.ini (one [name] section per rule: path = the folder of its rule.ini, enable = true|false), defaults.ini
+(the points, severities and grades of the rules that do not set their own) and a folder per rule with rule.ini
+([rule] standard = the Markdown document, scan = the scan rule file, applies, role = common), the document and the
+scan rules.
+
+Options: --settings FILE   (default: configs/settings.ini in the project root; its [rules] root names the rules project)
          --common          the document is the common standard (its check codes start with CM-)
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
-Exit codes: 0 ok (warnings allowed), 1 lint found errors, 2 bad arguments or unknown NAME, 3 standards.ini or the document
-has a format error or is missing.
+Exit codes: 0 ok (warnings allowed), 1 lint found errors, 2 bad arguments, unknown or disabled NAME, 3 the rules
+project or the document has a format error or is missing.
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -57,16 +68,16 @@ $argv = @($args)
 if ($argv.Count -eq 0) { Get-Help $PSCommandPath -Detailed; exit 2 }
 if ($argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 0 }
 $cmd = [string]$argv[0]
-$opt = @{ standards = (Join-Path $projectRoot 'configs/standards.ini'); settings = (Join-Path $projectRoot 'configs/settings.ini')
-    file = ''; scan = ''; role = ''; diff = ''; out = '' }
+$opt = @{ settings = (Join-Path $projectRoot 'configs/settings.ini'); file = ''; scan = ''; role = ''; diff = ''; out = '' }
 $names = @()
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -in '--standards', '--settings', '--file', '--scan', '--diff', '--out') {
+    if ($a -in '--settings', '--file', '--scan', '--diff', '--out') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]; $i += 2
     }
+    elseif ($a -eq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--settings)' }
     elseif ($a -eq '--common') { $opt.role = 'common'; $i++ }
     elseif ($a -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 0 }
     elseif ($a.StartsWith('-', [StringComparison]::Ordinal)) { Exit-WithError "unknown option $a (see Get-Help)" }
@@ -80,25 +91,71 @@ function Get-Field([string[]]$Lines, [string]$Key) {
     foreach ($l in $Lines) { $a = $l.Split("`t"); if ($a[0] -ceq $Key) { return $a[1] } }
     return ''
 }
+function Get-Sha([string]$Path) { return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant() }
 function Add-Problem([string]$Kind, [string]$Text) {
     if ($Kind -eq 'error') { $script:nerr++ } else { $script:nwarn++ }
     Write-Line "${Kind}: $Text"
 }
-# Prints the diagnostics of a parser run ($Shown = file shown in the messages) and counts them.
+# "FILE:LINE: message" of a diagnostic record ($Shown = the file when the record names none).
+function Get-DiagText([string]$Shown, [string[]]$a) {
+    $f = if ($a.Count -ge 4 -and $a[3] -ne '') { $a[3] } else { $Shown }
+    $at = if ($a[1] -ne '') { ":$($a[1])" } else { '' }
+    return "$f${at}: $($a[2])"
+}
+# The first error of a parser run as "FILE:LINE: message", or ''.
+function Get-FirstError([string]$Shown, [string[]]$Lines) {
+    foreach ($l in $Lines) { $a = $l.Split("`t"); if ($a[0] -ceq '!error') { return Get-DiagText $Shown $a } }
+    return ''
+}
+# Prints the diagnostics of a parser run ($Shown = file shown when the record names none) and counts them.
 function Write-Report([string]$Shown, [string[]]$Lines) {
     foreach ($l in $Lines) {
         $a = $l.Split("`t")
-        if ($a[0] -cne '!error' -and $a[0] -cne '!warn') { continue }
-        $at = if ($a[1] -ne '') { ":$($a[1])" } else { '' }
-        if ($a[0] -ceq '!error') { $script:nerr++; Write-Line "error: $Shown${at}: $($a[2])" }
-        else { $script:nwarn++; Write-Line "warning: $Shown${at}: $($a[2])" }
+        if ($a[0] -ceq '!error') { $script:nerr++; Write-Line "error: $(Get-DiagText $Shown $a)" }
+        elseif ($a[0] -ceq '!warn') { $script:nwarn++; Write-Line "warning: $(Get-DiagText $Shown $a)" }
     }
 }
-# Paths in standards.ini: relative paths are relative to its folder.
-function Resolve-StdPath([string]$Path, [string]$Base) {
-    if ($Path -eq '-' -or $Path -eq '') { return '' }
-    if (-not [IO.Path]::IsPathRooted($Path)) { $Path = Join-Path $Base $Path }
-    return Get-Full $Path
+# A path of the rules project as the parser wrote it, made absolute ('' for -).
+function Get-PathOf([string]$Path) { if ($Path -eq '-' -or $Path -eq '') { return '' } return Get-Full $Path }
+
+# The rules project: [rules] root of the settings, relative to the folder of the settings file. Returns
+# @($true, its folder) or @($false, the reason it cannot be used).
+function Get-RulesRoot([string]$Settings) {
+    if (-not [IO.File]::Exists($Settings)) { return @($false, "${Settings}: file not found; run setup check") }
+    $insec = $false; $v = ''
+    foreach ($l in (Read-StdLines $Settings)) {
+        if ($l -cmatch '^[ \t]*\[') { $h = $l -creplace '^[ \t]*\[|\][ \t]*$', ''; $insec = ($h -ceq 'rules'); continue }
+        if ($insec -and $l -cmatch '^[ \t]*root[ \t]*=') { $v = (($l -creplace '^[^=]*=[ \t]*', '') -creplace '[ \t]*$', '') -creplace '^"|"$', '' }
+    }
+    if ($v -eq '') { return @($false, "${Settings}: [rules] root is not set; set it to the folder of the code-review-scoring-rules project") }
+    $v = $v.Replace('\', '/')
+    if (-not (Test-StdAbs $v)) { $v = (Split-Path -Parent $Settings) + '/' + $v }
+    if (-not [IO.Directory]::Exists($v)) { return @($false, "${Settings}: [rules] root $v is not a folder") }
+    return @($true, ([IO.Path]::GetFullPath($v).TrimEnd('\', '/').Replace('\', '/')))
+}
+# Reads the rules project of the settings: @($true, its folder, the parser output) or @($false, the reason).
+function Read-Rules([string]$Settings) {
+    $rr = Get-RulesRoot $Settings
+    if (-not $rr[0]) { return $rr }
+    return @($true, $rr[1], (Invoke-StdRules "$($rr[1])/rules.ini" $rr[1] "$($rr[1])/defaults.ini"))
+}
+# Like Read-Rules, for the commands that need a valid rules project: prints the first error and exits 3.
+function Get-NeedRules([string]$Settings) {
+    $r = Read-Rules $Settings
+    if (-not $r[0]) { [Console]::Error.WriteLine("error: $($r[1])"); exit 3 }
+    $e = Get-FirstError "$($r[1])/rules.ini" $r[2]
+    if ($e) { [Console]::Error.WriteLine("error: $e; run standard lint first"); exit 3 }
+    return $r
+}
+# The std records of the parser output, split into fields.
+function Get-StdRecords([string[]]$Ini) {
+    $list = New-Object System.Collections.Generic.List[object]
+    foreach ($l in $Ini) { if ($l.StartsWith("std`t", [StringComparison]::Ordinal)) { $list.Add($l.Split("`t")) } }
+    return , $list.ToArray()
+}
+# The severity codes of the rule $Name, from the most severe.
+function Get-SevsOf([string[]]$Ini, [string]$Name) {
+    return , @($Ini | ForEach-Object { $a = $_.Split("`t"); if ($a[0] -ceq 'severity' -and $a[1] -ceq $Name) { $a[2] } })
 }
 
 # Compiles every queued regex ("!re" records of $Shown) with awk when it is installed, and with .NET.
@@ -129,16 +186,17 @@ function Test-StdRegex([string]$Shown, [string[]]$Re) {
     }
 }
 
-# Lints one document and its scan rule file; $Want = the section name it must have ('' = any).
-function Test-StdDoc([string]$Want, [string]$Doc, [string]$Role, [string]$Scan) {
+# Lints one document and its scan rule file; $Want = the rule name it must have ('' = any), $Sevs = the severity
+# codes of its scale (empty = not checked).
+function Test-StdDoc([string]$Want, [string]$Doc, [string]$Role, [string]$Scan, [string[]]$Sevs) {
     if (-not [IO.File]::Exists($Doc)) { Add-Problem 'error' "${Doc}: file not found"; return }
-    $out = Invoke-StdDoc $Doc $Role
+    $out = Invoke-StdDoc $Doc $Role $Sevs
     $name = Get-Field $out 'name'
     $st = ''
     foreach ($l in $out) { $a = $l.Split("`t"); if ($a[0] -ceq 'stats') { $st = "$($a[1]) check items ($($a[2])), $($a[3]) adjustable, $($a[4]) confirmations" } }
     Write-Line "document: $(if ($name) { $name } else { '?' }) $(Get-Field $out 'version'), $st"
     Write-Report $Doc $out
-    if ($Want -and $name -and $name -cne $Want) { Add-Problem 'error' "${Doc}: the front matter name $name does not match the section [$Want] in standards.ini" }
+    if ($Want -and $name -and $name -cne $Want) { Add-Problem 'error' "${Doc}: the front matter name $name does not match the section [$Want] in rules.ini" }
     if (-not $Scan) { return }
     if (-not [IO.File]::Exists($Scan)) { Add-Problem 'error' "${Scan}: file not found"; return }
     $sc = Invoke-StdScan $Scan $out
@@ -148,53 +206,69 @@ function Test-StdDoc([string]$Want, [string]$Doc, [string]$Role, [string]$Scan) 
     $src = $sc | Where-Object { $_.StartsWith("!source`t", [StringComparison]::Ordinal) } | Select-Object -First 1
     if ($src) {
         $a = $src.Split("`t")
-        $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $Doc).Hash.ToLowerInvariant()
-        if ($a[4] -cne $h) { Add-Problem 'warning' "${Scan}:$($a[1]): the scan rules were made from $($a[2]) $($a[3]), and the document has changed since; regenerate them or run the review mode" }
+        if ($a[4] -cne (Get-Sha $Doc)) { Add-Problem 'warning' "${Scan}:$($a[1]): the scan rules were made from $($a[2]) $($a[3]), and the document has changed since; regenerate them or run the review mode" }
     }
 }
 
 # Parses a document for parse and diff; stops with exit 3 at the first format error.
 function Get-ParsedDoc([string]$Doc, [string]$Role) {
     if (-not (Test-UserFile $Doc)) { Exit-WithError "file not found: $Doc" }
-    $out = Invoke-StdDoc (Resolve-UserPath $Doc) $Role
-    foreach ($l in $out) {
-        $a = $l.Split("`t")
-        if ($a[0] -ceq '!error') {
-            $at = if ($a[1] -ne '') { ":$($a[1])" } else { '' }
-            [Console]::Error.WriteLine("error: $Doc${at}: $($a[2]); run standard lint first"); exit 3
-        }
-    }
+    $out = Invoke-StdDoc (Resolve-UserPath $Doc) $Role @()
+    $e = Get-FirstError $Doc $out
+    if ($e) { [Console]::Error.WriteLine("error: $e; run standard lint first"); exit 3 }
     return , @($out | Where-Object { -not $_.StartsWith('!', [StringComparison]::Ordinal) -and -not $_.StartsWith("stats`t", [StringComparison]::Ordinal) })
 }
 
 switch ($cmd) {
     'lint' {
         if ($opt.file) {
+            # An unregistered document: the scale of the rule.ini in its folder, or that of defaults.ini.
+            $file = Get-Full $opt.file; $sevs = @()
+            $rr = Get-RulesRoot (Get-Full $opt.settings)
+            if ($rr[0]) {
+                $rf = Join-Path (Split-Path -Parent $file) 'rule.ini'
+                if (-not [IO.File]::Exists($rf)) { $rf = '' }
+                $sevs = Get-StdScale $rf "$($rr[1])/defaults.ini"
+            }
+            if ($sevs.Count -eq 0) { Add-Problem 'warning' 'no severity scale found (rule.ini next to the document, or defaults.ini of the rules project); severities are not checked' }
             $scanFull = if ($opt.scan) { Get-Full $opt.scan } else { '' }
-            Test-StdDoc '' (Get-Full $opt.file) $opt.role $scanFull
+            Test-StdDoc '' $file $opt.role $scanFull $sevs
         }
         else {
             if ($opt.scan -or $opt.role) { Exit-WithError '--scan and --common go with --file' }
-            $standards = Get-Full $opt.standards
-            Write-Line "== $standards"
-            if (-not [IO.File]::Exists($standards)) {
-                Add-Problem 'error' "${standards}: file not found; copy configs/standards.example.ini to configs/standards.ini"
+            $settings = Get-Full $opt.settings
+            $r = Read-Rules $settings
+            if (-not $r[0]) {
+                Write-Line "== $settings"
+                Add-Problem 'error' $r[1]
             }
             else {
-                $base = Split-Path -Parent $standards
-                $ini = Invoke-StdIni $standards (Resolve-UserPath $opt.settings)
-                Write-Report $standards $ini
-                $records = @($ini | Where-Object { $_.StartsWith("std`t", [StringComparison]::Ordinal) } | ForEach-Object { , $_.Split("`t") })
+                $rulesIni = "$($r[1])/rules.ini"; $ini = $r[2]
+                $records = Get-StdRecords $ini
+                Write-Line "== $rulesIni"
+                $list = ($records | ForEach-Object { $_[1] + $(if ($_[6] -ceq 'true') { '' } else { ' (disabled)' }) }) -join ', '
+                Write-Line "rules: $($records.Count) registered$(if ($records.Count -gt 0) { " ($list)" })"
+                Write-Report $rulesIni $ini
                 foreach ($n in $names) {
-                    if (-not ($records | Where-Object { $_[1] -ceq $n })) { Add-Problem 'error' "${standards}: [$n] is not registered" }
+                    if (-not ($records | Where-Object { $_[1] -ceq $n })) { Add-Problem 'error' "${rulesIni}: [$n] is not registered" }
                 }
-                foreach ($r in $records) {
-                    if ($names.Count -gt 0 -and $r[1] -cnotin $names) { continue }
-                    if ($r[3] -ceq '-') { continue }
-                    $dpath = Resolve-StdPath $r[3] $base; $scan = Resolve-StdPath $r[4] $base
+                foreach ($rec in $records) {
+                    if ($names.Count -gt 0 -and $rec[1] -cnotin $names) { continue }
+                    $name = $rec[1]
                     Write-Line ''
-                    Write-Line "== [$($r[1])] $dpath"
-                    Test-StdDoc $r[1] $dpath $(if ($r[5] -ceq '-') { '' } else { $r[5] }) $scan
+                    Write-Line "== [$name]$(if ($rec[7] -cne '-') { ' ' + (Get-PathOf $rec[7]) })$(if ($rec[6] -cne 'true') { ' (disabled)' })"
+                    $src = New-StdMap; $m = ''; $sl = @(); $gl = @()
+                    foreach ($l in $ini) {
+                        $a = $l.Split("`t")
+                        if ($a[1] -cne $name) { continue }
+                        if ($a[0] -ceq 'from') { $src[$a[2]] = $a[3] }
+                        elseif ($a[0] -ceq 'merge') { $m = $a[2] }
+                        elseif ($a[0] -ceq 'severity') { $sl += $a[2] }
+                        elseif ($a[0] -ceq 'grade') { $gl += $a[2] }
+                    }
+                    if ($src['points']) { Write-Line "settings: points ($($src['points'])), severities $($sl -join ', ') ($($src['severities'])), grades $($gl -join ', ') ($($src['grades'])), merge=$m" }
+                    if ($rec[3] -ceq '-') { continue }
+                    Test-StdDoc $name (Get-PathOf $rec[3]) $(if ($rec[5] -ceq '-') { '' } else { $rec[5] }) (Get-PathOf $rec[4]) (Get-SevsOf $ini $name)
                 }
             }
         }
@@ -212,7 +286,7 @@ switch ($cmd) {
         foreach ($f in $opt.file, $opt.scan) { if (-not (Test-UserFile $f)) { Exit-WithError "file not found: $f" } }
         $doc = Get-ParsedDoc $opt.file $opt.role
         $docPath = Get-Full $opt.file
-        $src = "# source: $([IO.Path]::GetFileName($docPath)) $(Get-Field $doc 'version') sha256:$((Get-FileHash -Algorithm SHA256 -LiteralPath $docPath).Hash.ToLowerInvariant())"
+        $src = "# source: $([IO.Path]::GetFileName($docPath)) $(Get-Field $doc 'version') sha256:$(Get-Sha $docPath)"
         # The source line replaces the first existing one (others are dropped), or goes first.
         $lines = New-Object System.Collections.Generic.List[string]
         $done = $false
@@ -237,81 +311,68 @@ switch ($cmd) {
     }
     'resolve' {
         if ($names.Count -gt 1) { Exit-WithError 'resolve takes at most one NAME' }
-        $standards = Get-Full $opt.standards
-        if (-not [IO.File]::Exists($standards)) {
-            [Console]::Error.WriteLine("error: ${standards}: file not found; copy configs/standards.example.ini to configs/standards.ini"); exit 3
-        }
-        $base = Split-Path -Parent $standards
-        $ini = Invoke-StdIni $standards (Resolve-UserPath $opt.settings)
-        foreach ($l in $ini) {
-            $a = $l.Split("`t")
-            if ($a[0] -ceq '!error') {
-                $at = if ($a[1] -ne '') { ":$($a[1])" } else { '' }
-                [Console]::Error.WriteLine("error: $standards${at}: $($a[2]); run standard lint first"); exit 3
-            }
-        }
-        $records = New-Object System.Collections.Generic.List[object]
-        foreach ($l in $ini) { if ($l.StartsWith("std`t", [StringComparison]::Ordinal)) { $records.Add($l.Split("`t")) } }
+        $r = Get-NeedRules (Get-Full $opt.settings)
+        $rulesIni = "$($r[1])/rules.ini"; $ini = $r[2]
+        $records = Get-StdRecords $ini
         $want = if ($names.Count -eq 1) { [string]$names[0] } else { '' }
         $common = $null; $frameworks = New-Object System.Collections.Generic.List[string]
-        foreach ($r in $records) { if ($r[5] -ceq 'common') { $common = $r } else { $frameworks.Add($r[1]) } }
+        foreach ($rec in $records) {
+            if ($rec[6] -cne 'true') { continue }
+            if ($rec[5] -ceq 'common') { $common = $rec } else { $frameworks.Add($rec[1]) }
+        }
         if (-not $want) {
-            # Without a NAME: the only framework standard, or the common one when there is no framework standard.
-            if ($frameworks.Count -gt 1) { Exit-WithError "${standards}: several standards are registered ($($frameworks -join ', ')); pick one by name" }
+            # Without a NAME: the only enabled framework rule, or the common one when there is no framework rule.
+            if ($frameworks.Count -gt 1) { Exit-WithError "${rulesIni}: several rules are enabled ($($frameworks -join ', ')); pick one by name" }
             elseif ($frameworks.Count -eq 1) { $want = $frameworks[0] }
             elseif ($common) { $want = $common[1] }
-            else { Exit-WithError "${standards}: no standard is registered" }
+            else { Exit-WithError "${rulesIni}: no rule is enabled" }
         }
-        # The standard itself first, then the common standard (when it is another one); each with its check items.
+        # The rule itself first, then the enabled common rule (when it is another one); each with its check items.
         $pick = New-Object System.Collections.Generic.List[object]
-        foreach ($r in $records) { if ($r[1] -ceq $want) { $pick.Add($r) } }
-        if ($pick.Count -eq 0) { Exit-WithError "${standards}: [$want] is not registered" }
+        foreach ($rec in $records) { if ($rec[1] -ceq $want) { $pick.Add($rec) } }
+        if ($pick.Count -eq 0) { Exit-WithError "${rulesIni}: [$want] is not registered" }
+        if ($pick[0][6] -cne 'true') { Exit-WithError "${rulesIni}: [$want] is disabled (enable=`"false`")" }
         if ($common -and $common[1] -cne $want) { $pick.Add($common) }
         $sb = New-Object System.Text.StringBuilder
-        foreach ($r in $pick) {
-            $dpath = Resolve-StdPath $r[3] $base
+        foreach ($rec in $pick) {
+            $name = $rec[1]; $dpath = Get-PathOf $rec[3]; $ruleini = Get-PathOf $rec[7]
             if (-not [IO.File]::Exists($dpath)) { [Console]::Error.WriteLine("error: ${dpath}: file not found; run standard lint first"); exit 3 }
-            $out = Invoke-StdDoc $dpath $(if ($r[5] -ceq '-') { '' } else { $r[5] })
-            foreach ($l in $out) {
-                $a = $l.Split("`t")
-                if ($a[0] -ceq '!error') {
-                    $at = if ($a[1] -ne '') { ":$($a[1])" } else { '' }
-                    [Console]::Error.WriteLine("error: $dpath${at}: $($a[2]); run standard lint first"); exit 3
-                }
+            $out = Invoke-StdDoc $dpath $(if ($rec[5] -ceq '-') { '' } else { $rec[5] }) (Get-SevsOf $ini $name)
+            $e = Get-FirstError $dpath $out
+            if ($e) { [Console]::Error.WriteLine("error: $e; run standard lint first"); exit 3 }
+            $kind = if ($name -ceq $want) { 'standard' } else { 'common' }
+            [void]$sb.Append("$kind`t$name`t$(Get-Field $out 'version')`tsha256:$(Get-Sha $dpath)`t$dpath`n")
+            [void]$sb.Append("ruleini`t$ruleini`tsha256:$(Get-Sha $ruleini)`n")
+            if ($name -ceq $want) {
+                foreach ($l in $ini) { $a = $l.Split("`t"); if ($a[0] -ceq 'applies' -and $a[1] -ceq $name) { [void]$sb.Append("applies`t$($a[2])`n") } }
             }
-            $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $dpath).Hash.ToLowerInvariant()
-            $kind = if ($r[1] -ceq $want) { 'standard' } else { 'common' }
-            [void]$sb.Append("$kind`t$($r[1])`t$(Get-Field $out 'version')`tsha256:$h`t$dpath`n")
-            if ($r[1] -ceq $want) {
-                foreach ($l in $ini) { $a = $l.Split("`t"); if ($a[0] -ceq 'applies' -and $a[1] -ceq $want) { [void]$sb.Append("applies`t$($a[2])`n") } }
-            }
-            if ($r[4] -cne '-') {
-                $spath = Resolve-StdPath $r[4] $base
+            if ($rec[4] -cne '-') {
+                $spath = Get-PathOf $rec[4]
                 if (-not [IO.File]::Exists($spath)) { [Console]::Error.WriteLine("error: ${spath}: file not found; run standard lint first"); exit 3 }
-                [void]$sb.Append("scan`t$spath`tsha256:$((Get-FileHash -Algorithm SHA256 -LiteralPath $spath).Hash.ToLowerInvariant())`n")
+                [void]$sb.Append("scan`t$spath`tsha256:$(Get-Sha $spath)`n")
             }
-            if ($r[1] -ceq $want) {
-                foreach ($l in $ini) { $a = $l.Split("`t"); if ($a[0] -ceq 'points' -and $a[1] -ceq $want) { [void]$sb.Append("points`t$($a[2])`t$($a[3])`n") } }
+            foreach ($l in $ini) {
+                $a = $l.Split("`t")
+                if ($a[1] -cne $name) { continue }
+                if ($name -ceq $want) {
+                    if ($a[0] -ceq 'points') { [void]$sb.Append("points`t$($a[2])`t$($a[3])`n") }
+                    elseif ($a[0] -ceq 'merge') { [void]$sb.Append("merge`t$($a[2])`n") }
+                    elseif ($a[0] -ceq 'severity') { [void]$sb.Append("severity`t$($a[2])`t$($a[3])`t$($a[4])`t$($a[5])`t$($a[6])`n") }
+                    elseif ($a[0] -ceq 'grade') { [void]$sb.Append("grade`t$($a[2])`t$($a[3])`t$($a[4])`n") }
+                }
+                elseif ($a[0] -ceq 'severity') { [void]$sb.Append("cseverity`t$($a[2])`t$($a[5])`t$($a[6])`n") }
             }
             foreach ($l in $out) { if ($l.StartsWith("check`t", [StringComparison]::Ordinal)) { [void]$sb.Append("$l`n") } }
         }
+        $d = Get-Field $ini 'defaults'
+        [void]$sb.Append("defaults`t$(Get-PathOf $d)`tsha256:$(Get-Sha $d)`n")
         [Console]::Out.Write($sb.ToString())
     }
     'plan' {
         if (-not $opt.diff -or -not $opt.out -or $names.Count -gt 0) { Exit-WithError 'plan needs --diff PR.diff --out DIR' }
         if (-not (Test-UserFile $opt.diff)) { Exit-WithError "diff file not found: $($opt.diff)" }
-        $standards = Get-Full $opt.standards
-        if (-not [IO.File]::Exists($standards)) {
-            [Console]::Error.WriteLine("error: ${standards}: file not found; copy configs/standards.example.ini to configs/standards.ini"); exit 3
-        }
-        $ini = Invoke-StdIni $standards (Resolve-UserPath $opt.settings)
-        foreach ($l in $ini) {
-            $a = $l.Split("`t")
-            if ($a[0] -ceq '!error') {
-                $at = if ($a[1] -ne '') { ":$($a[1])" } else { '' }
-                [Console]::Error.WriteLine("error: $standards${at}: $($a[2]); run standard lint first"); exit 3
-            }
-        }
+        $settings = Get-Full $opt.settings
+        $ini = (Get-NeedRules $settings)[2]
         $outDir = Get-Full $opt.out
         [void][IO.Directory]::CreateDirectory($outDir)
         foreach ($f in [IO.Directory]::GetFiles($outDir)) { if ($f -match '(\\|/)(plan\.tsv|confirm\.tsv|[^\\/]*\.diff|[^\\/]*\.resolve)$') { [IO.File]::Delete($f) } }
@@ -326,7 +387,7 @@ switch ($cmd) {
             if ($a[0] -cne 'report') { continue }
             $name = $a[1]; $reports.Add($name)
             $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-            try { $res = @(& $exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath resolve --standards $standards --settings $opt.settings $name) }
+            try { $res = @(& $exe -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath resolve --settings $settings $name) }
             finally { $ErrorActionPreference = $prev }
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             [IO.File]::WriteAllText((Join-Path $outDir "$name.resolve"), (($res -join "`n") + "`n"), $utf8)
@@ -341,7 +402,7 @@ switch ($cmd) {
                 $done[$f[1]] = 1
                 $role = ''
                 foreach ($x in $ini) { $g = $x.Split("`t"); if ($g[0] -ceq 'std' -and $g[1] -ceq $f[1] -and $g[5] -ceq 'common') { $role = 'common' } }
-                foreach ($c in (Invoke-StdDoc $f[4] $role)) {
+                foreach ($c in (Invoke-StdDoc $f[4] $role @())) {
                     $g = $c.Split("`t")
                     if ($g[0] -ceq 'confirm') { [void]$confirm.Append("$($f[1])`t$($g[1])`t$($g[2])`n") }
                 }

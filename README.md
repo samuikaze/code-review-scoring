@@ -10,14 +10,15 @@ Skills following the [Agent Skills](https://agentskills.io) specification. It
 works with any tool that supports skills, such as Claude Code, GitHub Copilot
 and Codex.
 
-- **Scoring**: scores against the scoring standard documents registered in
-  `configs/standards.ini`, not tied to any technology. Each framework
-  standard (for example Spring Boot 3 or Angular) produces its own report;
-  files that belong to no framework (README, CI configuration, Dockerfile and
-  so on) are scored with the common standard. Standard documents are written
-  in Markdown and kept in the separate
-  [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
-  repository; see [Scoring standards](#scoring-standards).
+- **Scoring**: scores against the enabled scoring rules of a rules project,
+  not tied to any technology. Each framework rule (for example Spring Boot 3
+  or Angular) produces its own report; files that belong to no framework
+  (README, CI configuration, Dockerfile and so on) are scored with the common
+  rule. The rules (standard documents, points, severity scales and grades)
+  live in a separate rules project such as
+  [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules),
+  located by `[rules] root` in `configs/settings.ini`; see
+  [Scoring standards](#scoring-standards).
 - **CR**: CR guidelines for other technologies (for example the frontend) or
   of other teams plug into the workflow as plugin skills, with no technology
   restriction.
@@ -46,7 +47,7 @@ results and the score:
 ### One report per scoring standard
 
 A PR may change both the backend and the frontend. Step 1 plans the scoring
-from `configs/standards.ini` (`standard plan`):
+from the enabled rules in `rules.ini` of the rules project (`standard plan`):
 
 - Every framework standard (for example `springboot-3` or `angular`) with at
   least one file matching its `applies` produces its own report; steps 3 to 5
@@ -67,9 +68,9 @@ from `configs/standards.ini` (`standard plan`):
 - Step 1 saves a snapshot of each parsed standard
   (`step1/standards/<standard>.resolve`) and records the standard names,
   versions and sha256 in `request.md`. Steps 3 to 5 then score with that
-  snapshot; if a standard document, a scan rule file or the settings in
-  `standards.ini` change during the run, the status script refuses to
-  continue. Revert the change, or start over with `init --reset`.
+  snapshot; if a standard document, a scan rule file, the `rule.ini` of the
+  rule or `defaults.ini` of the rules project change during the run, the
+  status script refuses to continue. Revert the change, or start over with `init --reset`.
 
 ### Execution modes
 
@@ -285,10 +286,10 @@ skills/
     SKILL.md
     references/upstream.md                # judging upstream factors (loaded only when an upstream factor is suspected)
     references/findings-format.md         # format of findings.txt
-    scripts/prepare-diff.{sh,zsh,ps1}     # scan rules come from the scan rule files (scan) registered in configs/standards.ini
+    scripts/prepare-diff.{sh,zsh,ps1}     # scan rules come from scan in the rule.ini of the rule, which also gives the severity scale
   code-review-scoring-score/
     SKILL.md
-    scripts/score.{sh,zsh,ps1}            # check items and severities come from the standards registered in configs/standards.ini
+    scripts/score.{sh,zsh,ps1}            # check items, severity scale, points and grades come from the rules project
   code-review-scoring-report/
     SKILL.md
     references/placeholders.md            # placeholders of the report template and keys of labels.tsv
@@ -300,9 +301,8 @@ skills/
 scripts/
   link-skills.{sh,zsh,ps1}                # syncs the skill directories each tool reads from skills/ and configs/plugins.ini
 configs/                                  # configuration (only *.example.ini is under version control)
-  settings.example.ini                    # template for execution mode, subagent model and reasoning, report language and points (settings.ini is generated on first use)
+  settings.example.ini                    # template for execution mode, subagent model and reasoning, report language and the rules project (settings.ini is generated on first use)
   plugins.example.ini                     # template for the plugin skill list (copy to plugins.ini)
-  standards.example.ini                   # template for the scoring standard list (copy to standards.ini)
 docs/
   en/notices.md                           # notices (scoring standards, GitHub Copilot compatibility)
   zh-tw/README.md                         # Traditional Chinese version of this README
@@ -310,6 +310,7 @@ docs/
 templates/                                # one folder per language; see "Report language"
   en/                                     # English
     scoring-rule-template.md              # template for scoring standard documents
+    rule-template.ini                     # template for rule.ini (every section explained, with the default scale and grades)
     report-template.md                    # report template (customizable)
     labels.tsv                            # text the script inserts into the report, and the language the agents write in
   zh-tw/                                  # Traditional Chinese (same files)
@@ -318,7 +319,7 @@ tests/
   score/                                  # test cases of score (the check items of legacy.md equal the old rules.tsv, so scores stay the same)
   prepare/                                # test cases of prepare-diff (legacy.tsv holds the rules of the old scan-rules.tsv, plus scan rules of the common standard)
   plan/                                   # test cases of standard plan (two framework standards and the common standard, common files at several levels)
-  workflow/                               # end-to-end test of the full workflow (temporary git repository, two reports, routing of CR comments, refusal when a standard changes)
+  workflow/                               # end-to-end test of the full workflow (temporary git repository, two reports, one with its own severity scale and grades, routing of CR comments, refusal when a standard changes)
 tmp/                                      # temporary files of a scoring run (default review root of all scripts, not under version control)
 reports/                                  # final score reports (reports/ next to tmp/, not under version control)
 .gitattributes                            # fixes the line endings of scripts and configuration files
@@ -376,18 +377,36 @@ scoring workflow read the same document:
   and can be written freely. The scripts accept the headings, the dimension
   names and 「無」 / `None` in either language, so a standard can be written
   in either one regardless of the report language.
-- In the project root, copy `configs/standards.example.ini` to
-  `configs/standards.ini`, with one section per standard: the path of the
-  standard document (`path`), the files it applies to (`applies`, required
-  for framework standards), the scan rule file (`scan`, optional) and point
-  overrides (`points.A` to `points.G`, optional). The common standard sets
-  `role="common"` and its check codes start with `CM-`. See the comments in
-  the template for every field.
-- The standard documents and scan rule files are not kept in this project
-  but in an external repository such as
-  [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules).
-  Paths differ per environment, so `standards.ini` is not under version
-  control; set it up yourself on each machine or for each person.
+- The rules live in a separate rules project (for example
+  [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)).
+  Set `root` in the `[rules]` section of `configs/settings.ini` to its root
+  folder (a full path, or relative to `configs/`; on Windows, use forward
+  slashes). Paths differ per environment, so `settings.ini` is not under
+  version control; set it up yourself on each machine or for each person.
+- The layout of a rules project:
+
+  ```text
+  <rules project>/
+    rules.ini        registers the rules: one section per rule, path = its folder, enable = whether it is used
+    defaults.ini     default points, deduction merging, severity scale and grades
+    <rule folder>/
+      rule.ini       the rule: document, scan rules, files it applies to, and the points, scale and grades it overrides
+      <document>.md
+      <scan rules>.tsv
+  ```
+
+- A section name of `rules.ini` is the rule name and must equal the `name` in
+  the front matter of its document (lowercase letters, digits and `-`);
+  `path` and `enable` (`"true"` or `"false"`) are required. Disabled rules are
+  not used for scoring, but `lint` still checks them.
+- Write `rule.ini` from `templates/<language>/rule-template.ini`: `[rule]`
+  sets the document (`standard`), the scan rule file (`scan`, optional), the
+  files it applies to (`applies`, required for framework rules) or
+  `role="common"` (the common rule: at most one enabled, check codes start
+  with `CM-`; its points and grades always come from `defaults.ini`). The
+  other sections (`[points]`, `[scoring]`, `[severity:*]`,
+  `[grade:*]`) come from `defaults.ini` when left out; see
+  [Adjusting points and severities](#adjusting-points-and-severities).
 - After writing or changing a standard, run `standard lint` to check the
   format, overlapping `applies`, the point totals and the scan rules:
 
@@ -405,52 +424,44 @@ scoring workflow read the same document:
   find; they are only hints and never deduct by themselves. For the format
   and the `@scope` and `@pr` records, see the template and the examples in
   `tests/prepare/`.
-- Do not change a standard during a scoring run: step 1 records the
-  standards as they are, and the workflow refuses to continue when they change
-  later (see [One report per scoring standard](#one-report-per-scoring-standard)).
+- Do not change the rules during a scoring run: step 1 records the
+  documents, scan rules, `rule.ini` and `defaults.ini` as they are, and the
+  workflow refuses to continue when they change later (see [One report per scoring standard](#one-report-per-scoring-standard)).
 
 ### Using the existing scoring standards
 
 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
-currently provides the following standards, each with a standard document
-(`.md`) and a scan rule file (`.tsv`) in English (`en/`) and Traditional
-Chinese (`zh-tw/`). Pick either language for a standard; it does not have to
-match the report language:
+is a rules project. It currently provides the following rules. Each rule
+folder has one `rule.ini` and the standard document (`.md`) and scan rule file
+(`.tsv`) in two languages, English (`en/`) and Traditional Chinese
+(`zh-tw/`). The `rule.ini` of each rule uses the Traditional Chinese files; to
+use English, change `zh-tw/` to `en/` in its `standard` and `scan`. A standard
+does not have to match the report language:
 
-| Code | Type | Applies to | Directory |
+| Rule | Type | Applies to | Rule folder |
 | --- | --- | --- | --- |
-| `springboot-3` | Framework standard | Java / Spring Boot 3 projects | `springboot3-rule/<language>/` |
-| `common` | Common standard | Other files, e.g. README, CI, Dockerfile | `common-rule/<language>/` |
+| `springboot-3` | Framework rule | Java / Spring Boot 3 projects | `springboot3-rule/` |
+| `common` | Common rule | Other files, e.g. README, CI, Dockerfile | `common-rule/` |
 
-1. Clone the standards repository anywhere on your machine:
+1. Clone the rules project anywhere on your machine:
 
    ```bash
    git clone https://github.com/samuikaze/code-review-scoring-rules.git
    ```
 
-2. In this project's root, copy `configs/standards.example.ini` to
-   `configs/standards.ini`, and point `path` and `scan` to the cloned files.
-   Relative paths are relative to `configs/`; on Windows, use forward
-   slashes:
+2. Add a `[rules]` section to `configs/settings.ini` of this project, with
+   `root` pointing to the cloned folder (see `configs/settings.example.ini`):
 
    ```ini
-   [springboot-3]
-   path="/path/to/code-review-scoring-rules/springboot3-rule/en/springboot-3-cr-scoring-rule.md"
-   scan="/path/to/code-review-scoring-rules/springboot3-rule/en/springboot-3-cr-scoring-rule.tsv"
-   applies="*.java, *.kt, *.sql, *.xml, *.yml, *.yaml, *.properties, *.gradle, *.kts"
-
-   [common]
-   path="/path/to/code-review-scoring-rules/common-rule/en/common-cr-scoring-rule.md"
-   scan="/path/to/code-review-scoring-rules/common-rule/en/common-cr-scoring-rule.tsv"
-   role="common"
+   [rules]
+   root="/path/to/code-review-scoring-rules"
    ```
 
 3. Run `standard lint` to check the configuration and the standards.
 
-When the standards are updated, run `git pull` in the standards repository;
-this project needs no change. Do not update during a scoring run, for the
-reason above. To add or change a standard, see the README of the standards
-repository.
+When the rules are updated, run `git pull` in the rules project; this project
+needs no change. Do not update during a scoring run, for the reason above. To
+add or change a rule, see the README of the rules project.
 
 ### Maintaining scoring standards
 
@@ -474,70 +485,107 @@ scan rules"); the scoring workflow never loads it:
      the subagent, for at most 3 rounds.
   5. When it passes, the changes against the existing file are shown for your
      confirmation; only after you confirm, `standard stamp` writes it to the
-     location set by `scan` in `standards.ini`, with the version and hash of
+     location set by `scan` in the `rule.ini` of the rule, with the version and hash of
      the source standard document in the header.
 - **Review mode**: runs lint and the review on an existing scan rule file
   only, writes the result to `review.md`, and changes no file.
 
 On platforms without subagents (or with `subagent=false`), the main agent
 does the generation and the review in turn, with the same steps and files but
-less independence. You always change the standard documents and
-`standards.ini` yourself; the AI only reports problems.
+less independence. You always change the standard documents, `rules.ini`,
+`defaults.ini` and `rule.ini` yourself; the AI only reports problems.
 
-## Adjusting points
+## Adjusting points and severities
 
-The maximum points per dimension, the deduction per severity and the grade
-thresholds are set in the `[points]`, `[deductions]` and `[grades]` sections
-of `configs/settings.ini` in the project root; unset items use the defaults:
+The points per dimension, deduction merging, the severity scale and the
+grades are set in the rules project; `configs/settings.ini` of this project no
+longer has scoring settings:
 
-| Dimension | Default max | | Severity | Default deduction | | Grade | Default minimum total |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| A Correctness | 25 | | Critical | 10 | | S | 95 |
-| B Security | 15 | | Major | 5 | | A | 85 |
-| C Test quality | 15 | | Minor | 2 | | B | 70 |
-| D Architecture and design | 15 | | Nit | 1 | | C | 55 |
-| E Performance and resources | 10 | | | | | D | below C |
-| F Readability | 10 | | | | | | |
-| G Maintainability | 10 | | | | | | |
+- `defaults.ini` (root of the rules project): the defaults shared by all
+  rules.
+- `rule.ini` of a rule: only what it overrides. Groups are replaced as a
+  whole, not merged key by key: any `[severity:*]` section replaces the whole
+  default scale, any `[grade:*]` section replaces all default grades, and
+  `[points]` and `[scoring]` each replace the whole section.
+- The common rule (`role="common"`) can override only `[scoring]` and the
+  severity scale. Its points and grades always come from `defaults.ini`, also
+  when it scores files on its own; `[points]`, `[grade:*]` and `cap` in its
+  `rule.ini` are ignored with a lint warning.
+
+`templates/<language>/rule-template.ini` explains every section; its defaults
+are:
+
+| Dimension | Default max | | Severity | Default deduction | Caps the grade at | | Grade | Default minimum total |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A Correctness | 25 | | Critical | 10 | B | | A | 95 |
+| B Security | 15 | | Major | 5 | | | B | 85 |
+| C Test quality | 15 | | Minor | 2 | | | C | 70 |
+| D Architecture and design | 15 | | Nit | 1 | | | D | 60 |
+| E Performance and resources | 10 | | | | | | F | 0 |
+| F Readability | 10 | | | | | | | |
+| G Maintainability | 10 | | | | | | | |
+
+In the default scale, problems that must be fixed use the classic SonarQube
+severities Critical, Major and Minor, and small style issues use Nit from the
+Google code review guide. A frontend rule could, for example, use a scale of
+its own with display names:
 
 ```ini
-[points]
-A="30"
-B="20"
-C="10"
-D="10"
-E="10"
-F="10"
-G="10"
+[severity:Critical]
+name="嚴重"
+points="15"
+cap="C"
+meaning="Data corruption, a security incident or an outage."
 
-[deductions]
-Major="6"
-merge="true"
+[severity:Major]
+name="主要"
+points="5"
+meaning="Fails in specific situations."
+
+[severity:Minor]
+name="次要"
+points="2"
+meaning="Works, but there is a better way to write it."
+
+[severity:Info]
+name="參考"
+points="0"
+meaning="A detail that does not affect the quality."
 ```
 
-- The seven dimensions must total 100, the grade thresholds must satisfy
-  S > A > B > C, and all values are integers; otherwise the scoring step fails
-  and lists the errors.
-- A scoring standard can override the maximum points of dimensions with
-  `points.A` to `points.G` in `configs/standards.ini`. Overrides take
-  precedence over `[points]`, and the result must also total 100
-  (`standard lint` checks this).
-- Every problem deducts points, including Nit. Problems that match no A to G
-  check item (check code `-`) and upstream factors are deducted from the
-  total by severity, not from any dimension; the total is at least 0.
-- With any Critical deduction, the grade is capped at B.
-- Whether deductions are merged is decided by `merge` in `[deductions]`:
+- Severities go from the most severe to the least severe. The code
+  (`[severity:CODE]`) is used by the check items of the documents and by
+  findings.txt; `name` is the name shown in the report (optional); `points` is
+  the deduction per finding; `meaning` is required and is what the AI judges
+  severities by (repeat `meaning` for several lines; they are joined in
+  order); `cap` is the highest grade when a deduction has this severity
+  (optional, a grade code).
+- The last severity is the lowest: every check item can be lowered to it,
+  and problems the diff cannot confirm get it. Every problem deducts points,
+  the lowest severity included.
+- Grades go from the highest to the lowest; `min` must decrease and the last
+  grade must be 0, and `name` is the name shown in the report (optional). The
+  grade is the first one whose minimum the total reaches; with several caps,
+  the lowest applies.
+- The seven dimensions must total 100, and all values are integers; otherwise
+  `standard lint` lists the errors and scoring stops.
+- Problems that match no A to G check item (check code `-`) and upstream
+  factors are deducted from the total by severity, not from any dimension;
+  dimension scores and the total are at least 0.
+- Whether deductions are merged is decided by `merge` in `[scoring]`:
   - `merge="false"` (default): not merged; every occurrence is its own
     deduction, so a check code at three locations deducts three times.
   - `merge="true"`: merged; a check code is written once with all its
     locations and deducts once.
   - Step 3 learns the current mode from the `- deductions:` line of the
-    `prepared.txt` summary; each dimension's score is at least 0.
-- Changes take effect when you rerun scoring (step 4) and the report (step 5)
-  (`review-state finish` in the full workflow); see
-  `configs/settings.example.ini` for an example. The first
-  `configs/settings.ini` is copied from the template, with the point sections
-  commented out.
+    `prepared.txt` summary.
+- When the common rule has a scale of its own, its check items (`CM-…`) are
+  judged on that scale first and deducted with the closest severity of the
+  framework rule's scale. Recording the severity on the common scale in
+  `from:` of findings.txt is recommended (optional); when present, it is
+  checked against the common document.
+- The rules are locked during a scoring run; after a change, start over
+  (`init --reset`), or the change applies from the next run.
 
 ## Adjusting the report
 
@@ -653,7 +701,7 @@ mode="advisory"
 
 With a CR plugin in `mapped` mode, comments that match no check item of the
 scoring standard go to "other" and are deducted from the total by the
-plugin's severity. When no scoring standard covers the technology a plugin
+severity they were mapped to on the standard's scale. When no scoring standard covers the technology a plugin
 reviews, or you do not want the plugin to affect the score, use `advisory`.
 Each report lists only the comments on its standard's files.
 
@@ -719,8 +767,8 @@ Each report lists only the comments on its standard's files.
    H|做得好的地方
    ```
 
-   Severities map by meaning to Critical, Major, Minor and Nit; the plugin's
-   own rule id goes in the 4th field; `spec:` (optional) lists every spec
+   Severities stay on the plugin's own scale; step 3 maps them to the scale
+   of the scoring standard. The plugin's own rule id goes in the 4th field; `spec:` (optional) lists every spec
    location the comment is based on. When the step is marked successful, the
    status script validates the format of `cr.txt`.
 4. Step 3 can start only after every plugin succeeded.
@@ -728,20 +776,25 @@ Each report lists only the comments on its standard's files.
 ### How CR results affect the score (step 3)
 
 - `prepare-diff` lists in `prepared.txt` the id `<plugin>#<n>` of every
-  comment (the n-th comment in that plugin's `cr.txt`).
+  comment (the n-th comment in that plugin's `cr.txt`) and the severity scale
+  of the scoring standard.
+- Every comment (of `advisory` plugins too) is mapped with
+  `M|<comment id>|<severity>` to the severity of the standard's scale whose
+  meaning is closest; the report counts and sorts the comments by it.
 - Every comment of a `mapped` plugin is checked against the code during the
   analysis, with one of two outcomes:
   - **Confirmed**: always deducts points, with `source: <comment id>` naming
     the comment. A comment matching an A to G check item deducts under that
     item with the scoring rules' default severity and adjustment conditions;
     one matching no check item uses check code `-` and is deducted from the
-    total by the plugin's severity; one whose root cause seems to be upstream
+    total by its mapped severity; one whose root cause seems to be upstream
     is recorded as an upstream factor and deducted.
   - **Rejected** (the plugin was wrong, it is outside this change, or it
     cannot be confirmed in the code): written as `X|<comment id>|reason`, and
     the reason appears in the report.
 - Scoring checks that every `mapped` comment is either deducted or rejected
-  with a reason; a missing one fails the check.
+  with a reason, and that every comment has an `M` line; a missing one fails
+  the check.
 - Comments of `advisory` plugins are for reference only and never become
   deductions.
 
@@ -758,8 +811,9 @@ Each report lists only the comments on its standard's files.
 The final report has two parts:
 
 - **Part 1, CR results**: an overview per plugin (files reviewed, comments
-  per severity, conclusion), the comments of each plugin (sorted by severity)
-  and highlights, and the plugins that did not run because no changed file
+  per severity of the standard's scale, conclusion), the comments of each
+  plugin (sorted by their mapped severity, with the plugin's own severity on
+  an extra line when it differs) and highlights, and the plugins that did not run because no changed file
   matched. Each comment's header is "severity | rule | verdict", and all code
   locations and spec locations are listed one per line:
 
@@ -788,8 +842,9 @@ The final report has two parts:
   - After the seven dimensions, the score table has two more rows for the
     deductions of 「其他（未對應檢查項）」 (other, no matching check item) and
     「上游因素」 (upstream factors).
-  - The problem details include Nit; deductions confirmed from CR comments
-    show the comment id they came from.
+  - The problem details include deductions of the lowest severity;
+    deductions confirmed from CR comments show the comment id they came from.
+    Severities and grades are shown by their `name` (or code when unset).
   - 「建議（不扣分）」 (suggestions, no deduction) holds only the extra
     suggestions made in step 3.
 
@@ -803,7 +858,9 @@ comments. Layout and wording can be adjusted in
 - `link-skills`: syncs each tool's skill links from `skills/` and
   `configs/plugins.ini`, checking names and settings before any change.
 - `setup`: before every full workflow run, checks `configs/plugins.ini` and
-  `configs/settings.ini` and creates them step by step or by command,
+  `configs/settings.ini` (with the rules project that `[rules] root` names,
+  and the legacy settings that are no longer read) and creates them step by
+  step or by command,
   validating plugins as they are registered, so configuration errors are not
   discovered only in the CR step.
 - `review-state`: manages the step status files, plans which CR plugins run,
@@ -824,16 +881,17 @@ comments. Layout and wording can be adjusted in
 - `standard`: checks the format when writing a scoring standard (`lint`),
   parses the standard document into data the scripts can read (`parse`),
   lists the differences between two versions (`diff`), selects the standard
-  to score with and the common standard and outputs the check items, point
-  overrides, applicable files and scan rule files for `score` and
+  to score with and the common standard and outputs the check items, points,
+  severity scale, grades, applicable files and scan rule files for `score` and
   `prepare-diff` (`resolve`), decides in step 1 which reports to produce from
   the changed files and cuts the diff of each report (`plan`), and writes a
   reviewed scan rule draft with its source header to its final location
   (`stamp`). The standard document is shared by the AI and the scripts, and a
   format error would make the scoring read the wrong rules, so the script
-  checks strictly: field counts, severity spelling, duplicate codes, that all
-  dimensions exist, the point totals and overlapping `applies` in
-  `standards.ini`, and whether the regexes of the scan rules use only syntax
+  checks strictly: field counts, severities that are not on the rule's scale,
+  duplicate codes, that all dimensions exist, unknown sections and keys of
+  `rules.ini`, `defaults.ini` and `rule.ini`, the point totals, the grade
+  thresholds and overlapping `applies`, and whether the regexes of the scan rules use only syntax
   shared by awk and .NET, whether the codes they reference still exist, and
   whether they are stale after the standard document changed. `lint` runs
   only when writing or maintaining standards; the scoring workflow calls
@@ -843,8 +901,8 @@ comments. Layout and wording can be adjusted in
 - `score`: validates the scoring result (check codes, severity adjustment
   conditions, whether locations are on added lines of the diff, and merged or
   per-occurrence deductions according to `merge`), and computes the scores
-  and grade with the points of `configs/settings.ini` (the `points.*` of a
-  standard in `configs/standards.ini` take precedence). Check codes and
+  and grade (with its cap) with the points, severity scale and grades of the
+  rule. Check codes and
   allowed severities come from the scoring standard document, which avoids
   calculation mistakes by the AI. `--check` only validates without writing
   files, for step 3 to check itself before finishing.

@@ -5,15 +5,14 @@ Preprocess a PR diff: drop non-reviewable files, number new-file lines, list heu
 .DESCRIPTION
 Prints a summary, the code review comments of ROOT/step2 with their ids (with -Root only), heuristic candidates
 (clues only) and a compact diff with new-file line numbers.
-The summary shows the [deductions] merge setting of -Config (default: configs/settings.ini in the project root; missing =
-false), which decides how findings.txt is written. With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
+The summary shows merge and the severity scale of the standard, which decide how findings.txt is written. With -Root, reads ROOT/step1/pr.diff and writes ROOT/step3/prepared.txt unless -Out is given; without -Root,
 -InputPath and -Git, ROOT is tmp in the project root. -InputPath - reads the diff from stdin.
 With the review plan ROOT/step1/standards/plan.tsv, -Root reads the diff of the standard -Standard (default: the only
 one; ROOT/step1/standards/NAME.diff), lists only its code review comments and writes ROOT/step3/NAME/prepared.txt.
-The scan rules come from -Standard (a section of -Standards, default: configs/standards.ini in the project root;
-default: the only framework standard, or the common standard when no framework standard is registered); files its
-applies does not cover are scanned with the rules of the common standard. -Scan FILE uses one scan rule file for
-every file instead.
+The scan rules, severity scale and merge come from -Standard (an enabled rule of the rules project that [rules] root
+of -Config names; -Config defaults to configs/settings.ini in the project root; default standard: the only enabled
+framework rule, or the common rule when no framework rule is enabled); files its applies does not cover are scanned
+with the rules of the common rule. -Scan FILE uses one scan rule file for every file instead (no severity scale).
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 2 bad arguments or input, or a missing or invalid standard or scan rule file (run standard lint).
 
@@ -45,18 +44,8 @@ $sources = @($Root, $InputPath, $Git | Where-Object { $_ }).Count
 if ($sources -gt 1) { Exit-WithError 'use only one of -Root, -InputPath, -Git' }
 $projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
 if ($sources -eq 0) { $Root = Join-Path $projectRoot 'tmp' }
-# [deductions] merge decides how findings.txt is written; the scoring step validates it the same way.
 if (-not $Config) { $Config = Join-Path $projectRoot 'configs/settings.ini' }
-if (-not $Standards) { $Standards = Join-Path $projectRoot 'configs/standards.ini' }
-$merge = 'false'
-if (Test-UserFile $Config) {
-    $sec = ''
-    foreach ($l in (Read-Utf8Lines $Config)) {
-        if ($l -match '^\s*\[(.*)\]\s*$') { $sec = $Matches[1]; continue }
-        if ($sec -ceq 'deductions' -and $l -cmatch '^\s*merge\s*=\s*"?(.*?)"?\s*$') { $merge = $Matches[1].ToLowerInvariant() }
-    }
-    if ($merge -cnotin 'true', 'false') { Exit-WithError "[deductions] merge in $Config must be true or false, not $merge" }
-}
+if ($Standards) { Exit-WithError '-Standards was removed: the rules come from [rules] root of the settings (-Config)' }
 $cplan = ''; $cstd = ''
 if ($Root) {
     $InputPath = Join-Path $Root 'step1/pr.diff'; $sub = ''
@@ -70,7 +59,7 @@ if ($Root) {
 }
 $diffText = Get-DiffText -InputPath $InputPath -Git $Git -Repo $Repo
 
-# Scan rules and file scopes of the standard (code-review-scoring/scripts/standard.ps1 resolve, run with the same
+# Scan rules, file scopes, severity scale and merge of the standard (code-review-scoring/scripts/standard.ps1 resolve, run with the same
 # PowerShell; it prints its own errors). Owner 's' = the standard, 'c' = the common standard.
 if ($Scan) {
     if ($Standard) { Exit-WithError 'use only one of -Standard, -Scan' }
@@ -82,7 +71,7 @@ elseif ($cstd) {
     $resolved = @(Read-Utf8Lines (Join-Path $Root "step1/standards/$cstd.resolve") | Where-Object { $_ })
 }
 else {
-    $resolveArgs = @('resolve', '--standards', $Standards, '--settings', $Config)
+    $resolveArgs = @('resolve', '--settings', $Config)
     if ($Standard) { $resolveArgs += $Standard }
     $exe = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     $prevPref = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
@@ -94,10 +83,14 @@ $rules = New-Object System.Collections.Generic.List[object]
 $idOrder = New-Object System.Collections.Generic.List[string]
 $scopes = @{ s = (New-Object System.Collections.Generic.List[object]); c = (New-Object System.Collections.Generic.List[object]) }
 $hints = New-Object System.Collections.Generic.List[object]
-$stdName = ''; $stdVer = ''; $commonName = ''; $commonVer = ''; $applies = $null; $owner = 's'
+$stdName = ''; $stdVer = ''; $commonName = ''; $commonVer = ''; $applies = $null; $owner = 's'; $merge = 'false'
+$sevs = New-Object System.Collections.Generic.List[object]; $csevs = New-Object System.Collections.Generic.List[object]
 foreach ($rl in $resolved) {
     $a = ([string]$rl).Split("`t")
     switch -CaseSensitive ($a[0]) {
+        'merge' { $merge = $a[1] }
+        'severity' { $sevs.Add([pscustomobject]@{ Code = $a[1]; Points = $a[2]; Cap = $a[3]; Name = $a[4]; Meaning = $a[5] }) }
+        'cseverity' { $csevs.Add([pscustomobject]@{ Code = $a[1]; Name = $a[2]; Meaning = $a[3] }) }
         'standard' { $owner = 's'; $stdName = $a[1]; $stdVer = $a[2] }
         'common' { $owner = 'c'; $commonName = $a[1]; $commonVer = $a[2] }
         'applies' { $applies = [regex]::new($a[1]) }
@@ -298,6 +291,18 @@ if ($Mode -in 'all', 'summary') {
         [void]$sb.Append("- standard: $stdName $stdVer$cover`n")
     }
     [void]$sb.Append("- deductions: $(if ($merge -eq 'true') { 'merged (merge=true): one F line per check id with all its locations; deducted once' } else { 'not merged (merge=false): one F line per location; every occurrence is deducted' })`n")
+    # The severity scale of the standard, and that of the common standard when it differs (codes not in the same order).
+    if ($sevs.Count -gt 0) {
+        $label = { param($x) $x.Code + $(if ($x.Name -and $x.Name -cne $x.Code) { " ($($x.Name))" } else { '' }) }
+        # The meaning of a severity: "-" is none; the lines of a multi-line meaning (separated by |) go on indented lines.
+        $text = { param($v) if ($v -ceq '-') { '' } else { $v.Replace('|', "`n    ") } }
+        [void]$sb.Append("- severity scale (from the most severe; deducted per finding; the lowest, $($sevs[$sevs.Count - 1].Code), is always allowed and is used when a problem cannot be confirmed):`n")
+        foreach ($x in $sevs) { [void]$sb.Append("  - $(& $label $x): $(if ([int]$x.Points) { "-$($x.Points)" } else { '0' })$(if ($x.Cap -cne '-') { ", caps the grade at $($x.Cap)" }). $(& $text $x.Meaning)`n") }
+        if ($csevs.Count -gt 0 -and (@($csevs | ForEach-Object { $_.Code }) -join ',') -cne (@($sevs | ForEach-Object { $_.Code }) -join ',')) {
+            [void]$sb.Append("- severity scale of the common standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):`n")
+            foreach ($x in $csevs) { [void]$sb.Append("  - $(& $label $x). $(& $text $x.Meaning)`n") }
+        }
+    }
     $parts = (Get-CountPart 'main' 'main code changed' $nMain) + (Get-CountPart 'test' 'test files' $nTest) + (Get-CountPart 'migration' 'migrations' $nMig)
     if ($nCommon -gt 0) { $parts += ", $(if ($commonName) { 'common standard files' } else { 'files without a standard' }): $nCommon" }
     [void]$sb.Append("- reviewable files: $nk, excluded: $nx$(if ($parts) { '; ' + $parts.Substring(2) })`n")
@@ -310,7 +315,7 @@ if ($Mode -in 'all', 'summary') {
     [void]$sb.Append("`n")
     # Lists every code review comment with its id <plugin>#<n> (the n-th C record of the plugin's cr.txt).
     if ($Root -and (Test-UserFile (Join-Path $Root 'step2/plan.tsv'))) {
-        [void]$sb.Append("## Code review comments (cite the ids in source: of F/U lines or in X lines; see the skill)`n")
+        [void]$sb.Append("## Code review comments (cite the ids in source: of F/U lines or in X lines, and map each to the severity scale with an M line; see the skill)`n")
         $listed = 0
         foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step2/plan.tsv') | Where-Object { $_ })) {
             $p = $l -split "`t"; $crFile = Join-Path $Root "step2/$($p[0])/cr.txt"; $n = 0
@@ -333,7 +338,7 @@ if ($Mode -in 'all', 'summary') {
 }
 if ($Mode -in 'all', 'scan') {
     [void]$sb.Append("## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)`n")
-    if ($rules.Count -eq 0 -and $hints.Count -eq 0) { [void]$sb.Append("- none: the standard has no scan rules (scan= in configs/standards.ini)`n") }
+    if ($rules.Count -eq 0 -and $hints.Count -eq 0) { [void]$sb.Append("- none: the standard has no scan rules (scan= in the rule.ini of the standard)`n") }
     foreach ($h in $hints) {
         $mod = Get-PrHint $h
         if ($null -ne $mod) { [void]$sb.Append("- $($h.Id): $($h.Hint)`n").Append($mod) }

@@ -1,15 +1,15 @@
-### lint --file bad.md
+### lint --file bad.md --settings settings.ini
 document: Bad_Name , 4 check items (A 3, B 0, C 0, D 0, E 1, F 0, G 0), 1 adjustable, 1 confirmations
-warning: bad.md:3: applies is set in configs/standards.ini, not in the document; this line is ignored
+warning: bad.md:3: applies is set in the rule.ini of the rule, not in the document; this line is ignored
 warning: bad.md:4: unknown front matter key color is ignored
 error: bad.md:15: dimension B is listed more than once
 error: bad.md:16: dimension codes are A to G, not "H"
 error: bad.md:29: A1 is already defined on line 28
 error: bad.md:30: separate the fields with the full-width ｜, not |
 error: bad.md:31: a check item has 3 or 5 fields separated by ｜, not 4
-error: bad.md:32: severity must be Critical, Major, Minor or Nit (case-sensitive), not "major"
+error: bad.md:32: severity must be one of Critical, Major, Minor, Nit (case-sensitive), not "major"
 error: bad.md:33: A5 lists its default severity Minor as adjustable
-warning: bad.md:34: A6: Nit is always allowed and does not need to be listed
+warning: bad.md:34: A6: Nit is the lowest severity, which is always allowed and does not need to be listed
 error: bad.md:35: A7 has no condition for the adjustment
 error: bad.md:36: B1 is under ### A; the letter of a check code must match its dimension
 error: bad.md:37: the CM prefix is reserved for the common standard (role="common"): CM-A8
@@ -35,14 +35,14 @@ error: bad.md:70: the confirmation refers to Z9, which is not a check item
 
 result: 24 error(s), 8 warning(s)
 exit=1
-### lint --file bad-common.md --common
+### lint --file bad-common.md --common --settings settings.ini
 document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
 error: bad-common.md:23: check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not "A2"
 error: bad-common.md:24: CM-B1 is under ### A; the letter of a check code must match its dimension
 
 result: 2 error(s), 0 warning(s)
 exit=1
-### lint --file good-v1.md --scan bad-scan.tsv
+### lint --file good-v1.md --scan bad-scan.tsv --settings settings.ini
 document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
 scan rules: 11 line rules, 1 scopes, 2 PR hints
 error: bad-scan.tsv:3: scope test is already defined on line 2
@@ -73,7 +73,7 @@ warning: bad-scan.tsv:1: the scan rules were made from bad.md v1, and the docume
 
 result: 24 error(s), 1 warning(s)
 exit=1
-### lint --file good-v2.md --scan good-scan.tsv
+### lint --file good-v2.md --scan good-scan.tsv --settings settings.ini
 document: springboot-3 v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 1 confirmations
 scan rules: 2 line rules, 2 scopes, 1 PR hints
 error: good-scan.tsv:5: C1 is not a check item of the standard (removed or renamed?)
@@ -81,94 +81,180 @@ warning: good-scan.tsv:2: the scan rules were made from good-v1.md v0.1, and the
 
 result: 1 error(s), 1 warning(s)
 exit=1
-### lint --standards bad-standards.ini --settings none.ini
-== bad-standards.ini
-error: bad-standards.ini:2: key outside a [section]
-error: bad-standards.ini:7: [springboot-3] is already defined on line 3
-error: bad-standards.ini:12: points.B must be a whole number, not "x"
-error: bad-standards.ini:13: unknown key color (path, scan, applies, role, points.A to points.G)
-error: bad-standards.ini:14: section names are the name of the standard: lowercase letters, digits and -
-error: bad-standards.ini:29: lines are [name], key="value" or ; comments
-error: bad-standards.ini:6: [springboot-3] the seven dimensions must add up to 100 with the overrides, not 105
-error: bad-standards.ini:11: the pattern *.java is also in [springboot-3]; a file may belong to one framework standard only
-error: bad-standards.ini:17: [noapplies] has no applies (framework standards need one)
-warning: bad-standards.ini:22: applies is ignored for the common standard, which covers the files no framework standard covers
-error: bad-standards.ini:25: role is "common" or not set, not "weird"
-error: bad-standards.ini:23: [common2] has no applies (framework standards need one)
-error: bad-standards.ini:28: only one standard can have role="common"
+### lint --file good-v2.md --settings settings-missing.ini
+warning: no severity scale found (rule.ini next to the document, or defaults.ini of the rules project); severities are not checked
+document: springboot-3 v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 1 confirmations
 
-== [springboot-3] good-v1.md
+result: 0 error(s), 1 warning(s)
+exit=0
+### lint --file custom/custom.md --settings settings.ini
 document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
 
-== [angular] missing.md
-error: missing.md: file not found
+result: 0 error(s), 0 warning(s)
+exit=0
+### lint --file custom/old.md --settings settings.ini
+document: springboot-3 v0.1, 0 check items (A 0, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
+error: custom/old.md:22: severity must be one of High, Medium, Low (case-sensitive), not "Minor"
+error: custom/old.md:30: severity must be one of High, Medium, Low (case-sensitive), not "Major"
+error: custom/old.md:30: severity must be one of High, Medium, Low (case-sensitive), not "Critical"
+warning: custom/old.md:20: ### A has no check item; write 無 or None if that is intended
+warning: custom/old.md:28: ### C has no check item; write 無 or None if that is intended
 
-== [Bad Name] good-v1.md
-document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
-error: good-v1.md: the front matter name springboot-3 does not match the section [Bad Name] in standards.ini
+result: 3 error(s), 2 warning(s)
+exit=1
+### lint --settings settings-bad.ini
+== rules-bad/rules.ini
+rules: 8 registered (fw, fw2 (disabled), Bad Name, nopath, noenable (disabled), gone (disabled), cm, cm2)
+error: rules-bad/rules.ini:2: key outside a [section]
+error: rules-bad/rules.ini:7: [fw] is already defined on line 3
+error: rules-bad/rules.ini:29: lines are [section], key="value" or ; comments
+error: rules-bad/defaults.ini:13: [severity:Critical] is already defined on line 9
+error: rules-bad/defaults.ini:1: [rule] belongs in the rule.ini of a rule
+error: rules-bad/defaults.ini:4: merge is "true" or "false", not "maybe"
+error: rules-bad/defaults.ini:7: B must be a whole number, not "x"
+error: rules-bad/defaults.ini:8: unknown dimension H in [points] (A to G)
+error: rules-bad/defaults.ini:5: [points] needs all seven dimensions; C is missing
+error: rules-bad/defaults.ini:5: [points] needs all seven dimensions; D is missing
+error: rules-bad/defaults.ini:5: [points] needs all seven dimensions; E is missing
+error: rules-bad/defaults.ini:5: [points] needs all seven dimensions; F is missing
+error: rules-bad/defaults.ini:5: [points] needs all seven dimensions; G is missing
+error: rules-bad/defaults.ini:12: meaning may not contain a TAB or |
+error: rules-bad/defaults.ini:15: severity codes are letters, digits, _ and -, starting with a letter, not "9bad"
+error: rules-bad/defaults.ini:19: unknown key color in [severity:Major] (name, points, cap, meaning)
+error: rules-bad/defaults.ini:17: [severity:Major] needs points, the whole number deducted for each finding
+error: rules-bad/defaults.ini:27: unknown section [color] (scoring, points, severity:CODE, grade:CODE)
+error: rules-bad/defaults.ini:20: the min of grade A must be at most 100
+error: rules-bad/defaults.ini:22: grades go from the highest to the lowest: the min of B (120) must be lower than that of A (120)
+error: rules-bad/defaults.ini:24: the last grade C is the lowest; its min must be 0
+error: rules-bad/rules.ini:6: applies is set in the rule.ini of the rule, not in rules.ini
+error: rules-bad/fw/rule.ini:5: unknown key owner in [rule] (standard, scan, applies, role)
+error: rules-bad/fw/rule.ini:4: role is "common" or not set, not "weird"
+error: rules-bad/fw/rule.ini:1: [rule] has no applies (framework rules need one)
+error: rules-bad/defaults.ini:11: cap Z is not one of the grades that apply to [fw] (A, F)
+error: rules-bad/rules.ini:12: unknown key color (path, enable)
+error: rules-bad/rules.ini:11: enable is "true" or "false", not "yes"
+error: rules-bad/defaults.ini:11: cap Z is not one of the grades that apply to [fw2] (A, B, C)
+error: rules-bad/rules.ini:13: section names are the name of the rule: lowercase letters, digits and -
+error: rules-bad/bad/rule.ini: file not found (the path of [Bad Name] in rules.ini)
+error: rules-bad/rules.ini:16: [nopath] has no path (the folder of its rule.ini)
+error: rules-bad/rules.ini:18: [noenable] has no enable ("true" or "false")
+error: rules-bad/none/rule.ini: file not found (the path of [noenable] in rules.ini)
+error: rules-bad/gone/rule.ini: file not found (the path of [gone] in rules.ini)
+warning: rules-bad/cm/rule.ini:4: applies is ignored for the common standard, which covers the files no framework rule covers
+warning: rules-bad/cm/rule.ini:6: [points] is never used by the common rule (role="common"); its points come from defaults.ini
+warning: rules-bad/cm/rule.ini:24: [grade:CODE] sections are never used by the common rule (role="common"); its grades come from defaults.ini
+warning: rules-bad/cm/rule.ini:17: cap is never used by the common rule (role="common")
+error: rules-bad/cm2/rule.ini:1: [rule] has no standard (the Markdown document)
+error: rules-bad/rules.ini:26: only one enabled rule can have role="common"
 
-== [noapplies] good-v1.md
-document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
-error: good-v1.md: the front matter name springboot-3 does not match the section [noapplies] in standards.ini
+== [fw] rules-bad/fw/rule.ini
+settings: points (defaults.ini), severities Critical, Major (defaults.ini), grades A, F (rule.ini), merge=false
+document: springboot-3 v0.1, 1 check items (A 0, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
+error: good-v1.md:22: severity must be one of Critical, Major (case-sensitive), not "Minor"
+warning: good-v1.md:20: ### A has no check item; write 無 or None if that is intended
+error: good-v1.md: the front matter name springboot-3 does not match the section [fw] in rules.ini
+scan rules: 2 line rules, 2 scopes, 1 PR hints
+error: good-scan.tsv:6: A1 is not a check item of the standard (removed or renamed?)
 
-== [common] bad-common.md
-document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
+== [fw2] rules-bad/fw2/rule.ini (disabled)
+settings: points (defaults.ini), severities Critical, Major (defaults.ini), grades A, B, C (defaults.ini), merge=false
+document: springboot-3 v0.2, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 0 adjustable, 1 confirmations
+error: good-v2.md:23: severity must be one of Critical, Major (case-sensitive), not "Minor"
+warning: good-v2.md:23: A2: Major is the lowest severity, which is always allowed and does not need to be listed
+error: good-v2.md:51: the confirmation refers to A2, which is not a check item
+error: good-v2.md: the front matter name springboot-3 does not match the section [fw2] in rules.ini
+
+== [Bad Name] rules-bad/bad/rule.ini
+
+== [nopath]
+
+== [noenable] rules-bad/none/rule.ini (disabled)
+
+== [gone] rules-bad/gone/rule.ini (disabled)
+
+== [cm] rules-bad/cm/rule.ini
+settings: points (defaults.ini), severities Critical, Major (rule.ini), grades A, B, C (defaults.ini), merge=false
+document: common v0.1, 0 check items (A 0, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
+error: bad-common.md:22: severity must be one of Critical, Major (case-sensitive), not "Minor"
 error: bad-common.md:23: check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not "A2"
+error: bad-common.md:23: severity must be one of Critical, Major (case-sensitive), not "Minor"
 error: bad-common.md:24: CM-B1 is under ### A; the letter of a check code must match its dimension
+error: bad-common.md:24: severity must be one of Critical, Major (case-sensitive), not "Minor"
+warning: bad-common.md:20: ### A has no check item; write 無 or None if that is intended
+error: bad-common.md: the front matter name common does not match the section [cm] in rules.ini
 
-== [common2] bad-common.md
+== [cm2] rules-bad/cm2/rule.ini
+settings: points (defaults.ini), severities Critical, Major (defaults.ini), grades A, B, C (defaults.ini), merge=false
+
+result: 49 error(s), 7 warning(s)
+exit=1
+### lint --settings settings.ini
+== rules/rules.ini
+rules: 3 registered (springboot-3, common, angular (disabled))
+
+== [springboot-3] rules/springboot-3/rule.ini
+settings: points (rule.ini), severities Critical, Major, Minor, Nit (defaults.ini), grades A, B, C, D, F (defaults.ini), merge=false
+document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
+scan rules: 2 line rules, 2 scopes, 1 PR hints
+
+== [common] rules/common/rule.ini
+settings: points (defaults.ini), severities Critical, Major, Minor, Nit (defaults.ini), grades A, B, C, D, F (defaults.ini), merge=false
 document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
-error: bad-common.md:22: the CM prefix is reserved for the common standard (role="common"): CM-A1
-error: bad-common.md:24: the CM prefix is reserved for the common standard (role="common"): CM-B1
-error: bad-common.md: the front matter name common does not match the section [common2] in standards.ini
 
-== [common3] bad-common.md
-document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
-error: bad-common.md:23: check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not "A2"
-error: bad-common.md:24: CM-B1 is under ### A; the letter of a check code must match its dimension
-error: bad-common.md: the front matter name common does not match the section [common3] in standards.ini
+== [angular] rules/angular/rule.ini (disabled)
+settings: points (defaults.ini), severities Critical, Major, Minor, Nit (rule.ini), grades S, C, F (rule.ini), merge=false
+document: angular v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 1 confirmations
 
-result: 23 error(s), 1 warning(s)
+result: 0 error(s), 0 warning(s)
+exit=0
+### lint --settings settings.ini springboot-3 angular nope
+== rules/rules.ini
+rules: 3 registered (springboot-3, common, angular (disabled))
+error: rules/rules.ini: [nope] is not registered
+
+== [springboot-3] rules/springboot-3/rule.ini
+settings: points (rule.ini), severities Critical, Major, Minor, Nit (defaults.ini), grades A, B, C, D, F (defaults.ini), merge=false
+document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
+scan rules: 2 line rules, 2 scopes, 1 PR hints
+
+== [angular] rules/angular/rule.ini (disabled)
+settings: points (defaults.ini), severities Critical, Major, Minor, Nit (rule.ini), grades S, C, F (rule.ini), merge=false
+document: angular v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 1 confirmations
+
+result: 1 error(s), 0 warning(s)
+exit=1
+### lint --settings settings-missing.ini
+== settings-missing.ini
+error: settings-missing.ini: [rules] root nope is not a folder
+
+result: 1 error(s), 0 warning(s)
+exit=1
+### lint --settings settings-noroot.ini
+== settings-noroot.ini
+error: settings-noroot.ini: [rules] root is not set; set it to the folder of the code-review-scoring-rules project
+
+result: 1 error(s), 0 warning(s)
+exit=1
+### lint --settings none.ini
+== none.ini
+error: none.ini: file not found; run setup check
+
+result: 1 error(s), 0 warning(s)
 exit=1
 ### lint --standards good-standards.ini
-== good-standards.ini
-
-== [springboot-3] good-v1.md
-document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
-scan rules: 2 line rules, 2 scopes, 1 PR hints
-
-== [common] good-common.md
-document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0, G 0), 0 adjustable, 0 confirmations
-
-result: 0 error(s), 0 warning(s)
-exit=0
-### lint --standards good-standards.ini springboot-3 nope
-== good-standards.ini
-error: good-standards.ini: [nope] is not registered
-
-== [springboot-3] good-v1.md
-document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 0 confirmations
-scan rules: 2 line rules, 2 scopes, 1 PR hints
-
-result: 1 error(s), 0 warning(s)
-exit=1
-### lint --standards missing.ini
-== missing.ini
-error: missing.ini: file not found; copy configs/standards.example.ini to configs/standards.ini
-
-result: 1 error(s), 0 warning(s)
-exit=1
-### lint --file ../../templates/zh-tw/scoring-rule-template.md
+error: --standards was removed: the rules come from [rules] root of the settings (--settings)
+exit=2
+### lint --file ../../templates/zh-tw/scoring-rule-template.md --settings settings.ini
 document: example-standard v1.0, 8 check items (A 2, B 1, C 1, D 1, E 1, F 1, G 1), 1 adjustable, 2 confirmations
 
 result: 0 error(s), 0 warning(s)
 exit=0
-### lint --file ../../templates/en/scoring-rule-template.md
+### lint --file ../../templates/en/scoring-rule-template.md --settings settings.ini
 document: example-standard v1.0, 8 check items (A 2, B 1, C 1, D 1, E 1, F 1, G 1), 1 adjustable, 2 confirmations
 
 result: 0 error(s), 0 warning(s)
 exit=0
-### lint --file good-en.md
+### lint --file good-en.md --settings settings.ini
 document: english v1.0, 7 check items (A 2, B 1, C 1, D 1, E 1, F 1, G 0), 1 adjustable, 2 confirmations
 
 result: 0 error(s), 0 warning(s)
@@ -217,35 +303,79 @@ exit=3
 ### diff good-v1.md
 error: diff needs OLD.md NEW.md
 exit=2
-### resolve --standards good-standards.ini
+### resolve --settings settings.ini
 standard	springboot-3	v0.1	sha256:0aed7bc76d20fcc7cd89c7114fb366d09eb951b071f8e5f22750c3baddb41481	good-v1.md
+ruleini	rules/springboot-3/rule.ini	sha256:bc0da1ac4731103018fdf56de9743ddbc62f0c6f5ef81f4afbf28d77e3469e71
 applies	((^|/)[^/]*/.java$)|((^|/)[^/]*/.kt$)
 scan	good-scan.tsv	sha256:725a551283124b46fb276988d2ffc7310851f576c37fdcc9b713a7e4f096a3f9
+points	A	25
+points	B	15
 points	C	20
+points	D	15
+points	E	10
 points	F	5
+points	G	10
+merge	false
+severity	Critical	10	B	Critical	資料損毀、資安事件或服務中斷。|上線前一定要修正。
+severity	Major	5	-	Major	特定情境下會出錯，或明顯降低品質。
+severity	Minor	2	-	Minor	能運作，但有更好的寫法。
+severity	Nit	1	-	Nit	風格偏好。
+grade	A	95	A
+grade	B	85	B
+grade	C	70	C
+grade	D	60	D
+grade	F	0	F
 check	A1	Minor	-	-	正常	22
 check	C1	Major	Critical	沒有測試時	測試	30
 common	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	good-common.md
+ruleini	rules/common/rule.ini	sha256:38279a83a8434b18997040c5bc6944ce0dfc044393c469c0496e44525a2a47d1
+cseverity	Critical	Critical	資料損毀、資安事件或服務中斷。|上線前一定要修正。
+cseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
+cseverity	Minor	Minor	能運作，但有更好的寫法。
+cseverity	Nit	Nit	風格偏好。
 check	CM-A1	Minor	-	-	正常	22
+defaults	rules/defaults.ini	sha256:a18f6c759558364499fedb8fb4485b064bfbf365ea359fedf9b92c24d81470df
 exit=0
-### resolve --standards good-standards.ini common
+### resolve --settings settings.ini common
 standard	common	v0.1	sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742	good-common.md
+ruleini	rules/common/rule.ini	sha256:38279a83a8434b18997040c5bc6944ce0dfc044393c469c0496e44525a2a47d1
+points	A	25
+points	B	15
+points	C	15
+points	D	15
+points	E	10
+points	F	10
+points	G	10
+merge	false
+severity	Critical	10	B	Critical	資料損毀、資安事件或服務中斷。|上線前一定要修正。
+severity	Major	5	-	Major	特定情境下會出錯，或明顯降低品質。
+severity	Minor	2	-	Minor	能運作，但有更好的寫法。
+severity	Nit	1	-	Nit	風格偏好。
+grade	A	95	A
+grade	B	85	B
+grade	C	70	C
+grade	D	60	D
+grade	F	0	F
 check	CM-A1	Minor	-	-	正常	22
+defaults	rules/defaults.ini	sha256:a18f6c759558364499fedb8fb4485b064bfbf365ea359fedf9b92c24d81470df
 exit=0
-### resolve --standards good-standards.ini nope
-error: good-standards.ini: [nope] is not registered
+### resolve --settings settings.ini angular
+error: rules/rules.ini: [angular] is disabled (enable="false")
 exit=2
-### resolve --standards bad-standards.ini
-error: bad-standards.ini:2: key outside a [section]; run standard lint first
+### resolve --settings settings.ini nope
+error: rules/rules.ini: [nope] is not registered
+exit=2
+### resolve --settings settings-bad.ini
+error: rules-bad/rules.ini:2: key outside a [section]; run standard lint first
 exit=3
-### resolve --standards missing.ini
-error: missing.ini: file not found; copy configs/standards.example.ini to configs/standards.ini
+### resolve --settings settings-missing.ini
+error: settings-missing.ini: [rules] root nope is not a folder
 exit=3
 ### stamp --file good-v2.md --scan good-scan.tsv --out stamped.tmp.tsv
 wrote stamped.tmp.tsv
 # source: good-v2.md v0.2 sha256:28801aba8ae9d5bb7d08cf4f8472cb5ca628efb871204f41bd9debfe6ac2b948
 exit=0
-### lint --file good-v2.md --scan stamped.tmp.tsv
+### lint --file good-v2.md --scan stamped.tmp.tsv --settings settings.ini
 document: springboot-3 v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0, G 0), 1 adjustable, 1 confirmations
 scan rules: 2 line rules, 2 scopes, 1 PR hints
 error: stamped.tmp.tsv:5: C1 is not a check item of the standard (removed or renamed?)
