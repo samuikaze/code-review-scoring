@@ -108,7 +108,7 @@ new_plugins_file() {  # configs/plugins.ini starts as a copy of the commented ex
   [[ -f "$plugins_file" ]] && return 0
   mkdir -p "$(dirname "$plugins_file")"
   if [[ -f "$project_root/configs/plugins.example.ini" ]]; then cp "$project_root/configs/plugins.example.ini" "$plugins_file"
-  else printf '; Code review plugin skills. See configs/plugins.example.ini for the format.\n' > "$plugins_file"; fi
+  else printf '; Code review plugin skills. See docs/en/configurations.md for the format.\n' > "$plugins_file"; fi
 }
 
 # Prints the problem and returns 1 when the plugin is invalid.

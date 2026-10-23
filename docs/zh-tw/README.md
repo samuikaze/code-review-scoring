@@ -130,7 +130,7 @@ model="gpt-5.6"
 reasoning="xhigh"
 ```
 
-要修改時可直接編輯此檔，或執行 `review-state config --subagent true|false`、`review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。也可以在第一次使用前，從範本 `configs/settings.example.ini` 複製一份 `configs/settings.ini`，取消註解要用的區段後修改。
+要修改時可直接編輯此檔，或執行 `review-state config --subagent true|false`、`review-state config --platform <名稱> --model "<model>" --reasoning "<level>"`。也可以在第一次使用前，從範本 `configs/settings.example.ini` 複製一份 `configs/settings.ini`，取消註解要用的區段後修改。各區段與鍵的說明見 [docs/zh-tw/configurations.md](configurations.md)。
 
 > [!WARNING]
 > **GitHub Copilot 的已知限制**
@@ -183,8 +183,10 @@ configs/                                  # 設定檔（只有 *.example.ini 進
   settings.example.ini                    # 執行方式、Sub-Agent 的 model 與 reasoning、報告語言、規則專案位置的範本（settings.ini 首次使用時自動產生）
   plugins.example.ini                     # 外掛 Skill 清單範本（複製為 plugins.ini 使用）
 docs/
+  en/configurations.md                    # 設定檔說明英文版
   en/notices.md                           # 注意事項英文版（評分標準、GitHub Copilot 適用性）
   zh-tw/README.md                         # 本說明文件（繁體中文版；英文版為根目錄的 README.md）
+  zh-tw/configurations.md                 # 設定檔說明（settings.ini、plugins.ini 的各區段與鍵）
   zh-tw/notices.md                        # 注意事項（評分標準、GitHub Copilot 適用性）
 templates/                                # 每種語言一個資料夾，見「報告語言」
   en/                                     # 英文
@@ -264,12 +266,12 @@ git add --renormalize .
 ### 使用現有的評分標準
 
 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
-就是一個規則專案，目前提供下列規則。每個規則目錄有一個 `rule.ini`，以及英文（`en/`）與繁體中文（`zh-tw/`）兩種語言的標準文件（`.md`）與掃描規則檔（`.tsv`）。各規則的 `rule.ini` 預設使用繁體中文版，要改用英文版時把 `standard` 與 `scan` 的 `zh-tw/` 改成 `en/`；標準的語言不必和報告語言相同：
+就是一個規則專案，目前提供下列規則，每套都包含英文（`en/`）與繁體中文（`zh-tw/`）兩個規則目錄，各有自己的 `rule.ini`、標準文件（`.md`）與掃描規則檔（`.tsv`），內容都以該目錄的語言撰寫。`rules.ini` 預設登錄繁體中文版，要改用英文版時把 `path` 的 `zh-tw` 改成 `en`；標準的語言不必和報告語言相同：
 
 | 規則名稱 | 類型 | 適用範圍 | 規則目錄 |
 | --- | --- | --- | --- |
-| `springboot-3` | 框架規則 | Java／Spring Boot 3 專案 | `springboot3-rule/` |
-| `common` | 通用規則 | 其他檔案，例如 README、CI、Dockerfile | `common-rule/` |
+| `springboot-3` | 框架規則 | Java／Spring Boot 3 專案 | `springboot3-rule/<語言>/` |
+| `common` | 通用規則 | 其他檔案，例如 README、CI、Dockerfile | `common-rule/<語言>/` |
 
 1. 把規則專案 clone 到本機，位置不限：
 
@@ -277,7 +279,7 @@ git add --renormalize .
    git clone https://github.com/samuikaze/code-review-scoring-rules.git
    ```
 
-2. 在本專案的 `configs/settings.ini` 加上 `[rules]` 區段，`root` 指向 clone 下來的目錄（範例見 `configs/settings.example.ini`）：
+2. 在本專案的 `configs/settings.ini` 加上 `[rules]` 區段，`root` 指向 clone 下來的目錄（說明見 [docs/zh-tw/configurations.md](configurations.md#rules-區段)）：
 
    ```ini
    [rules]
@@ -384,7 +386,7 @@ meaning="不影響品質的小地方。"
 
 ## 安裝到各工具
 
-`configs/plugins.ini` 不需要事先手動建立：第一次執行完整流程時，設定檢查會引導建立（見「設定檢查」）。也可以先執行 `setup wizard`，或從範本 `configs/plugins.example.ini` 複製後自行編輯。
+`configs/plugins.ini` 不需要事先手動建立：第一次執行完整流程時，設定檢查會引導建立（見「設定檢查」）。也可以先執行 `setup wizard`，或從範本 `configs/plugins.example.ini` 複製後自行編輯；各鍵的說明見 [docs/zh-tw/configurations.md](configurations.md#pluginsini)。
 
 `link-skills` 會依 `skills/` 與 `configs/plugins.ini` 同步各工具讀取 Skill 的目錄：建立缺少的連結，並解除已從清單移除的外掛連結。重複執行是安全的；已是最新狀態時不會做任何變更。
 

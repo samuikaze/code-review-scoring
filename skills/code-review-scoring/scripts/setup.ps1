@@ -138,7 +138,7 @@ function New-PluginsFile {
     [void][IO.Directory]::CreateDirectory((Split-Path -Parent $pluginsFile))
     $example = Join-Path $projectRoot 'configs/plugins.example.ini'
     if ([IO.File]::Exists($example)) { Write-Utf8File $pluginsFile (Read-Utf8Text $example) }
-    else { Write-Utf8File $pluginsFile "; Code review plugin skills. See configs/plugins.example.ini for the format.`n" }
+    else { Write-Utf8File $pluginsFile "; Code review plugin skills. See docs/en/configurations.md for the format.`n" }
 }
 
 # Returns the problem, or an empty string when the plugin is valid.

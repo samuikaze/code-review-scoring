@@ -14,7 +14,7 @@ English | [繁體中文](../zh-tw/notices.md)
   `configs/settings.ini` is not under version control, and the rules project
   (`rules.ini`, `defaults.ini` and the rule folders) lives outside this
   project. On a new machine or for a new person, set `root` in the `[rules]`
-  section of `configs/settings.ini` (see `configs/settings.example.ini`); on
+  section of `configs/settings.ini` (see [configurations.md](configurations.md#the-rules-section)); on
   Windows, use forward slashes in paths.
 - **The old scoring settings are no longer read**: `configs/standards.ini`
   and the `[points]`, `[deductions]` and `[grades]` sections of
