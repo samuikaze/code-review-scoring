@@ -20,8 +20,8 @@ Usage: prepare-diff.zsh [--root DIR | --input FILE | --git RANGE] [options]
       --config FILE    the settings whose [rules] root names the rules project (default: configs/settings.ini in the
                        project root)
       --standard NAME  the scoring standard (an enabled rule of rules.ini) whose scan rules, severity scale and merge
-                       are used; default: the only enabled framework rule, or the common rule when no framework rule is
-                       enabled. Files its applies does not cover are scanned with the rules of the common rule
+                       are used; default: the only enabled framework rule, or the global rule when no framework rule is
+                       enabled. Files its applies does not cover are scanned with the rules of the global rule
       --scan FILE      use this scan rule file for every file instead of the rules project (no severity scale)
   -h, --help           show this help
 

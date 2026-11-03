@@ -1,5 +1,5 @@
 # Validator and calculator shared by score.sh and score.zsh (POSIX awk). Run with LC_ALL=C.
-# Variables: rules=output of "standard resolve" (standard, common, points, merge, severity, grade, cseverity and check
+# Variables: rules=output of "standard resolve" (standard, global, points, merge, severity, grade, gseverity and check
 #                  records): the points, severity scale and grades of the rule all come from it
 #            idxfile=output of diff-index.awk ("" = skip location checks)
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = skip the code review comment checks)
@@ -22,7 +22,7 @@ function close_record() {
         if (!(("problem") in fld)) err2(recline, recid " is missing \"problem:\"")
         if (!(("suggestion") in fld)) err2(recline, recid " is missing \"suggestion:\"")
         if (recfrom) check_from()
-        else if (("from") in fld) err2(recline, recid ": from: is only used for check items of the common standard when its severity scale differs from that of the standard")
+        else if (("from") in fld) err2(recline, recid ": from: is only used for check items of the global standard when its severity scale differs from that of the standard")
     } else if (rec == "U") {
         if (!(("content") in fld)) err2(recline, "upstream record is missing \"content:\"")
     }
@@ -31,13 +31,13 @@ function close_record() {
 function err2(ln, msg) { nerr++; errs = errs "  - line " ln ": " msg "\n" }
 function err0(msg) { nerr++; errs = errs "  - " msg "\n" }
 
-# A check item of the common standard when its scale differs from that of the standard: column 3 holds the closest
+# A check item of the global standard when its scale differs from that of the standard: column 3 holds the closest
 # severity of the standard's scale, any one of it. from: is recommended but optional; when present it names the
-# severity on the common scale (the default, an allowed adjustment with its condition in column 5, or the lowest).
+# severity on the global scale (the default, an allowed adjustment with its condition in column 5, or the lowest).
 function check_from(    f) {
     if (!(("from") in fld)) return
     f = fld["from"]
-    if (!(f in crank)) { err2(recline, recid ": from: " f " is not a severity of the common standard (" clist ")"); return }
+    if (!(f in crank)) { err2(recline, recid ": from: " f " is not a severity of the global standard (" clist ")"); return }
     if (f != def[recid] && f != clowest) {
         if (!inlist(f, adj[recid])) { err2(recline, recid ": from: must be the default " def[recid] (adj[recid] != "-" ? ", the allowed adjustment " adj[recid] : "") " or " clowest ", not " f); return }
         if (recreason == "") { err2(recline, recid ": from: " f " is not the default severity and needs the matching adjustment condition in column 5"); return }
@@ -98,7 +98,7 @@ BEGIN {
     FS = "|"
     split("A B C D E F G", dims, " ")
     # The rule as "standard resolve" printed it: points, merge, severity scale, grades and check items of the rule and
-    # of the common rule (whose check items start with CM-), and the severity scale of the common rule.
+    # of the global rule (whose check items start with GL-), and the severity scale of the global rule.
     while ((getline l < rules) > 0) {
         split(l, a, "\t")
         if (a[1] == "check") { def[a[2]] = a[3]; adj[a[2]] = a[4] }
@@ -109,16 +109,16 @@ BEGIN {
             sevlist = sevlist (nsv > 1 ? ", " : "") a[2]
         }
         else if (a[1] == "grade") { gcode[++ngr] = a[2]; grank[a[2]] = ngr; gmin[a[2]] = a[3] + 0; gname[a[2]] = a[4] }
-        else if (a[1] == "cseverity") { ccode[++ncs] = a[2]; crank[a[2]] = ncs; clist = clist (ncs > 1 ? ", " : "") a[2] }
+        else if (a[1] == "gseverity") { ccode[++ncs] = a[2]; crank[a[2]] = ncs; clist = clist (ncs > 1 ? ", " : "") a[2] }
         else if (a[1] == "standard") { stdname = a[2]; stdver = a[3]; stdhash = a[4]; owner = "s" }
-        else if (a[1] == "common") { cmname = a[2]; cmver = a[3]; cmhash = a[4]; owner = "c" }
-        else if (a[1] == "ruleini") { if (owner == "c") cmrule = a[3]; else stdrule = a[3] }
+        else if (a[1] == "global") { glname = a[2]; glver = a[3]; glhash = a[4]; owner = "c" }
+        else if (a[1] == "ruleini") { if (owner == "c") glrule = a[3]; else stdrule = a[3] }
         else if (a[1] == "defaults") defhash = a[3]
     }
     close(rules)
     if (npts != 7 || !nsv || !ngr) { printf "error: %s has no points, severity scale or grades of the standard; run standard lint and standard resolve again\n", rules > "/dev/stderr"; cfgfail = 1; exit 2 }
     lowest = scode[nsv]
-    # The common rule uses the scale of the standard when its scale has the same codes in the same order.
+    # The global rule uses the scale of the standard when its scale has the same codes in the same order.
     samescale = 1
     if (ncs) { if (ncs != nsv) samescale = 0; else for (i = 1; i <= nsv; i++) if (ccode[i] != scode[i]) samescale = 0 }
     clowest = ncs ? ccode[ncs] : lowest
@@ -158,12 +158,12 @@ BEGIN {
     if (t == "F") {
         id = $2; sev = $3; locs = $4; reason = $5
         rec = "skip"; recid = id; recline = NR; recreason = reason
-        # Check id "-": no check item of the standard covers the problem; deducted from the total by its severity.
+        # Check id "-": no check item of the standard covers the problem; deducted from dimension G by its severity.
         other = (id == "-")
         if (!other && !(id in def)) { err("unknown check id " id " (use - when no check covers the problem)"); next }
         if (!(sev in pts)) { err(id ": severity \"" sev "\" is not one of the scale of the standard (" sevlist ")"); next }
-        # A check item of the common standard on another scale: its own severity is checked with from: (close_record).
-        fromcheck = (!other && substr(id, 1, 3) == "CM-" && !samescale)
+        # A check item of the global standard on another scale: its own severity is checked with from: (close_record).
+        fromcheck = (!other && substr(id, 1, 3) == "GL-" && !samescale)
         if (!other && !fromcheck && sev != def[id] && sev != lowest) {
             if (!inlist(sev, adj[id])) { err(id ": severity must be the default " def[id] (adj[id] != "-" ? ", the allowed adjustment " adj[id] : "") " or " lowest ", not " sev); next }
             if (reason == "") { err(id ": non-default severity " sev " needs the matching adjustment condition in column 5"); next }
@@ -255,9 +255,13 @@ END {
         while (j >= 1 && after(forder[j], v)) { forder[j + 1] = forder[j]; j-- }
         forder[j + 1] = v
     }
+    # Records without a check id and upstream factors share dimension G. The severities found cap the grade.
+    othded = 0; upded = 0
+    for (i = 1; i <= nf_; i++) { if (fid[i] == "-") othded += pts[fsev[i]]; used_sev[fsev[i]] = 1 }
+    for (i = 1; i <= nu; i++) { upded += pts[usev[i]]; used_sev[usev[i]] = 1 }
     total = 0
     for (k = 1; k <= 7; k++) {
-        d = dims[k]; ded = 0
+        d = dims[k]; ded = (d == "G") ? othded + upded : 0
         for (i = 1; i <= nf_; i++) {
             x = forder[i]
             if (dimof(fid[x]) != d) continue
@@ -266,11 +270,6 @@ END {
         sc[d] = dmax[d] - ded; if (sc[d] < 0) sc[d] = 0
         total += sc[d]
     }
-    # Records without a check id and upstream factors are deducted from the total. The severities found cap the grade.
-    othded = 0; upded = 0
-    for (i = 1; i <= nf_; i++) { if (fid[i] == "-") othded += pts[fsev[i]]; used_sev[fsev[i]] = 1 }
-    for (i = 1; i <= nu; i++) { upded += pts[usev[i]]; used_sev[usev[i]] = 1 }
-    total -= othded + upded; if (total < 0) total = 0
     grade = gcode[ngr]
     for (i = 1; i <= ngr; i++) if (total >= gmin[gcode[i]]) { grade = gcode[i]; break }
     # The strictest cap (the lowest grade) of the severities found; the most severe of them names it.
@@ -282,10 +281,10 @@ END {
     printf "total\t%d\ngrade\t%s\ncapped\t%d\n", total, grade, capped > tsvout
     if (capped) printf "cap\t%s\t%s\n", capsev, grade > tsvout
     printf "standard\t%s\t%s\t%s\n", stdname, stdver, stdhash > tsvout
-    if (cmname != "") printf "common\t%s\t%s\t%s\n", cmname, cmver, cmhash > tsvout
-    # sha256 of the settings in effect: the rule.ini of the standard and of the common rule, and defaults.ini
+    if (glname != "") printf "global\t%s\t%s\t%s\n", glname, glver, glhash > tsvout
+    # sha256 of the settings in effect: the rule.ini of the standard and of the global rule, and defaults.ini
     printf "ruleini\tstandard\t%s\n", stdrule > tsvout
-    if (cmname != "") printf "ruleini\tcommon\t%s\n", cmrule > tsvout
+    if (glname != "") printf "ruleini\tglobal\t%s\n", glrule > tsvout
     printf "defaults\t%s\n", defhash > tsvout
     for (k = 1; k <= 7; k++) printf "dim\t%s\t%d\t%d\n", dims[k], sc[dims[k]], dmax[dims[k]] > tsvout
     for (i = 1; i <= nf_; i++) { x = forder[i]; printf "finding\t%s\t%s\t%d\t%s\t%d\n", fid[x], fsev[x], pts[fsev[x]], floc[x], x > tsvout }
@@ -298,8 +297,8 @@ END {
     if (capped) printf "  \"cap\": { \"severity\": %s, \"grade\": %s },\n", jstr(capsev), jstr(grade) > jsonout
     else printf "  \"cap\": null,\n" > jsonout
     printf "  \"standard\": { \"name\": %s, \"version\": %s, \"hash\": %s, \"ruleIniHash\": %s },\n", jstr(stdname), jstr(stdver), jstr(stdhash), jstr(stdrule) > jsonout
-    if (cmname != "") printf "  \"common\": { \"name\": %s, \"version\": %s, \"hash\": %s, \"ruleIniHash\": %s },\n", jstr(cmname), jstr(cmver), jstr(cmhash), jstr(cmrule) > jsonout
-    else printf "  \"common\": null,\n" > jsonout
+    if (glname != "") printf "  \"global\": { \"name\": %s, \"version\": %s, \"hash\": %s, \"ruleIniHash\": %s },\n", jstr(glname), jstr(glver), jstr(glhash), jstr(glrule) > jsonout
+    else printf "  \"global\": null,\n" > jsonout
     printf "  \"defaultsHash\": %s,\n", jstr(defhash) > jsonout
     printf "  \"severities\": [" > jsonout
     for (i = 1; i <= nsv; i++) { s = scode[i]; printf "%s\n    { \"code\": %s, \"name\": %s, \"points\": %d, \"cap\": %s }", (i > 1 ? "," : ""), jstr(s), jstr(sname[s]), pts[s], (scap[s] == "" ? "null" : jstr(scap[s])) > jsonout }
@@ -335,12 +334,12 @@ END {
     printf "grade %s, total %d/100%s\n", grade, total, (capped ? " (capped at " grade " because of a " capsev " finding)" : "")
     for (k = 1; k <= 7; k++) printf "%s %d/%d  ", dims[k], sc[dims[k]], dmax[dims[k]]
     printf "\ndeductions: %d (without a check id: %d), upstream: %d, rejected comments: %d, skipped checks: %d\n", nf_, cnt_other(), nu, nx, ns
-    printf "standard: %s %s%s\n", stdname, stdver, (cmname != "" ? ", common: " cmname " " cmver : "")
+    printf "standard: %s %s%s\n", stdname, stdver, (glname != "" ? ", global: " glname " " glver : "")
     if (nwarn > 0) printf "warnings:\n%s", warns > "/dev/stderr"
 }
 
-# Dimension of a check id: its first letter, or the letter after CM- for the common standard.
-function dimof(id) { return substr(id, 1, 3) == "CM-" ? substr(id, 4, 1) : substr(id, 1, 1) }
+# Dimension of a check id: its first letter, or the letter after GL- for the global standard.
+function dimof(id) { return substr(id, 1, 3) == "GL-" ? substr(id, 4, 1) : substr(id, 1, 1) }
 function cnt_other(    c, i) { c = 0; for (i = 1; i <= nf_; i++) if (fid[i] == "-") c++; return c }
 function after(a, b) {
     if (sevrank(fsev[a]) != sevrank(fsev[b])) return sevrank(fsev[a]) > sevrank(fsev[b])

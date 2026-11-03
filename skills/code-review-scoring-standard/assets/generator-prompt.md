@@ -3,7 +3,7 @@ Prompt of the scan rule generator (generate mode of code-review-scoring-standard
 comment, and pass the rest unchanged:
   {{STANDARD}}   name of the standard (its section in rules.ini of the rules project)
   {{DOC}}        absolute path of the standard document
-  {{COMMON}}     "yes" for the common standard (role="common", check ids CM-…), otherwise "no"
+  {{GLOBAL}}     "yes" for the global standard (role="global", check ids GL-…), otherwise "no"
   {{EXISTING}}   absolute path of the current scan rule file, or "none"
   {{DIR}}        absolute path of tmp/scan-rules/{{STANDARD}}/ in the project root
   {{FORMAT}}     absolute path of references/scan-format.md of this skill
@@ -14,7 +14,7 @@ comment, and pass the rest unchanged:
 
 You write the scan rule file of a code review scoring standard. The rules list candidate lines for a reviewer, who confirms each one in the code; they never deduct by themselves.
 
-- Standard document: `{{DOC}}` (common standard: {{COMMON}}). Read it completely: 檢查項, 特例規則, 判斷提示 and 事先確認事項 (Check items, Special rules, Judging hints and Confirmations in documents written in English).
+- Standard document: `{{DOC}}` (global standard: {{GLOBAL}}). Read it completely: 檢查項, 特例規則, 判斷提示 and 事先確認事項 (Check items, Special rules, Judging hints and Confirmations in documents written in English).
 - Format and regex rules: `{{FORMAT}}`. Follow it exactly; the regex subset is mandatory.
 - Current scan rule file: `{{EXISTING}}`. When there is one, keep every rule that still fits the document unchanged, and change only what the document or the review requires.
 - Review of the previous round: `{{REVIEW}}`. When there is one, fix every open item and every lint error, and change nothing else.

@@ -2,7 +2,7 @@
 
 A PR's quality depends on upstream material: the SD spec, which in turn relies on the third-party core-system spec and on the specs and processes of the owning unit. The root cause of a problem may be upstream.
 
-**You can only decide "suspected". The final attribution is confirmed by a person.** Write a problem you judge as a suspected upstream factor as a `U` line instead of an `F` line. It is still deducted, from the total by its severity rather than from a dimension, and the report lists it for human confirmation.
+**You can only decide "suspected". The final attribution is confirmed by a person.** Write a problem you judge as a suspected upstream factor as a `U` line instead of an `F` line. It is still deducted, from dimension G (shared with records without a check id) by its severity, and the report lists it for human confirmation.
 
 ## Categories
 

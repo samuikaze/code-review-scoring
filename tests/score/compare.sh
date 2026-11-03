@@ -2,7 +2,7 @@
 # Runs score on the fixtures with every installed shell (bash, zsh, PowerShell) and compares the output, score.tsv and
 # score.json with expected.txt. The rules project rules/ registers legacy (the check items of the rules.tsv used before the
 # standards existed, so the scores of findings.txt must stay the same as before), points (other points), scaled (its own
-# five-level severity scale, grades and merge=true) and the common rule.
+# five-level severity scale, grades and merge=true) and the global rule.
 #   bash tests/score/compare.sh            compare
 #   bash tests/score/compare.sh --update   rewrite expected.txt from the bash output
 set -uo pipefail
@@ -13,11 +13,12 @@ cases=(
   "--findings findings.txt --config settings.ini --standard legacy"
   "--findings findings.txt --config settings.ini --standard points"
   "--findings invalid.txt --config settings.ini --standard legacy"
-  "--findings common.txt --config settings.ini --standard legacy"
-  "--findings common.txt --config settings.ini --standard scaled"
-  "--findings common-scaled.txt --config settings.ini --standard scaled"
+  "--findings global.txt --config settings.ini --standard legacy"
+  "--findings global.txt --config settings.ini --standard scaled"
+  "--findings global-scaled.txt --config settings.ini --standard scaled"
   "--findings scaled-bad.txt --config settings.ini --standard scaled"
   "--findings capped.txt --config settings.ini --standard scaled"
+  "--findings overflow.txt --config settings.ini --standard legacy"
   "--findings findings.txt --config settings.ini"
   "--findings findings.txt --config settings.ini --standard off"
   "--findings findings.txt --config settings.ini --standard nope"

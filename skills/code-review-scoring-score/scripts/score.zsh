@@ -24,7 +24,7 @@ Usage: score.zsh [--root DIR] [options]
                        project root). The points, severity scale, grades and merge come from the rule.ini of the
                        standard or defaults.ini of the rules project
       --standard NAME  the scoring standard (an enabled rule of rules.ini); default: the only enabled framework rule, or
-                       the common rule when no framework rule is enabled. Its check items and those of the common
+                       the global rule when no framework rule is enabled. Its check items and those of the global
                        rule are used
   -h, --help           show this help
 

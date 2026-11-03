@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs the whole review workflow on a throwaway git repository with every installed shell (bash, zsh, PowerShell)
-# and compares the output with expected.txt: init, step 1 (plan with two framework standards and the common
+# and compares the output with expected.txt: init, step 1 (plan with two framework standards and the global
 # standard; the rules project is rules/, where angular has its own severity scale and grades), step 2 (one fake code
 # review plugin), step 3 for each standard (comments mapped to the scale with M records), finish (one report per
 # standard, each showing only the comments on its files), show, and the gate that refuses to go on after a standard has
@@ -26,7 +26,7 @@ norm() {
 setup() {
   rm -rf "${work:?}"/*
   mkdir -p "$work/repo" "$work/std" "$work/plugin" "$work/configs"
-  cp ../standards/good-v2.md ../standards/good-common.md ../plan/angular.md "$work/std/"
+  cp ../standards/good-v2.md ../standards/good-global.md ../plan/angular.md "$work/std/"
   cp -r rules "$work/rules"
   printf -- '---\nname: fake-review\ndescription: test plugin\n---\n' > "$work/plugin/SKILL.md"
   printf '[fake-review]\npath="../plugin"\napplies="*.java, *.ts, *.md"\nmode="mapped"\n' > "$work/configs/plugins.ini"

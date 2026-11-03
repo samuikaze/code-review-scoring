@@ -1,5 +1,5 @@
 # Diff preprocessor shared by prepare-diff.sh and prepare-diff.zsh (POSIX awk).
-# Variables: std=output of "standard resolve" (standard, common, applies, scan, merge, severity and cseverity records; a
+# Variables: std=output of "standard resolve" (standard, global, applies, scan, merge, severity and gseverity records; a
 #            "scan" record before any standard record is a scan rule file given on its own; merge and the severity scale
 #            are shown in the summary for writing findings.txt)  mode=all|summary|scan|view  maxper=max locations listed per check
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = no code review comments section)
@@ -31,7 +31,7 @@ function is_comment(s, path) {
 
 function fail(msg) { print "error: " msg > "/dev/stderr"; failed = 1; exit 2 }
 
-# Reads a scan rule file; o = "s" for the rules of the standard, "c" for those of the common standard.
+# Reads a scan rule file; o = "s" for the rules of the standard, "c" for those of the global standard.
 # The scopes of each file are separate: a scope only holds the files of its owner (see classify).
 function load_rules(file, o,    l, ln, n, a, r) {
     ln = 0
@@ -63,7 +63,7 @@ function in_scope(o, scope, f) { return (scope == "any") ? (fown[f] == o) : ((o 
 function classify(f,    p, o, k, w, m, oi) {
     p = path[f]
     # Files of the standard: those its applies covers (every file when there is no applies); the others go to the
-    # common standard. A file is in a scope of its owner when its path matches and the within condition holds.
+    # global standard. A file is in a scope of its owner when its path matches and the within condition holds.
     fown[f] = (applies == "" || p ~ applies) ? "s" : "c"
     for (oi = 1; oi <= 2; oi++) {
         o = (oi == 1) ? "s" : "c"
@@ -153,15 +153,15 @@ BEGIN {
     while ((getline l < std) > 0) {
         split(l, a, "\t")
         if (a[1] == "standard") { own = "s"; sname = a[2]; sver = a[3] }
-        else if (a[1] == "common") { own = "c"; cname = a[2]; cver = a[3] }
+        else if (a[1] == "global") { own = "c"; cname = a[2]; cver = a[3] }
         else if (a[1] == "applies") applies = a[2]
         else if (a[1] == "scan") load_rules(a[2], own)
         else if (a[1] == "merge") merge = a[2]
         else if (a[1] == "severity") { nsv++; sv[nsv] = a[2]; svpts[nsv] = a[3]; svcap[nsv] = a[4]; svname[nsv] = a[5]; svmean[nsv] = a[6] }
-        else if (a[1] == "cseverity") { ncs++; cs[ncs] = a[2]; csname[ncs] = a[3]; csmean[ncs] = a[4] }
+        else if (a[1] == "gseverity") { ncs++; cs[ncs] = a[2]; csname[ncs] = a[3]; csmean[ncs] = a[4] }
     }
     close(std)
-    # The common rule uses the scale of the standard when its scale has the same codes in the same order.
+    # The global rule uses the scale of the standard when its scale has the same codes in the same order.
     samescale = 1
     if (ncs) { if (ncs != nsv) samescale = 0; else for (i = 1; i <= nsv; i++) if (cs[i] != sv[i]) samescale = 0 }
 }
@@ -250,13 +250,13 @@ function sevlabel(code, name) { return code ((name == "" || name == code) ? "" :
 # The meaning of a severity: "-" is none; the lines of a multi-line meaning (separated by |) go on indented lines.
 function sevmean(m) { if (m == "-") return ""; gsub(/\|/, "\n    ", m); return m }
 
-# The severity scale of the standard, and that of the common standard when it differs (the summary).
+# The severity scale of the standard, and that of the global standard when it differs (the summary).
 function print_scale(    i) {
     if (!nsv) return
     print "- severity scale (from the most severe; deducted per finding; the lowest, " sv[nsv] ", is always allowed and is used when a problem cannot be confirmed):"
     for (i = 1; i <= nsv; i++) printf "  - %s: %s%s. %s\n", sevlabel(sv[i], svname[i]), (svpts[i] + 0 ? "-" svpts[i] : "0"), (svcap[i] == "-" ? "" : ", caps the grade at " svcap[i]), sevmean(svmean[i])
     if (!ncs || samescale) return
-    print "- severity scale of the common standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):"
+    print "- severity scale of the global standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):"
     for (i = 1; i <= ncs; i++) printf "  - %s. %s\n", sevlabel(cs[i], csname[i]), sevmean(csmean[i])
 }
 
@@ -278,15 +278,15 @@ END {
 
     if (mode == "all" || mode == "summary") {
         print "## Summary"
-        if (sname != "") print "- standard: " sname " " sver (applies == "" ? "" : (cname != "" ? "; the files it does not cover ([common]) use the common standard " cname " " cver : "; the files it does not cover are marked [no standard] and are not scored"))
+        if (sname != "") print "- standard: " sname " " sver (applies == "" ? "" : (cname != "" ? "; the files it does not cover ([global]) use the global standard " cname " " cver : "; the files it does not cover are marked [no standard] and are not scored"))
         print "- deductions: " (merge == "true" ? "merged (merge=true): one F line per check id with all its locations; deducted once" : "not merged (merge=false): one F line per location; every occurrence is deducted")
         print_scale()
         parts = count_part("main", "main code changed", nmain + 0) count_part("test", "test files", ntest + 0) count_part("migration", "migrations", nmig + 0)
-        if (ncf > 0) parts = parts ", " (cname != "" ? "common standard files: " : "files without a standard: ") ncf
+        if (ncf > 0) parts = parts ", " (cname != "" ? "global standard files: " : "files without a standard: ") ncf
         printf "- reviewable files: %d, excluded: %d%s\n", nk, nx, (parts == "" ? "" : "; " substr(parts, 3))
         for (f = 1; f <= nf; f++) {
             tagv = (("s" SUBSEP "test" SUBSEP f) in insc) ? " [test]" : ((("s" SUBSEP "migration" SUBSEP f) in insc) ? " [migration]" : "")
-            if (fown[f] == "c") tagv = tagv (cname != "" ? " [common]" : " [no standard]")
+            if (fown[f] == "c") tagv = tagv (cname != "" ? " [global]" : " [no standard]")
             if (excl[f] != "") printf "  - (excluded: %s) %s\n", excl[f], path[f]
             else printf "  - %s [%s +%d -%d]%s\n", path[f], status[f], adds[f], dels[f], tagv
         }

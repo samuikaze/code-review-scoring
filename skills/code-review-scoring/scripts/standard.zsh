@@ -9,17 +9,17 @@ setopt err_exit no_unset pipe_fail
 usage() {
   cat <<'USAGE'
 Usage: standard.zsh lint [--settings FILE] [NAME ...]
-       standard.zsh lint --file DOC.md [--scan RULES.tsv] [--common]
-       standard.zsh parse --file DOC.md [--common]
-       standard.zsh diff OLD.md NEW.md
+       standard.zsh lint --file DOC.md [--scan RULES.tsv] [--global]
+       standard.zsh parse --file DOC.md [--global]
+       standard.zsh diff OLD.md NEW.md [--global]
        standard.zsh resolve [--settings FILE] [NAME]
        standard.zsh plan --diff PR.diff --out DIR [--settings FILE]
-       standard.zsh stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--common]
+       standard.zsh stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--global]
 
 The rules project: [rules] root of the settings names its folder (relative to the folder of the settings file). It
 holds rules.ini (one [name] section per rule: path = the folder of its rule.ini, enable = true|false), defaults.ini
 (the points, severities and grades of the rules that do not set their own) and a folder per rule with rule.ini
-([rule] standard = the Markdown document, scan = the scan rule file, applies, role = common), the document and the
+([rule] standard = the Markdown document, scan = the scan rule file, applies, role = global), the document and the
 scan rules.
 
 Commands:
@@ -30,27 +30,27 @@ Commands:
   parse    print the parsed document as TAB-separated records (name, version, dim, check, confirm);
            stops at the first format error (exit 3)
   diff     list the dimensions, check items and confirmations that differ between two versions of a document
-  resolve  for score: the enabled rule NAME (default: the only enabled framework rule, or the common one when there
-           is none) and the enabled common rule, as TAB-separated records: "standard" / "common" (name, version,
+  resolve  for score: the enabled rule NAME (default: the only enabled framework rule, or the global one when there
+           is none) and the enabled global rule, as TAB-separated records: "standard" / "global" (name, version,
            sha256, path of the document), "ruleini" (path, sha256), "applies" (the regex of the files of NAME), "scan"
            (path, sha256 of the scan rules), "points" (dimension, points), "merge", "severity" (code, points, cap,
            display name, meaning with its lines separated by |; from the most severe), "grade" (code, min, display
-           name; from the highest), "cseverity" (code, display name, meaning of the common rule's scale), the "check"
+           name; from the highest), "gseverity" (code, display name, meaning of the global rule's scale), the "check"
            records of each document
            and "defaults" (path, sha256 of defaults.ini).
            Stops when the rules project or a document has a format error (exit 3)
   plan     for the review workflow: the enabled rules that score the PR. Each file goes to the framework rule whose
-           applies covers it; the other files are common files, scored with the common rule in the report of their
+           applies covers it; the other files are global files, scored with the global rule in the report of their
            project (the framework of the nearest folder above them; every report when that is unclear), or on their
            own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
-           report and kind framework|common|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
+           report and kind framework|global|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
            each report, and DIR/confirm.tsv (standard, check codes, what to confirm before scoring)
   stamp    write a reviewed scan rule file (--scan, e.g. a draft) to --out with the source line
            "# source: <document file> <version> sha256:<hash>" of the document (--file), so lint can tell when the
            document changes later; an existing source line is replaced
 
 Options: --settings FILE   (default: configs/settings.ini in the project root; its [rules] root names the rules project)
-         --common          the document is the common standard (its check codes start with CM-)
+         --global          the document is the global standard (its check codes start with GL-)
 
 Exit codes: 0 ok (warnings allowed), 1 lint found errors, 2 bad arguments, unknown or disabled NAME, 3 the rules
             project or the document has a format error or is missing.
@@ -75,7 +75,7 @@ while [[ $# -gt 0 ]]; do
     --settings) settings="${2:?--settings needs a value}"; shift 2 ;;
     --file) file="${2:?--file needs a value}"; shift 2 ;;
     --scan) scan="${2:?--scan needs a value}"; shift 2 ;;
-    --common) role="common"; shift ;;
+    --global) role="global"; shift ;;
     --diff) pdiff="${2:?--diff needs a value}"; shift 2 ;;
     --out) pout="${2:?--out needs a value}"; shift 2 ;;
     --standards) echo "error: --standards was removed: the rules come from [rules] root of the settings (--settings)" >&2; exit 2 ;;
@@ -191,7 +191,7 @@ case "$cmd" in
       [[ -n "$sevs" ]] || problem warning "no severity scale found (rule.ini next to the document, or defaults.ini of the rules project); severities are not checked"
       lint_doc "" "$file" "$role" "${scan:+$(full "$scan")}" "$sevs"
     else
-      [[ -z "$scan" && -z "$role" ]] || { echo "error: --scan and --common go with --file" >&2; exit 2; }
+      [[ -z "$scan" && -z "$role" ]] || { echo "error: --scan and --global go with --file" >&2; exit 2; }
       settings="$(full "$settings")"
       if ! load_rules; then
         echo "== $settings"
@@ -268,22 +268,22 @@ case "$cmd" in
     need_rules
     want="${names[1]:-}"
     if [[ -z "$want" ]]; then
-      # Without a NAME: the only enabled framework rule, or the common one when there is no framework rule.
-      want="$(awk -F'\t' '$1 == "std" && $7 == "true" && $6 != "common" { n++; l = l (n > 1 ? ", " : "") $2; w = $2 }
-        $1 == "std" && $7 == "true" && $6 == "common" { c = $2 }
+      # Without a NAME: the only enabled framework rule, or the global one when there is no framework rule.
+      want="$(awk -F'\t' '$1 == "std" && $7 == "true" && $6 != "global" { n++; l = l (n > 1 ? ", " : "") $2; w = $2 }
+        $1 == "std" && $7 == "true" && $6 == "global" { c = $2 }
         END { if (n > 1) print "!several rules are enabled (" l "); pick one by name"; else if (n == 1) print w; else if (c != "") print c; else print "!no rule is enabled" }' "$tmpd/ini")"
       [[ "$want" != !* ]] || { echo "error: $rroot/rules.ini: ${want#!}" >&2; exit 2; }
     fi
     awk -F'\t' -v n="$want" '$1 == "std" && $2 == n { f = 1 } END { exit !f }' "$tmpd/ini" || { echo "error: $rroot/rules.ini: [$want] is not registered" >&2; exit 2; }
     awk -F'\t' -v n="$want" '$1 == "std" && $2 == n && $7 == "true" { f = 1 } END { exit !f }' "$tmpd/ini" || { echo "error: $rroot/rules.ini: [$want] is disabled (enable=\"false\")" >&2; exit 2; }
-    # The rule itself first, then the enabled common rule (when it is another one); each with its check items.
+    # The rule itself first, then the enabled global rule (when it is another one); each with its check items.
     while IFS=$'\t' read -r -u 3 k1 name k2 dpath spath role enable ruleini; do
       dpath="$(path_of "$dpath")" ruleini="$(path_of "$ruleini")"
       [[ -f "$dpath" ]] || { echo "error: $dpath: file not found; run standard lint first" >&2; exit 3; }
       run_awk -v mode=doc -v role="${role#-}" -v sevs="$(sevs_of "$name")" "$dpath" > "$tmpd/doc"
       e="$(first_error "$dpath" "$tmpd/doc")"
       [[ -z "$e" ]] || { echo "error: $e; run standard lint first" >&2; exit 3; }
-      printf '%s\t%s\t%s\tsha256:%s\t%s\n' "$([[ "$name" == "$want" ]] && echo standard || echo common)" "$name" "$(field version "$tmpd/doc")" "$(sha "$dpath")" "$dpath"
+      printf '%s\t%s\t%s\tsha256:%s\t%s\n' "$([[ "$name" == "$want" ]] && echo standard || echo global)" "$name" "$(field version "$tmpd/doc")" "$(sha "$dpath")" "$dpath"
       printf 'ruleini\t%s\tsha256:%s\n' "$ruleini" "$(sha "$ruleini")"
       if [[ "$name" == "$want" ]]; then awk -F'\t' -v n="$name" '$1 == "applies" && $2 == n { print "applies\t" $3 }' "$tmpd/ini"; fi
       if [[ "$spath" != "-" ]]; then
@@ -295,10 +295,10 @@ case "$cmd" in
         awk -F'\t' -v n="$name" '$2 != n { next } $1 == "points" { print "points\t" $3 "\t" $4 } $1 == "merge" { print "merge\t" $3 }
           $1 == "severity" { print "severity\t" $3 "\t" $4 "\t" $5 "\t" $6 "\t" $7 } $1 == "grade" { print "grade\t" $3 "\t" $4 "\t" $5 }' "$tmpd/ini"
       else
-        awk -F'\t' -v n="$name" '$1 == "severity" && $2 == n { print "cseverity\t" $3 "\t" $6 "\t" $7 }' "$tmpd/ini"
+        awk -F'\t' -v n="$name" '$1 == "severity" && $2 == n { print "gseverity\t" $3 "\t" $6 "\t" $7 }' "$tmpd/ini"
       fi
       awk -F'\t' '$1 == "check"' "$tmpd/doc"
-    done 3< <(awk -F'\t' -v n="$want" '$1 == "std" && $2 == n { print } $1 == "std" && $6 == "common" && $7 == "true" && $2 != n { c = $0 } END { if (c != "") print c }' "$tmpd/ini")
+    done 3< <(awk -F'\t' -v n="$want" '$1 == "std" && $2 == n { print } $1 == "std" && $6 == "global" && $7 == "true" && $2 != n { c = $0 } END { if (c != "") print c }' "$tmpd/ini")
     d="$(awk -F'\t' '$1 == "defaults" { print $2 }' "$tmpd/ini")"
     printf 'defaults\t%s\tsha256:%s\n' "$(path_of "$d")" "$(sha "$d")"
     ;;
@@ -316,24 +316,24 @@ case "$cmd" in
     : > "$pout/confirm.tsv"
     while IFS=$'\t' read -r -u 3 k1 name n; do
       zsh "$script_dir/standard.zsh" resolve --settings "$settings" "$name" > "$pout/$name.resolve" || exit $?
-      # The confirmations of the standard, and those of the common standard when the report has common files.
+      # The confirmations of the standard, and those of the global standard when the report has global files.
       while IFS=$'\t' read -r -u 4 kind sname k2 k3 dpath; do
-        [[ "$kind" == "standard" ]] || awk -F'\t' -v n="$name" '$1 == "file" && $3 == n && $4 == "common" { f = 1 } END { exit !f }' "$tmpd/plan" || continue
+        [[ "$kind" == "standard" ]] || awk -F'\t' -v n="$name" '$1 == "file" && $3 == n && $4 == "global" { f = 1 } END { exit !f }' "$tmpd/plan" || continue
         grep -q "^$sname"$'\t' "$pout/confirm.tsv" && continue
-        role="$(awk -F'\t' -v n="$sname" '$1 == "std" && $2 == n && $6 == "common" { print "common" }' "$tmpd/ini")"
+        role="$(awk -F'\t' -v n="$sname" '$1 == "std" && $2 == n && $6 == "global" { print "global" }' "$tmpd/ini")"
         run_awk -v mode=doc -v role="$role" "$dpath" | awk -F'\t' -v n="$sname" '$1 == "confirm" { print n "\t" $2 "\t" $3 }' >> "$pout/confirm.tsv"
-      done 4< <(awk -F'\t' '$1 == "standard" || $1 == "common"' "$pout/$name.resolve")
+      done 4< <(awk -F'\t' '$1 == "standard" || $1 == "global"' "$pout/$name.resolve")
     done 3< <(awk -F'\t' '$1 == "report"' "$tmpd/plan")
     cp "$tmpd/plan" "$pout/plan.tsv"
     # Summary: one line per report with its files, then the files no standard scores.
-    awk -F'\t' 'FNR == NR { if ($1 == "standard" || $1 == "common") ver[$2] = $3; next }
+    awk -F'\t' 'FNR == NR { if ($1 == "standard" || $1 == "global") ver[$2] = $3; next }
       $1 == "report" { r[++n] = $2; tot[$2] = $3 }
-      $1 == "file" && $4 == "common" { c[$3]++ } $1 == "file" && $4 == "none" { x[$3]++ }
+      $1 == "file" && $4 == "global" { c[$3]++ } $1 == "file" && $4 == "none" { x[$3]++ }
       END {
         print n " report(s):"
         for (i = 1; i <= n; i++) {
           s = r[i]; printf "  - %s %s: %d file(s)", s, ver[s], tot[s]
-          if (c[s] && c[s] != tot[s]) printf " (%d scored with the common standard)", c[s]
+          if (c[s] && c[s] != tot[s]) printf " (%d scored with the global standard)", c[s]
           if (x[s]) printf " (%d not covered by any standard)", x[s]
           print ""
         }

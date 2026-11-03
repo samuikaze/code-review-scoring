@@ -8,9 +8,9 @@ questions in step1/step3, checks that every comment of a mapped code review plug
 and writes ROOT/step4/score.tsv and ROOT/step4/score.json.
 With -Findings: standalone use without the root layout.
 The standard is -Standard (an enabled rule of the rules project that [rules] root of -Config names; -Config defaults to
-configs/settings.ini in the project root; default standard: the only enabled framework rule, or the common rule when no
+configs/settings.ini in the project root; default standard: the only enabled framework rule, or the global rule when no
 framework rule is enabled). Its check items, points, severity scale, grades and merge come from the rule.ini of the
-standard or defaults.ini of the rules project, and the check items of the common rule are used too.
+standard or defaults.ini of the rules project, and the check items of the global rule are used too.
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 With -Check: validate findings.txt only (same checks and exit codes) and write nothing; step 3 runs it before reporting success.
 Exit codes: 0 ok, 1 validation failed (errors on stderr; fix and rerun), 2 bad arguments, invalid rules project or standards
@@ -78,10 +78,10 @@ if (-not (Test-UserFile $Findings)) { Exit-WithError "findings file not found: $
 if (-not $OutDir) { $OutDir = Split-Path -Parent (Resolve-UserPath $Findings) }
 
 # The standard as "standard resolve" prints it (code-review-scoring/scripts/standard.ps1, run with the same PowerShell;
-# it prints its own errors): check items of the standard and of the common standard, points, merge, severity scale and
-# grades of the standard, and the severity scale of the common standard.
+# it prints its own errors): check items of the standard and of the global standard, points, merge, severity scale and
+# grades of the standard, and the severity scale of the global standard.
 function New-Map { return [hashtable]::new([StringComparer]::Ordinal) }
-$def = New-Map; $adj = New-Map; $dimMax = [ordered]@{}; $std = $null; $common = $null; $owner = ''; $stdRule = ''; $cmRule = ''; $defHash = ''; $merge = $false
+$def = New-Map; $adj = New-Map; $dimMax = [ordered]@{}; $std = $null; $globalStd = $null; $owner = ''; $stdRule = ''; $glRule = ''; $defHash = ''; $merge = $false
 $sevs = New-Object System.Collections.Generic.List[string]; $pts = New-Map; $sevCap = New-Map; $sevName = New-Map
 $grades = New-Object System.Collections.Generic.List[string]; $gradeMin = New-Map; $gradeName = New-Map
 $csevs = New-Object System.Collections.Generic.List[string]
@@ -104,10 +104,10 @@ foreach ($l in $resolved) {
         'merge' { $merge = ($a[1] -ceq 'true') }
         'severity' { $sevs.Add($a[1]); $pts[$a[1]] = [int]$a[2]; $sevCap[$a[1]] = $(if ($a[3] -ceq '-') { '' } else { $a[3] }); $sevName[$a[1]] = $a[4] }
         'grade' { $grades.Add($a[1]); $gradeMin[$a[1]] = [int]$a[2]; $gradeName[$a[1]] = $a[3] }
-        'cseverity' { $csevs.Add($a[1]) }
+        'gseverity' { $csevs.Add($a[1]) }
         'standard' { $std = $a; $owner = 's' }
-        'common' { $common = $a; $owner = 'c' }
-        'ruleini' { if ($owner -ceq 'c') { $cmRule = $a[2] } else { $stdRule = $a[2] } }
+        'global' { $globalStd = $a; $owner = 'c' }
+        'ruleini' { if ($owner -ceq 'c') { $glRule = $a[2] } else { $stdRule = $a[2] } }
         'defaults' { $defHash = $a[2] }
     }
 }
@@ -115,7 +115,7 @@ if ($dimMax.Count -ne 7 -or $sevs.Count -eq 0 -or $grades.Count -eq 0) {
     [Console]::Error.WriteLine('error: the resolve output has no points, severity scale or grades of the standard; run standard lint and standard resolve again'); exit 2
 }
 $sevList = $sevs -join ', '; $lowest = $sevs[$sevs.Count - 1]
-# The common rule uses the scale of the standard when its scale has the same codes in the same order.
+# The global rule uses the scale of the standard when its scale has the same codes in the same order.
 $sameScale = ($csevs.Count -eq 0) -or (($csevs -join ',') -ceq ($sevs -join ','))
 $cList = $csevs -join ', '; $cLowest = if ($csevs.Count -gt 0) { $csevs[$csevs.Count - 1] } else { $lowest }
 
@@ -195,7 +195,7 @@ function Close-Record {
         if (-not $script:fld.ContainsKey('problem')) { Add-Error $script:recLine "$($script:recId) is missing `"problem:`"" }
         if (-not $script:fld.ContainsKey('suggestion')) { Add-Error $script:recLine "$($script:recId) is missing `"suggestion:`"" }
         if ($script:recFrom) { Test-From }
-        elseif ($script:fld.ContainsKey('from')) { Add-Error $script:recLine "$($script:recId): from: is only used for check items of the common standard when its severity scale differs from that of the standard" }
+        elseif ($script:fld.ContainsKey('from')) { Add-Error $script:recLine "$($script:recId): from: is only used for check items of the global standard when its severity scale differs from that of the standard" }
     }
     elseif ($script:rec -eq 'U') {
         if (-not $script:fld.ContainsKey('content')) { Add-Error $script:recLine 'upstream record is missing "content:"' }
@@ -203,14 +203,14 @@ function Close-Record {
     $script:rec = ''; $script:recFrom = $false; $script:fld = @{}
 }
 
-# A check item of the common standard when its scale differs from that of the standard: column 3 holds the closest
+# A check item of the global standard when its scale differs from that of the standard: column 3 holds the closest
 # severity of the standard's scale, any one of it. from: is recommended but optional; when present it names the
-# severity on the common scale (the default, an allowed adjustment with its condition in column 5, or the lowest).
+# severity on the global scale (the default, an allowed adjustment with its condition in column 5, or the lowest).
 function Test-From {
     $id = $script:recId; $ln = $script:recLine
     if (-not $script:fld.ContainsKey('from')) { return }
     $f = $script:fld['from']
-    if ($script:csevs -cnotcontains $f) { Add-Error $ln "${id}: from: $f is not a severity of the common standard ($($script:cList))"; return }
+    if ($script:csevs -cnotcontains $f) { Add-Error $ln "${id}: from: $f is not a severity of the global standard ($($script:cList))"; return }
     if ($f -cne $script:def[$id] -and $f -cne $script:cLowest) {
         if ($script:adj[$id] -cnotcontains $f) {
             $adjText = if ($script:adj[$id].Count -gt 0) { ", the allowed adjustment $($script:adj[$id] -join ',')" } else { '' }
@@ -248,12 +248,12 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
         'F' {
             $id = $c[1]; $sev = $c[2]; $locs = $c[3]; $reason = $c[4]
             $rec = 'skip'; $recId = $id; $recLine = $no; $recReason = $reason
-            # Check id "-": no check item of the standard covers the problem; deducted from the total by its severity.
+            # Check id "-": no check item of the standard covers the problem; deducted from dimension G by its severity.
             $other = ($id -eq '-')
             if (-not $other -and -not $def.ContainsKey($id)) { Add-Error $no "unknown check id $id (use - when no check covers the problem)"; break }
             if (-not $pts.ContainsKey($sev)) { Add-Error $no "${id}: severity `"$sev`" is not one of the scale of the standard ($sevList)"; break }
-            # A check item of the common standard on another scale: its own severity is checked with from: (Close-Record).
-            $fromCheck = (-not $other -and $id.StartsWith('CM-', [StringComparison]::Ordinal) -and -not $sameScale)
+            # A check item of the global standard on another scale: its own severity is checked with from: (Close-Record).
+            $fromCheck = (-not $other -and $id.StartsWith('GL-', [StringComparison]::Ordinal) -and -not $sameScale)
             if (-not $other -and -not $fromCheck -and $sev -cne $def[$id] -and $sev -cne $lowest) {
                 if ($adj[$id] -cnotcontains $sev) {
                     $adjText = if ($adj[$id].Count -gt 0) { ", the allowed adjustment $($adj[$id] -join ',')" } else { '' }
@@ -350,9 +350,9 @@ if ($Check) {
 function ConvertTo-JsonString([string]$s) {
     return '"' + ($s -replace '\\', '\\' -replace '"', '\"' -replace "`t", '\t') + '"'
 }
-# Dimension of a check id: its first letter, or the letter after CM- for the common standard.
+# Dimension of a check id: its first letter, or the letter after GL- for the global standard.
 function Get-Dimension([string]$Id) {
-    if ($Id.StartsWith('CM-', [StringComparison]::Ordinal)) { return $Id.Substring(3, 1) }
+    if ($Id.StartsWith('GL-', [StringComparison]::Ordinal)) { return $Id.Substring(3, 1) }
     return $Id.Substring(0, 1)
 }
 function Join-JsonArray($items) {
@@ -362,18 +362,17 @@ function Join-JsonArray($items) {
 
 # Sorted by severity, then check id with records without one (-) last; occurrences of one id keep their order in findings.txt
 $sorted = @($found | Sort-Object @{ Expression = { $sevs.IndexOf($_.Severity) } }, @{ Expression = { [int]($_.Id -eq '-') } }, @{ Expression = { $_.Id } }, @{ Expression = { $_.Seq } })
+# Records without a check id and upstream factors share dimension G. The severities found cap the grade.
+$othDed = 0; foreach ($x in $sorted) { if ($x.Id -eq '-') { $othDed += $pts[$x.Severity] } }
+$upDed = 0; foreach ($u in $upstream) { $upDed += $pts[$u.Severity] }
+$usedSev = New-Map; foreach ($x in $found) { $usedSev[$x.Severity] = 1 }; foreach ($u in $upstream) { $usedSev[$u.Severity] = 1 }
 $scores = [ordered]@{}; $total = 0
 foreach ($d in $dimMax.Keys) {
-    $ded = 0
+    $ded = if ($d -ceq 'G') { $othDed + $upDed } else { 0 }
     foreach ($x in $sorted) { if ((Get-Dimension $x.Id) -ceq $d) { $ded += $pts[$x.Severity] } }
     $scores[$d] = [Math]::Max(0, $dimMax[$d] - $ded)
     $total += $scores[$d]
 }
-# Records without a check id and upstream factors are deducted from the total. The severities found cap the grade.
-$othDed = 0; foreach ($x in $sorted) { if ($x.Id -eq '-') { $othDed += $pts[$x.Severity] } }
-$upDed = 0; foreach ($u in $upstream) { $upDed += $pts[$u.Severity] }
-$usedSev = New-Map; foreach ($x in $found) { $usedSev[$x.Severity] = 1 }; foreach ($u in $upstream) { $usedSev[$u.Severity] = 1 }
-$total = [Math]::Max(0, $total - $othDed - $upDed)
 $grade = $grades[$grades.Count - 1]
 foreach ($g in $grades) { if ($total -ge $gradeMin[$g]) { $grade = $g; break } }
 # The strictest cap (the lowest grade) of the severities found; the most severe of them names it.
@@ -386,10 +385,10 @@ $tsv = New-Object System.Text.StringBuilder
 [void]$tsv.Append("total`t$total`ngrade`t$grade`ncapped`t$([int]$capped)`n")
 if ($capped) { [void]$tsv.Append("cap`t$capSev`t$grade`n") }
 [void]$tsv.Append("standard`t$($std[1])`t$($std[2])`t$($std[3])`n")
-if ($common) { [void]$tsv.Append("common`t$($common[1])`t$($common[2])`t$($common[3])`n") }
-# sha256 of the settings in effect: the rule.ini of the standard and of the common rule, and defaults.ini
+if ($globalStd) { [void]$tsv.Append("global`t$($globalStd[1])`t$($globalStd[2])`t$($globalStd[3])`n") }
+# sha256 of the settings in effect: the rule.ini of the standard and of the global rule, and defaults.ini
 [void]$tsv.Append("ruleini`tstandard`t$stdRule`n")
-if ($common) { [void]$tsv.Append("ruleini`tcommon`t$cmRule`n") }
+if ($globalStd) { [void]$tsv.Append("ruleini`tglobal`t$glRule`n") }
 [void]$tsv.Append("defaults`t$defHash`n")
 foreach ($d in $dimMax.Keys) { [void]$tsv.Append("dim`t$d`t$($scores[$d])`t$($dimMax[$d])`n") }
 foreach ($x in $sorted) { [void]$tsv.Append("finding`t$($x.Id)`t$($x.Severity)`t$($pts[$x.Severity])`t$($x.Clean)`t$($x.Seq)`n") }
@@ -422,14 +421,14 @@ $mj = @($mapped.Keys | ForEach-Object { '    { "comment": ' + (ConvertTo-JsonStr
 $xj = @($rejected | ForEach-Object { '    { "comment": ' + (ConvertTo-JsonString $_.Comment) + ', "reason": ' + (ConvertTo-JsonString $_.Reason) + ' }' })
 $sj = @($skipped | ForEach-Object { '    { "id": ' + (ConvertTo-JsonString $_.Id) + ', "reason": ' + (ConvertTo-JsonString $_.Reason) + ' }' })
 $stdJson = { param($r, $ruleHash) '{ "name": ' + (ConvertTo-JsonString $r[1]) + ', "version": ' + (ConvertTo-JsonString $r[2]) + ', "hash": ' + (ConvertTo-JsonString $r[3]) + ', "ruleIniHash": ' + (ConvertTo-JsonString $ruleHash) + ' }' }
-$commonJson = if ($common) { & $stdJson $common $cmRule } else { 'null' }
+$globalJson = if ($globalStd) { & $stdJson $globalStd $glRule } else { 'null' }
 $capJson = if ($capped) { '{ "severity": ' + (ConvertTo-JsonString $capSev) + ', "grade": ' + (ConvertTo-JsonString $grade) + ' }' } else { 'null' }
 $json = "{`n" +
 '  "total": ' + $total + ",`n" +
 '  "grade": "' + $grade + '"' + ",`n" +
 '  "cap": ' + $capJson + ",`n" +
 '  "standard": ' + (& $stdJson $std $stdRule) + ",`n" +
-'  "common": ' + $commonJson + ",`n" +
+'  "global": ' + $globalJson + ",`n" +
 '  "defaultsHash": ' + (ConvertTo-JsonString $defHash) + ",`n" +
 '  "severities": ' + (Join-JsonArray $sevj) + ",`n" +
 '  "grades": ' + (Join-JsonArray $gj) + ",`n" +
@@ -447,7 +446,7 @@ $capNote = if ($capped) { " (capped at $grade because of a $capSev finding)" } e
 $summary = "grade $grade, total $total/100$capNote`n" +
 (@($dimMax.Keys | ForEach-Object { "$_ $($scores[$_])/$($dimMax[$_])  " }) -join '') + "`n" +
 "deductions: $($found.Count) (without a check id: $(@($found | Where-Object { $_.Id -eq '-' }).Count)), upstream: $($upstream.Count), rejected comments: $($rejected.Count), skipped checks: $($skipped.Count)`n" +
-"standard: $($std[1]) $($std[2])$(if ($common) { ", common: $($common[1]) $($common[2])" })`n"
+"standard: $($std[1]) $($std[2])$(if ($globalStd) { ", global: $($globalStd[1]) $($globalStd[2])" })`n"
 [Console]::Out.Write($summary)
 if ($warnings.Count -gt 0) { [Console]::Error.WriteLine('warnings:'); $warnings | ForEach-Object { [Console]::Error.WriteLine($_) } }
 Write-Output "wrote $tsvPath and $jsonPath"

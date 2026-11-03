@@ -1,6 +1,6 @@
 ### --input pr.diff --config settings.ini
 ## Summary
-- standard: legacy v1.0; the files it does not cover ([common]) use the common standard common v0.1
+- standard: legacy v1.0; the files it does not cover ([global]) use the global standard global v0.1
 - deductions: not merged (merge=false): one F line per location; every occurrence is deducted
 - severity scale (from the most severe; deducted per finding; the lowest, Nit, is always allowed and is used when a problem cannot be confirmed):
   - Critical: -10, caps the grade at B. 資料損毀、資安事件或服務中斷。
@@ -8,26 +8,26 @@
   - Major: -5. 特定情境下會出錯，或明顯降低品質。
   - Minor: -2. 能運作，但有更好的寫法。
   - Nit: -1. 風格偏好。
-- reviewable files: 9, excluded: 4; main code changed: 2, test files: 1, migrations: 1, common standard files: 4
+- reviewable files: 9, excluded: 4; main code changed: 2, test files: 1, migrations: 1, global standard files: 4
   - src/main/java/com/ex/order/OrderController.java [added +21 -0]
   - src/main/java/com/ex/order/OrderService.java [modified +17 -1]
   - src/test/java/com/ex/order/OrderControllerTest.java [added +8 -0] [test]
   - src/main/resources/db/migration/V1__init.sql [modified +1 -0] [migration]
   - (excluded: deleted file) src/main/resources/db/migration/V2__old.sql
   - src/main/resources/application.yml [modified +5 -0]
-  - README.md [modified +3 -0] [common]
-  - .github/workflows/ci.yml [added +7 -0] [common]
-  - scripts/deploy.sh [added +4 -0] [common]
-  - Dockerfile [added +2 -0] [common]
+  - README.md [modified +3 -0] [global]
+  - .github/workflows/ci.yml [added +7 -0] [global]
+  - scripts/deploy.sh [added +4 -0] [global]
+  - Dockerfile [added +2 -0] [global]
   - (excluded: lock file) package-lock.json
   - (excluded: build output / generated) build/generated/Gen.java
   - (excluded: marked as generated) src/main/java/com/ex/Mapper.java
 
 ## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
-- G6: existing migration file modified
+- F11: existing migration file modified
   - src/main/resources/db/migration/V1__init.sql (modified)
   - src/main/resources/db/migration/V2__old.sql (deleted)
-- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, F9 OpenAPI annotations
   - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
 - A1 (1 hits) possible Optional.get() without check
   - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
@@ -78,15 +78,15 @@
   - src/main/java/com/ex/order/OrderController.java:11  if (order.getQty() > 100) {
 - F5 (1 hits) System.out or commented-out code
   - src/main/java/com/ex/order/OrderController.java:12  System.out.println("big order");
-- G2 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
+- F7 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
   - src/main/java/com/ex/order/OrderService.java:26  rt.getForObject("http://pay.example.com/api", String.class);
-- G3 (1 hits) log message built by concatenation
+- F8 (1 hits) log message built by concatenation
   - src/main/java/com/ex/order/OrderController.java:15  log.info("created " + order.getId());
-- G5 (1 hits) TODO without issue number
+- F10 (1 hits) TODO without issue number
   - src/main/java/com/ex/order/OrderController.java:14  // TODO handle errors
-- CM-A1 (1 hits) unpinned base image
+- GL-A1 (1 hits) unpinned base image
   - Dockerfile:1  FROM eclipse-temurin:latest
-- CM-B1 (3 hits) downloaded script piped to a shell
+- GL-B1 (3 hits) downloaded script piped to a shell
   - .github/workflows/ci.yml:6  - run: curl -s https://get.example.com | sh
   - scripts/deploy.sh:3  curl -fsSL https://get.example.com/install | bash
   - scripts/deploy.sh:4  echo "token=abcdef123456"
@@ -198,10 +198,10 @@ exit=0
 ### --input no-test.diff --mode scan --config settings.ini
 ## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
 - C1: main code changed but the PR touches no test file (meets the C1 Critical condition if the change is business logic)
-- G6: existing migration file modified
+- F11: existing migration file modified
   - src/main/resources/db/migration/V1__init.sql (modified)
   - src/main/resources/db/migration/V2__old.sql (deleted)
-- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, F9 OpenAPI annotations
   - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
 - A1 (1 hits) possible Optional.get() without check
   - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
@@ -244,19 +244,19 @@ exit=0
   - src/main/java/com/ex/order/OrderController.java:11  if (order.getQty() > 100) {
 - F5 (1 hits) System.out or commented-out code
   - src/main/java/com/ex/order/OrderController.java:12  System.out.println("big order");
-- G2 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
+- F7 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
   - src/main/java/com/ex/order/OrderService.java:26  rt.getForObject("http://pay.example.com/api", String.class);
-- G3 (1 hits) log message built by concatenation
+- F8 (1 hits) log message built by concatenation
   - src/main/java/com/ex/order/OrderController.java:15  log.info("created " + order.getId());
-- G5 (1 hits) TODO without issue number
+- F10 (1 hits) TODO without issue number
   - src/main/java/com/ex/order/OrderController.java:14  // TODO handle errors
 
 exit=0
-### --input pr.diff --mode scan --config settings.ini --standard common
+### --input pr.diff --mode scan --config settings.ini --standard global
 ## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
-- CM-A1 (1 hits) unpinned base image
+- GL-A1 (1 hits) unpinned base image
   - Dockerfile:1  FROM eclipse-temurin:latest
-- CM-B1 (4 hits) possible secret in a file
+- GL-B1 (4 hits) possible secret in a file
   - src/main/java/com/ex/order/OrderService.java:12  private static final String password = "s3cr3tvalue";
   - .github/workflows/ci.yml:6  - run: curl -s https://get.example.com | sh
   - scripts/deploy.sh:3  curl -fsSL https://get.example.com/install | bash
@@ -295,7 +295,7 @@ exit=0
 exit=0
 ### --input pr.diff --mode summary --config ../score/settings.ini --standard scaled
 ## Summary
-- standard: scaled v1.0; the files it does not cover ([common]) use the common standard common v0.1
+- standard: scaled v1.0; the files it does not cover ([global]) use the global standard global v0.1
 - deductions: merged (merge=true): one F line per check id with all its locations; deducted once
 - severity scale (from the most severe; deducted per finding; the lowest, Trivial, is always allowed and is used when a problem cannot be confirmed):
   - Blocker (阻斷): -15, caps the grade at C. 必須立即修正。
@@ -303,22 +303,22 @@ exit=0
   - Major (主要): -5. 應該修正。
   - Minor (次要): -2. 可以改善。
   - Trivial (瑣碎): 0. 不影響品質的小地方。
-- severity scale of the common standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):
+- severity scale of the global standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):
   - Critical. 資料損毀、資安事件或服務中斷。
   - Major. 特定情境下會出錯，或明顯降低品質。
   - Minor. 能運作，但有更好的寫法。
   - Nit. 風格偏好。
-- reviewable files: 9, excluded: 4; common standard files: 9
-  - src/main/java/com/ex/order/OrderController.java [added +21 -0] [common]
-  - src/main/java/com/ex/order/OrderService.java [modified +17 -1] [common]
-  - src/test/java/com/ex/order/OrderControllerTest.java [added +8 -0] [common]
-  - src/main/resources/db/migration/V1__init.sql [modified +1 -0] [common]
+- reviewable files: 9, excluded: 4; global standard files: 9
+  - src/main/java/com/ex/order/OrderController.java [added +21 -0] [global]
+  - src/main/java/com/ex/order/OrderService.java [modified +17 -1] [global]
+  - src/test/java/com/ex/order/OrderControllerTest.java [added +8 -0] [global]
+  - src/main/resources/db/migration/V1__init.sql [modified +1 -0] [global]
   - (excluded: deleted file) src/main/resources/db/migration/V2__old.sql
-  - src/main/resources/application.yml [modified +5 -0] [common]
-  - README.md [modified +3 -0] [common]
-  - .github/workflows/ci.yml [added +7 -0] [common]
-  - scripts/deploy.sh [added +4 -0] [common]
-  - Dockerfile [added +2 -0] [common]
+  - src/main/resources/application.yml [modified +5 -0] [global]
+  - README.md [modified +3 -0] [global]
+  - .github/workflows/ci.yml [added +7 -0] [global]
+  - scripts/deploy.sh [added +4 -0] [global]
+  - Dockerfile [added +2 -0] [global]
   - (excluded: lock file) package-lock.json
   - (excluded: build output / generated) build/generated/Gen.java
   - (excluded: marked as generated) src/main/java/com/ex/Mapper.java
@@ -326,10 +326,10 @@ exit=0
 exit=0
 ### --input pr.diff --mode scan --config none.ini --scan legacy.tsv
 ## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
-- G6: existing migration file modified
+- F11: existing migration file modified
   - src/main/resources/db/migration/V1__init.sql (modified)
   - src/main/resources/db/migration/V2__old.sql (deleted)
-- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, F9 OpenAPI annotations
   - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
 - A1 (1 hits) possible Optional.get() without check
   - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
@@ -381,11 +381,11 @@ exit=0
   - src/main/java/com/ex/order/OrderController.java:11  if (order.getQty() > 100) {
 - F5 (1 hits) System.out or commented-out code
   - src/main/java/com/ex/order/OrderController.java:12  System.out.println("big order");
-- G2 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
+- F7 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
   - src/main/java/com/ex/order/OrderService.java:26  rt.getForObject("http://pay.example.com/api", String.class);
-- G3 (1 hits) log message built by concatenation
+- F8 (1 hits) log message built by concatenation
   - src/main/java/com/ex/order/OrderController.java:15  log.info("created " + order.getId());
-- G5 (4 hits) TODO without issue number
+- F10 (4 hits) TODO without issue number
   - src/main/java/com/ex/order/OrderController.java:14  // TODO handle errors
   - README.md:3  TODO: document the API
   - .github/workflows/ci.yml:7  # TODO pin the action versions

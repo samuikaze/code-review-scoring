@@ -28,9 +28,14 @@ How to write this document (delete this comment after copying the template):
 - The points of the dimensions, the severity scale and the grades are set in
   rule.ini; what rule.ini does not set comes from defaults.ini of the rules
   project.
-- General rules such as the scoring scope, deductions requiring evidence and
+- Workflow rules such as the scoring scope, deductions requiring evidence and
   upstream factors are handled by the scoring workflow; write only what is
   specific to this standard here.
+- The global standard (role="global" in rule.ini) also has a section
+  ## Global rules for rules that apply to every file of every report, such
+  as the third-party exemption or no double counting with static analysis.
+  Framework standards do not have this section. Where a framework standard
+  says otherwise, the framework standard wins.
 - The section headings may also be written in Chinese (面向, 檢查項,
   事先確認事項); both are accepted.
 -->
@@ -40,10 +45,11 @@ of scoring that this standard covers.
 
 ## Dimensions
 
-All standards share the following seven dimensions. Points are set by
+All standards share the following six dimensions. Points are set by
 `[points]` in `rule.ini`, or by `[points]` in `defaults.ini` of the rules
 project when `rule.ini` does not set them. The first letter of a check code is
-its dimension. Codes and dimension names cannot be changed; the "Focus" text can
+its dimension. `G` in `[points]` is for problems without a check item and for
+upstream factors; the scoring workflow handles it, so it is not listed here. Codes and dimension names cannot be changed; the "Focus" text can
 be adapted to this standard's technology.
 
 | Code | Dimension | Focus |
@@ -53,8 +59,7 @@ be adapted to this standard's technology.
 | C | Test quality | Are the tests sufficient and meaningful |
 | D | Architecture and design | Layering, separation of responsibilities, framework conventions |
 | E | Performance and resource use | Query efficiency, resource management, external calls |
-| F | Readability | Is it easy for others to understand |
-| G | Maintainability | Is it easy to change and extend later |
+| F | Readability and maintainability | Is it easy for others to understand, and to change and extend later |
 
 ## Check items
 
@@ -68,9 +73,9 @@ full-width `｜` (U+FF5C):
 Field rules:
 
 - Code: the dimension letter plus a sequence number, for example `A1`, unique
-  within the document. The common standard (`role="common"`) prefixes its
-  codes with `CM-`, for example `CM-A1`; codes of framework standards cannot
-  start with `CM`.
+  within the document. The global standard (`role="global"`) prefixes its
+  codes with `GL-`, for example `GL-A1`; codes of framework standards cannot
+  start with `GL`.
 - Severity: only the severity codes of this rule (case-sensitive), that is the
   `[severity:CODE]` sections of `rule.ini`, or the scale of `defaults.ini`
   when `rule.ini` does not set one. The examples below use the default
@@ -110,13 +115,10 @@ the heading and write "None". -->
 
 - E1｜A query has no paging and loads a whole table at once｜Minor
 
-### F. Readability
+### F. Readability and maintainability
 
 - F1｜A method has more than 50 lines, or nesting deeper than 3 levels｜Minor
-
-### G. Maintainability
-
-- G1｜A TODO has no issue number｜Minor
+- F2｜A TODO has no issue number｜Minor
 
 ## Confirmations
 
@@ -134,7 +136,7 @@ half-width commas.
 or when it does not deduct. -->
 
 - Code written to work around a third-party system problem does not deduct
-  under the check items of dimensions F and G when a comment explains the
+  under the check items of dimension F when a comment explains the
   reason and gives the vendor's ticket number.
 
 ## Judging hints

@@ -7,8 +7,8 @@ step 1: working
 exit=0
 ### init-workspace
 2 report(s):
-  - springboot-3 v0.2: 2 file(s) (1 scored with the common standard)
-  - angular v0.2: 2 file(s) (1 scored with the common standard)
+  - springboot-3 v0.2: 2 file(s) (1 scored with the global standard)
+  - angular v0.2: 2 file(s) (1 scored with the global standard)
 wrote WORK/review/step1/standards/plan.tsv
 pr.diff: 22 lines
 WORK/review/step1
@@ -30,15 +30,15 @@ step 1: success
 exit=0
 --- request.md
 ## Scoring standards
-- springboot-3: springboot-3 v0.2 sha256:28801aba8ae9d5bb7d08cf4f8472cb5ca628efb871204f41bd9debfe6ac2b948 WORK/std/good-v2.md
+- springboot-3: springboot-3 v0.2 sha256:7a33b9f46d0553c46fb81af8296ac99ec9aa15faf082612969834b07b73f14f6 WORK/std/good-v2.md
   - rule.ini: sha256:f27c7c5f88da218b91ebcb49f3c20f8675ce90a4acc58e104f9c8122a17c5144 WORK/rules/springboot-3/rule.ini
-  - common standard: common v0.1 sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742 WORK/std/good-common.md
-  - common rule.ini: sha256:bf961643219d55ad71567e5537c2beded15e8712fc16a9ab8469754ca9581e47 WORK/rules/common/rule.ini
+  - global standard: global v0.1 sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf WORK/std/good-global.md
+  - global rule.ini: sha256:e7e610eeda34d3c5e61fdcb3280b27cdb170f1c7de8a0ce0d27f1974d3a3f9e3 WORK/rules/global/rule.ini
   - defaults.ini: sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64 WORK/rules/defaults.ini
-- angular: angular v0.2 sha256:0465ef8820c3d07d2303488e209e50b40dd0fce5b0b295ced065091d62d72632 WORK/std/angular.md
+- angular: angular v0.2 sha256:5f4f9b9d82eabd280250d8e43ab175b0413c78d00432ed690b1a1f39139ba9b3 WORK/std/angular.md
   - rule.ini: sha256:668f557e4fbc4aefb8be288d347d17f56416944728218b6c7f2ddb814657d2fc WORK/rules/angular/rule.ini
-  - common standard: common v0.1 sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742 WORK/std/good-common.md
-  - common rule.ini: sha256:bf961643219d55ad71567e5537c2beded15e8712fc16a9ab8469754ca9581e47 WORK/rules/common/rule.ini
+  - global standard: global v0.1 sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf WORK/std/good-global.md
+  - global rule.ini: sha256:e7e610eeda34d3c5e61fdcb3280b27cdb170f1c7de8a0ce0d27f1974d3a3f9e3 WORK/rules/global/rule.ini
   - defaults.ini: sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64 WORK/rules/defaults.ini
 ### prompt --step 3
 error: step 3 needs --standard NAME: springboot-3, angular
@@ -107,7 +107,7 @@ exit=0
 ### next (step 3 prompt)
 action: run step 3 (springboot-3)
 # Step 3 of 5: Analyze code (springboot-3)
-- Scoring standard: `springboot-3`, document `WORK/std/good-v2.md`; common standard for the files no framework standard covers: `WORK/std/good-common.md`. Use only the check items of these documents (their codes, rules and severities); when several standards score this PR, the other standards' files are reviewed in their own step 3.
+- Scoring standard: `springboot-3`, document `WORK/std/good-v2.md`; global standard: `WORK/std/good-global.md`. Its section `## 全域規則` (`## Global rules`) applies to every file of this report, and its check items to the files no framework standard covers; where a rule of the framework standard says otherwise, the framework standard wins. Use only the check items of these documents (their codes, rules and severities); when several standards score this PR, the other standards' files are reviewed in their own step 3.
 - Report language: write all narrative text of `findings.txt` in Traditional Chinese with Taiwan usage
 2. Otherwise run `prepare-diff --root "WORK/review" --standard springboot-3 --config "WORK/configs/settings.ini"`, settle every code review comment (skill section "Using code review results"), then review the remaining check items of the standard documents without re-deriving what the code review already found.
 2. Write every file you produce under `WORK/review/step3/springboot-3/`; never modify files of other steps or plugins.
@@ -119,9 +119,9 @@ step 3 (angular): working
 exit=0
 ### prepare-diff angular
 wrote WORK/review/step3/angular/prepared.txt (37 lines)
-- standard: angular v0.2; the files it does not cover ([common]) use the common standard common v0.1
+- standard: angular v0.2; the files it does not cover ([global]) use the global standard global v0.1
 - severity scale (from the most severe; deducted per finding; the lowest, Info, is always allowed and is used when a problem cannot be confirmed):
-- severity scale of the common standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):
+- severity scale of the global standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):
 - fake-review#2 [mapped] Minor - | frontend/src/app.ts:1
 - fake-review#3 [mapped] Minor - | README.md:3
 ### set --step 3 --standard angular --state success
@@ -132,7 +132,7 @@ step 3 (springboot-3): working
 exit=0
 ### prepare-diff springboot-3
 wrote WORK/review/step3/springboot-3/prepared.txt (32 lines)
-- standard: springboot-3 v0.2; the files it does not cover ([common]) use the common standard common v0.1
+- standard: springboot-3 v0.2; the files it does not cover ([global]) use the global standard global v0.1
 - severity scale (from the most severe; deducted per finding; the lowest, Nit, is always allowed and is used when a problem cannot be confirmed):
 - fake-review#1 [mapped] Major - | backend/src/main/java/A.java:1
 - fake-review#3 [mapped] Minor - | README.md:3
@@ -148,20 +148,20 @@ steps 4 and 5 (springboot-3): success
 grade A, total 95/100
 A 20/25  B 15/15  C 15/15  D 15/15  E 10/10  F 10/10  G 10/10  
 deductions: 1 (without a check id: 0), upstream: 0, rejected comments: 1, skipped checks: 0
-standard: springboot-3 v0.2, common: common v0.1
+standard: springboot-3 v0.2, global: global v0.1
 report: WORK/reports/DATE_Demo-PR_springboot-3.md
 steps 4 and 5 (angular): success
 grade S, total 98/100
 A 23/25  B 15/15  C 15/15  D 15/15  E 10/10  F 10/10  G 10/10  
 deductions: 1 (without a check id: 0), upstream: 0, rejected comments: 1, skipped checks: 0
-standard: angular v0.2, common: common v0.1
+standard: angular v0.2, global: global v0.1
 report: WORK/reports/DATE_Demo-PR_angular.md
 exit=0
 --- reports
 DATE_Demo-PR_angular.md
 DATE_Demo-PR_springboot-3.md
 --- DATE_Demo-PR_angular.md
-- **評分標準**：angular v0.2；通用檔案使用 common v0.1
+- **評分標準**：angular v0.2；全域標準 global v0.1
 | fake-review | 3 | 0 | 0 | 1 | 1 | done |
 ### fake-review
    - 來源：fake-review#2
@@ -169,7 +169,7 @@ DATE_Demo-PR_springboot-3.md
     { "comment": "fake-review#3", "severity": "Info" }
     { "comment": "fake-review#3", "reason": "README 用語無誤。" }
 --- DATE_Demo-PR_springboot-3.md
-- **評分標準**：springboot-3 v0.2；通用檔案使用 common v0.1
+- **評分標準**：springboot-3 v0.2；全域標準 global v0.1
 | fake-review | 3 | 0 | 1 | 0 | 1 | done |
 ### fake-review
    - 來源：fake-review#1
@@ -178,7 +178,7 @@ DATE_Demo-PR_springboot-3.md
     { "comment": "fake-review#3", "reason": "README 用語無誤。" }
 ### render-report (report="en")
 # PR Review Report
-- **Scoring standard**: angular v0.2; common files use common v0.1
+- **Scoring standard**: angular v0.2; global standard global v0.1
 - **Grade**: 優 (98 / 100)
 ## 1. Code review results
 ## 2. Scoring results

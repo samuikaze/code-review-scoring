@@ -9,34 +9,34 @@ defaults.ini and the rule.ini, Markdown document and scan rule file of each rule
 Uses the same GNU-style arguments as standard.sh:
 
   standard.ps1 lint [--settings FILE] [NAME ...]
-  standard.ps1 lint --file DOC.md [--scan RULES.tsv] [--common]
+  standard.ps1 lint --file DOC.md [--scan RULES.tsv] [--global]
       check the rules project: rules.ini, defaults.ini and the rule.ini, document and scan rule file of every
       rule (only the NAMEs given), or one document that is not registered yet (--file; its severities are
       checked against the rule.ini in its folder, or defaults.ini). Prints what was parsed, then the errors and
       warnings with file and line. Regexes are compiled with .NET, and with awk when it is installed
-  standard.ps1 parse --file DOC.md [--common]
+  standard.ps1 parse --file DOC.md [--global]
       print the parsed document as TAB-separated records (name, version, dim, check, confirm);
       stops at the first format error (exit 3)
-  standard.ps1 diff OLD.md NEW.md
+  standard.ps1 diff OLD.md NEW.md [--global]
       list the dimensions, check items and confirmations that differ between two versions of a document
   standard.ps1 resolve [--settings FILE] [NAME]
-      for score: the enabled rule NAME (default: the only enabled framework rule, or the common one when there
-      is none) and the enabled common rule, as TAB-separated records: "standard" / "common" (name, version,
+      for score: the enabled rule NAME (default: the only enabled framework rule, or the global one when there
+      is none) and the enabled global rule, as TAB-separated records: "standard" / "global" (name, version,
       sha256, path of the document), "ruleini" (path, sha256), "applies" (the regex of the files of NAME), "scan"
       (path, sha256 of the scan rules), "points" (dimension, points), "merge", "severity" (code, points, cap,
       display name, meaning with its lines separated by |; from the most severe), "grade" (code, min, display
-      name; from the highest), "cseverity" (code, display name, meaning of the common rule's scale), the "check"
+      name; from the highest), "gseverity" (code, display name, meaning of the global rule's scale), the "check"
       records of each document
       and "defaults" (path, sha256 of defaults.ini).
       Stops when the rules project or a document has a format error (exit 3)
   standard.ps1 plan --diff PR.diff --out DIR [--settings FILE]
       for the review workflow: the enabled rules that score the PR. Each file goes to the framework rule whose
-      applies covers it; the other files are common files, scored with the common rule in the report of their
+      applies covers it; the other files are global files, scored with the global rule in the report of their
       project (the framework of the nearest folder above them; every report when that is unclear), or on their
       own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
-      report and kind framework|common|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
+      report and kind framework|global|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
       each report, and DIR/confirm.tsv (standard, check codes, what to confirm before scoring)
-  standard.ps1 stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--common]
+  standard.ps1 stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--global]
       write a reviewed scan rule file (--scan, e.g. a draft) to --out with the source line
       "# source: <document file> <version> sha256:<hash>" of the document (--file), so lint can tell when the
       document changes later; an existing source line is replaced
@@ -44,11 +44,11 @@ Uses the same GNU-style arguments as standard.sh:
 The rules project: [rules] root of the settings names its folder (relative to the folder of the settings file). It
 holds rules.ini (one [name] section per rule: path = the folder of its rule.ini, enable = true|false), defaults.ini
 (the points, severities and grades of the rules that do not set their own) and a folder per rule with rule.ini
-([rule] standard = the Markdown document, scan = the scan rule file, applies, role = common), the document and the
+([rule] standard = the Markdown document, scan = the scan rule file, applies, role = global), the document and the
 scan rules.
 
 Options: --settings FILE   (default: configs/settings.ini in the project root; its [rules] root names the rules project)
-         --common          the document is the common standard (its check codes start with CM-)
+         --global          the document is the global standard (its check codes start with GL-)
 
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok (warnings allowed), 1 lint found errors, 2 bad arguments, unknown or disabled NAME, 3 the rules
@@ -78,7 +78,7 @@ while ($i -lt $argv.Count) {
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]; $i += 2
     }
     elseif ($a -eq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--settings)' }
-    elseif ($a -eq '--common') { $opt.role = 'common'; $i++ }
+    elseif ($a -eq '--global') { $opt.role = 'global'; $i++ }
     elseif ($a -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 0 }
     elseif ($a.StartsWith('-', [StringComparison]::Ordinal)) { Exit-WithError "unknown option $a (see Get-Help)" }
     else { $names += $a; $i++ }
@@ -235,7 +235,7 @@ switch ($cmd) {
             Test-StdDoc '' $file $opt.role $scanFull $sevs
         }
         else {
-            if ($opt.scan -or $opt.role) { Exit-WithError '--scan and --common go with --file' }
+            if ($opt.scan -or $opt.role) { Exit-WithError '--scan and --global go with --file' }
             $settings = Get-Full $opt.settings
             $r = Read-Rules $settings
             if (-not $r[0]) {
@@ -315,24 +315,24 @@ switch ($cmd) {
         $rulesIni = "$($r[1])/rules.ini"; $ini = $r[2]
         $records = Get-StdRecords $ini
         $want = if ($names.Count -eq 1) { [string]$names[0] } else { '' }
-        $common = $null; $frameworks = New-Object System.Collections.Generic.List[string]
+        $globalStd = $null; $frameworks = New-Object System.Collections.Generic.List[string]
         foreach ($rec in $records) {
             if ($rec[6] -cne 'true') { continue }
-            if ($rec[5] -ceq 'common') { $common = $rec } else { $frameworks.Add($rec[1]) }
+            if ($rec[5] -ceq 'global') { $globalStd = $rec } else { $frameworks.Add($rec[1]) }
         }
         if (-not $want) {
-            # Without a NAME: the only enabled framework rule, or the common one when there is no framework rule.
+            # Without a NAME: the only enabled framework rule, or the global one when there is no framework rule.
             if ($frameworks.Count -gt 1) { Exit-WithError "${rulesIni}: several rules are enabled ($($frameworks -join ', ')); pick one by name" }
             elseif ($frameworks.Count -eq 1) { $want = $frameworks[0] }
-            elseif ($common) { $want = $common[1] }
+            elseif ($globalStd) { $want = $globalStd[1] }
             else { Exit-WithError "${rulesIni}: no rule is enabled" }
         }
-        # The rule itself first, then the enabled common rule (when it is another one); each with its check items.
+        # The rule itself first, then the enabled global rule (when it is another one); each with its check items.
         $pick = New-Object System.Collections.Generic.List[object]
         foreach ($rec in $records) { if ($rec[1] -ceq $want) { $pick.Add($rec) } }
         if ($pick.Count -eq 0) { Exit-WithError "${rulesIni}: [$want] is not registered" }
         if ($pick[0][6] -cne 'true') { Exit-WithError "${rulesIni}: [$want] is disabled (enable=`"false`")" }
-        if ($common -and $common[1] -cne $want) { $pick.Add($common) }
+        if ($globalStd -and $globalStd[1] -cne $want) { $pick.Add($globalStd) }
         $sb = New-Object System.Text.StringBuilder
         foreach ($rec in $pick) {
             $name = $rec[1]; $dpath = Get-PathOf $rec[3]; $ruleini = Get-PathOf $rec[7]
@@ -340,7 +340,7 @@ switch ($cmd) {
             $out = Invoke-StdDoc $dpath $(if ($rec[5] -ceq '-') { '' } else { $rec[5] }) (Get-SevsOf $ini $name)
             $e = Get-FirstError $dpath $out
             if ($e) { [Console]::Error.WriteLine("error: $e; run standard lint first"); exit 3 }
-            $kind = if ($name -ceq $want) { 'standard' } else { 'common' }
+            $kind = if ($name -ceq $want) { 'standard' } else { 'global' }
             [void]$sb.Append("$kind`t$name`t$(Get-Field $out 'version')`tsha256:$(Get-Sha $dpath)`t$dpath`n")
             [void]$sb.Append("ruleini`t$ruleini`tsha256:$(Get-Sha $ruleini)`n")
             if ($name -ceq $want) {
@@ -360,7 +360,7 @@ switch ($cmd) {
                     elseif ($a[0] -ceq 'severity') { [void]$sb.Append("severity`t$($a[2])`t$($a[3])`t$($a[4])`t$($a[5])`t$($a[6])`n") }
                     elseif ($a[0] -ceq 'grade') { [void]$sb.Append("grade`t$($a[2])`t$($a[3])`t$($a[4])`n") }
                 }
-                elseif ($a[0] -ceq 'severity') { [void]$sb.Append("cseverity`t$($a[2])`t$($a[5])`t$($a[6])`n") }
+                elseif ($a[0] -ceq 'severity') { [void]$sb.Append("gseverity`t$($a[2])`t$($a[5])`t$($a[6])`n") }
             }
             foreach ($l in $out) { if ($l.StartsWith("check`t", [StringComparison]::Ordinal)) { [void]$sb.Append("$l`n") } }
         }
@@ -391,17 +391,17 @@ switch ($cmd) {
             finally { $ErrorActionPreference = $prev }
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             [IO.File]::WriteAllText((Join-Path $outDir "$name.resolve"), (($res -join "`n") + "`n"), $utf8)
-            # The confirmations of the standard, and those of the common standard when the report has common files.
-            $hasCommon = $false
-            foreach ($x in $plan) { $f = $x.Split("`t"); if ($f[0] -ceq 'file' -and $f[2] -ceq $name -and $f[3] -ceq 'common') { $hasCommon = $true } }
+            # The confirmations of the standard, and those of the global standard when the report has global files.
+            $hasGlobal = $false
+            foreach ($x in $plan) { $f = $x.Split("`t"); if ($f[0] -ceq 'file' -and $f[2] -ceq $name -and $f[3] -ceq 'global') { $hasGlobal = $true } }
             foreach ($r in $res) {
                 $f = $r.Split("`t")
-                if ($f[0] -cne 'standard' -and $f[0] -cne 'common') { continue }
+                if ($f[0] -cne 'standard' -and $f[0] -cne 'global') { continue }
                 $ver[$f[1]] = $f[2]
-                if (($f[0] -ceq 'common' -and -not $hasCommon) -or $done.ContainsKey($f[1])) { continue }
+                if (($f[0] -ceq 'global' -and -not $hasGlobal) -or $done.ContainsKey($f[1])) { continue }
                 $done[$f[1]] = 1
                 $role = ''
-                foreach ($x in $ini) { $g = $x.Split("`t"); if ($g[0] -ceq 'std' -and $g[1] -ceq $f[1] -and $g[5] -ceq 'common') { $role = 'common' } }
+                foreach ($x in $ini) { $g = $x.Split("`t"); if ($g[0] -ceq 'std' -and $g[1] -ceq $f[1] -and $g[5] -ceq 'global') { $role = 'global' } }
                 foreach ($c in (Invoke-StdDoc $f[4] $role @())) {
                     $g = $c.Split("`t")
                     if ($g[0] -ceq 'confirm') { [void]$confirm.Append("$($f[1])`t$($g[1])`t$($g[2])`n") }
@@ -417,11 +417,11 @@ switch ($cmd) {
             foreach ($l in $plan) {
                 $a = $l.Split("`t")
                 if ($a[0] -ceq 'report' -and $a[1] -ceq $r) { $tot = [int]$a[2] }
-                if ($a[0] -ceq 'file' -and $a[2] -ceq $r -and $a[3] -ceq 'common') { $c++ }
+                if ($a[0] -ceq 'file' -and $a[2] -ceq $r -and $a[3] -ceq 'global') { $c++ }
                 if ($a[0] -ceq 'file' -and $a[2] -ceq $r -and $a[3] -ceq 'none') { $x++ }
             }
             $line = "  - $r $($ver[$r]): $tot file(s)"
-            if ($c -gt 0 -and $c -ne $tot) { $line += " ($c scored with the common standard)" }
+            if ($c -gt 0 -and $c -ne $tot) { $line += " ($c scored with the global standard)" }
             if ($x -gt 0) { $line += " ($x not covered by any standard)" }
             Write-Line $line
         }

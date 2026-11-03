@@ -1,5 +1,5 @@
 ---
-name: common
+name: global
 version: v0.1
 ---
 
@@ -12,18 +12,17 @@ version: v0.1
 | C | 測試品質 | x |
 | D | 架構與設計 | x |
 | E | 效能與資源使用 | x |
-| F | 可讀性 | x |
-| G | 可維護性 | x |
+| F | 可讀性與可維護性 | x；x |
 
 ## 檢查項
 
 ### A. 正確性
 
-- CM-A1｜設定值錯誤｜Major
+- GL-A1｜設定值錯誤｜Major
 
 ### B. 安全性
 
-- CM-B1｜設定檔含有機密｜Major｜Critical｜機密已推到遠端
+- GL-B1｜設定檔含有機密｜Major｜Critical｜機密已推到遠端
 
 ### C. 測試品質
 
@@ -37,10 +36,7 @@ version: v0.1
 
 無
 
-### F. 可讀性
+### F. 可讀性與可維護性
 
-- CM-F1｜註解與程式不符｜Minor
+- GL-F1｜註解與程式不符｜Minor
 
-### G. 可維護性
-
-無

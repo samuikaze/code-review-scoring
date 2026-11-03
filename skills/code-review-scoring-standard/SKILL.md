@@ -8,7 +8,7 @@ compatibility: Works with or without a subagent tool. Requires the code-review-s
 
 A scoring standard is a rule of the rules project that `[rules] root` of `configs/settings.ini` names: a folder registered in `rules.ini` (`path`, `enable`) with its `rule.ini` (written from `templates/<language>/rule-template.ini`: the document, scan rules, `applies`, points, severity scale and grades), a Markdown document (written from `templates/<language>/scoring-rule-template.md` in the project root) and optionally a scan rule file (TSV, `scan=` of `rule.ini`). What `rule.ini` does not set comes from `defaults.ini` of the rules project. The people who write standards maintain only the document; the scan rules are generated and reviewed here, so nobody writes regexes by hand. The scan rules only list candidate lines for step 3 of the scoring; they never deduct by themselves.
 
-You never edit a standard document, `rules.ini`, `defaults.ini` or a `rule.ini`: report what is wrong and let the user change it. You write a scan rule file only in generate mode, only after the user confirms it.
+You never edit a standard document, `rules.ini`, `defaults.ini` or a `rule.ini`: report what is wrong, and let the user change it or ask for the change with `code-review-scoring-rule-authoring`. You write a scan rule file only in generate mode, only after the user confirms it.
 
 ## Script
 
@@ -17,11 +17,11 @@ You never edit a standard document, `rules.ini`, `defaults.ini` or a `rule.ini`:
 | Command | Use |
 | --- | --- |
 | `lint [NAME ...]` | check the rules project: `rules.ini`, `defaults.ini` and the `rule.ini`, document and scan rule file of every rule, enabled or not (or only the NAMEs given) |
-| `lint --file DOC.md [--scan RULES.tsv] [--common]` | check one document, with a scan rule file such as a draft; its severities are checked against the `rule.ini` in its folder, or `defaults.ini` |
-| `diff OLD.md NEW.md` | the dimensions, check items and confirmations that changed between two versions |
-| `stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--common]` | write a reviewed draft to its place with the source line of the document |
+| `lint --file DOC.md [--scan RULES.tsv] [--global]` | check one document, with a scan rule file such as a draft; its severities are checked against the `rule.ini` in its folder, or `defaults.ini` |
+| `diff OLD.md NEW.md [--global]` | the dimensions, check items and confirmations that changed between two versions |
+| `stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--global]` | write a reviewed draft to its place with the source line of the document |
 
-`--common` is for the common standard (`role="common"`, check ids `CM-…`). Lint exit 1 means errors; warnings alone exit 0. The lint compiles every regex with awk and with .NET (when PowerShell is installed), so a rule that passes runs in every shell.
+`--global` is for the global standard (`role="global"`, check ids `GL-…`). Lint exit 1 means errors; warnings alone exit 0. The lint compiles every regex with awk and with .NET (when PowerShell is installed), so a rule that passes runs in every shell.
 
 ## Modes
 
@@ -35,13 +35,13 @@ Run `lint` (all standards, or the names the user gave) and report its errors and
 
 Produce a new or updated scan rule file. Work in `tmp/scan-rules/<standard>/` in the project root (create it; keep earlier rounds' files until the end).
 
-- [ ] 1. Run `lint --file <document> [--common]`. Stop on errors: the user fixes the document first.
+- [ ] 1. Run `lint --file <document> [--global]`. Stop on errors: the user fixes the document first.
 - [ ] 2. Generate the draft: dispatch **one** subagent with [assets/generator-prompt.md](assets/generator-prompt.md), its placeholders filled in (see the file). Without a subagent tool, or with `subagent=false` in `[workflow]` of `configs/settings.ini`, follow the prompt yourself and tell the user once that the generator and the reviewer are the same agent this time. It writes `draft.tsv` and `notes.md`.
-- [ ] 3. Run `lint --file <document> --scan tmp/scan-rules/<standard>/draft.tsv [--common]`. Ignore only the warning about the missing `# source:` line. Errors go back to the generator (step 5).
+- [ ] 3. Run `lint --file <document> --scan tmp/scan-rules/<standard>/draft.tsv [--global]`. Ignore only the warning about the missing `# source:` line. Errors go back to the generator (step 5).
 - [ ] 4. Review the draft against the document with every item of [references/review-checklist.md](references/review-checklist.md), and write `review.md` in its format. Read the checklist each round; do not review from memory.
 - [ ] 5. Lint errors or `result: changes needed`: dispatch the generator again with the same prompt plus the review (`{{REVIEW}}`), then repeat steps 3 and 4. At most **3** rounds in all; if round 3 still fails, stop, show the user the open items of `review.md`, and write nothing.
 - [ ] 6. Show the user the changes against the current scan rule file (`git diff --no-index <current file> tmp/scan-rules/<standard>/draft.tsv`, or the whole draft when there is none), grouped as added, changed and removed rules, with the review summary and the check items left without rules (from `notes.md`). Ask for confirmation.
-- [ ] 7. Only after the user confirms: `stamp --file <document> --scan tmp/scan-rules/<standard>/draft.tsv --out <scan path> [--common]`, then `lint <standard>` to confirm. When the `rule.ini` of the standard has no `scan=` yet, ask the user where to save the file (usually its folder) and tell them to add `scan="<path>"` to `[rule]` themselves.
+- [ ] 7. Only after the user confirms: `stamp --file <document> --scan tmp/scan-rules/<standard>/draft.tsv --out <scan path> [--global]`, then `lint <standard>` to confirm. When the `rule.ini` of the standard has no `scan=` yet, ask the user where to save the file (usually its folder) and tell them to add `scan="<path>"` to `[rule]` themselves (or with `code-review-scoring-rule-authoring`).
 
 ### Review mode
 

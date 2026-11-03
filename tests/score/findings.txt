@@ -29,7 +29,7 @@ suggestion: y
 F|F3|Minor|src/main/java/com/ex/refund/RefundService.java:17
 problem: x
 suggestion: y
-F|G6|Major|src/main/java/com/ex/order/OrderService.java:50
+F|F11|Major|src/main/java/com/ex/order/OrderService.java:50
 problem: x
 suggestion: y
 F|-|Minor|-

@@ -118,7 +118,7 @@ foreach ($raw in (Read-Utf8Lines $findingsPath)) {
 }
 
 # score.tsv / score.json
-$total = ''; $grade = ''; $capped = '0'; $capSev = ''; $capGrade = ''; $upCount = 0; $stdLabel = ''; $commonLabel = ''
+$total = ''; $grade = ''; $capped = '0'; $capSev = ''; $capGrade = ''; $upCount = 0; $stdLabel = ''; $globalLabel = ''
 # The severity scale and grades of the standard: codes from the most severe / the highest, and display names.
 $sevOrder = New-Object System.Collections.Generic.List[string]
 $sevName = [hashtable]::new([StringComparer]::Ordinal); $gradeName = [hashtable]::new([StringComparer]::Ordinal)
@@ -139,7 +139,7 @@ foreach ($l in (Read-Utf8Lines (Join-Path $step4 'score.tsv'))) {
         'finding' { $scored.Add([pscustomobject]@{ Id = $a[1]; Sev = $a[2]; Pts = $a[3]; Locs = $a[4]; Seq = [int]$a[5] }) }
         'upstream' { $upCount++; if ([int]$a[1] -le $ups.Count) { $ups[[int]$a[1] - 1].Pts = $a[3] } }
         'standard' { $stdLabel = "$($a[1]) $($a[2])" }
-        'common' { $commonLabel = "$($a[1]) $($a[2])" }
+        'global' { $globalLabel = "$($a[1]) $($a[2])" }
     }
 }
 if ($dims.Count -ne 7 -or -not $grade -or $sevOrder.Count -eq 0) { Exit-WithError 'score.tsv is missing or incomplete; run the scoring skill first' 1 }
@@ -163,19 +163,17 @@ $b = L 'sep.bracket'; $c = L 'sep.colon'
 $blk = @{}
 $sb = New-Object System.Text.StringBuilder
 foreach ($d in $dims) {
-    # Dimension of a check id: its first letter, or the letter after CM- for the common standard (CM-B1 is B).
-    $items = @($scored | Where-Object { $(if ($_.Id.StartsWith('CM-')) { $_.Id.Substring(3, 1) } else { $_.Id.Substring(0, 1) }) -ceq $d.Code } | ForEach-Object { "$($_.Id) $(Get-SevName $_.Sev) -$($_.Pts)" }) -join (L 'sep.list')
+    # Dimension of a check id: its first letter, or the letter after GL- for the global standard (GL-B1 is B).
+    $items = @($scored | Where-Object { $(if ($_.Id.StartsWith('GL-')) { $_.Id.Substring(3, 1) } else { $_.Id.Substring(0, 1) }) -ceq $d.Code } | ForEach-Object { "$($_.Id) $(Get-SevName $_.Sev) -$($_.Pts)" })
+    # Dimension G: the records without a check id and the upstream factors.
+    if ($d.Code -ceq 'G') {
+        $items += @($scored | Where-Object { $_.Id -eq '-' } | ForEach-Object { "$(L 'check.none') $(Get-SevName $_.Sev) -$($_.Pts)" })
+        $items += @($ups | ForEach-Object { "$(L 'cr.upstream') $(Get-SevName $_.Sev) -$($_.Pts)" })
+    }
+    $items = @($items) -join (L 'sep.list')
     if (-not $items) { $items = L 'none' }
     [void]$sb.Append("| $($d.Code) $(L "dim.$($d.Code)") | $($d.Score)/$($d.Max) | $items |`n")
 }
-# Records without a check id and upstream factors are deducted from the total.
-$other = @($scored | Where-Object { $_.Id -eq '-' })
-$sum = 0; foreach ($x in $other) { $sum += [int]$x.Pts }
-$items = @($other | ForEach-Object { "$(Get-SevName $_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
-[void]$sb.Append("| $(L 'row.other') | $(if ($sum) { "-$sum" } else { 0 }) | $items |`n")
-$sum = 0; foreach ($u in $ups) { $sum += [int]$u.Pts }
-$items = @($ups | ForEach-Object { "$(Get-SevName $_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
-[void]$sb.Append("| $(L 'row.upstream') | $(if ($sum) { "-$sum" } else { 0 }) | $items |`n")
 $blk['SCORE_ROWS'] = $sb.ToString()
 
 $sb = New-Object System.Text.StringBuilder; $i = 0
@@ -327,7 +325,7 @@ else {
 
 $inl = [ordered]@{ PR_TITLE = $Title; REVIEW_DATE = (Get-Date -Format 'yyyy-MM-dd'); GRADE = (Get-GradeName $grade); TOTAL = $total
     CAPPED_NOTE = $(if ($capped -eq '1') { (L 'capped_note').Replace('{severity}', (Get-SevName $capSev)).Replace('{grade}', (Get-GradeName $capGrade)) } else { '' }); CR_TOTALS = $crTotalsText
-    STANDARD = $(if ($stdLabel) { $stdLabel } else { L 'none' }) + $(if ($commonLabel) { (L 'standard.common').Replace('{common}', $commonLabel) } else { '' }) }
+    STANDARD = $(if ($stdLabel) { $stdLabel } else { L 'none' }) + $(if ($globalLabel) { (L 'standard.global').Replace('{global}', $globalLabel) } else { '' }) }
 
 $outSb = New-Object System.Text.StringBuilder
 $unknown = @{}

@@ -287,7 +287,7 @@ function Invoke-Tool([string]$Skill, [string]$Script, [string[]]$ArgList) {
 function Get-ResKey([string]$Text) {
     $lines = foreach ($l in ($Text.Replace("`r", '') -split "`n")) {
         $f = $l.Split("`t")
-        if (($f[0] -ceq 'standard' -or $f[0] -ceq 'common') -and $f.Count -gt 4) { $f[4] = '' }
+        if (($f[0] -ceq 'standard' -or $f[0] -ceq 'global') -and $f.Count -gt 4) { $f[4] = '' }
         elseif (($f[0] -ceq 'scan' -or $f[0] -ceq 'ruleini' -or $f[0] -ceq 'defaults') -and $f.Count -gt 1) { $f[1] = '' }
         $f -join "`t"
     }
@@ -319,14 +319,14 @@ function Write-RequestStandards {
         foreach ($l in (Read-Utf8Lines (P "step1/standards/$n.resolve"))) {
             $f = $l.Split("`t")
             if ($f[0] -ceq 'standard') { $out.Add("- ${n}: $($f[1]) $($f[2]) $($f[3]) $($f[4])"); $o = '' }
-            elseif ($f[0] -ceq 'common') { $out.Add("  - common standard: $($f[1]) $($f[2]) $($f[3]) $($f[4])"); $o = 'common ' }
+            elseif ($f[0] -ceq 'global') { $out.Add("  - global standard: $($f[1]) $($f[2]) $($f[3]) $($f[4])"); $o = 'global ' }
             elseif ($f[0] -ceq 'ruleini') { $out.Add("  - ${o}rule.ini: $($f[2]) $($f[1])") }
             elseif ($f[0] -ceq 'defaults') { $out.Add("  - defaults.ini: $($f[2]) $($f[1])") }
         }
     }
     Write-Utf8File (P 'request.md') (($out -join "`n") + "`n")
 }
-# The document path of the standard record ("standard") or the common record ("common") of a planned standard.
+# The document path of the standard record ("standard") or the global record ("global") of a planned standard.
 function Get-StdDoc([string]$Name, [string]$Kind) {
     foreach ($l in (Read-Utf8Lines (P "step1/standards/$Name.resolve"))) { $f = $l.Split("`t"); if ($f[0] -ceq $Kind) { return $f[4] } }
     return ''
@@ -352,12 +352,12 @@ function Get-ReportLanguage {
 # Prompt of step $N (plugin $Plugin): the step template plus the shared status protocol. Lines marked "[sub] " are only
 # for subagents, lines marked "[inline] " only for the main agent.
 function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
-    $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"; $sDoc = ''; $cDoc = 'none'; $lang = ''
+    $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"; $sDoc = ''; $gDoc = 'none'; $lang = ''
     if ($N -ge $CR) { $lang = Get-ReportLanguage }
     $cOpt = Get-FileOpt '--config' $opt.config (Join-Path $projectRoot 'configs/settings.ini')
     if ($N -eq $CR) { $pPath = Get-PlanField $Plugin 1; $pMode = Get-PlanField $Plugin 2; $unitArgs += " --plugin $Plugin"; $dir = P "step$CR/$Plugin" }
     elseif ($N -gt $CR) {
-        $sDoc = Get-StdDoc $Std 'standard'; $cDoc = Get-StdDoc $Std 'common'; if (-not $cDoc) { $cDoc = 'none' }
+        $sDoc = Get-StdDoc $Std 'standard'; $gDoc = Get-StdDoc $Std 'global'; if (-not $gDoc) { $gDoc = 'none' }
         $unitArgs += " --standard $Std"; $dir = P "step$N/$Std"
     }
     $tpl = (Read-Utf8Text (Join-Path $skillDir "assets/prompts/step$N.md")) + (Read-Utf8Text (Join-Path $skillDir 'assets/prompts/protocol.md'))
@@ -367,7 +367,7 @@ function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
         $l
     }
     $text = ($lines -join "`n")
-    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"$cOpt").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{COMMON_DOC}}', $cDoc).Replace('{{REPORT_LANGUAGE}}', $lang).Replace('{{CONFIG_OPT}}', $cOpt)
+    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"$cOpt").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{GLOBAL_DOC}}', $gDoc).Replace('{{REPORT_LANGUAGE}}', $lang).Replace('{{CONFIG_OPT}}', $cOpt)
 }
 # Writes the action "next" prints for a unit ("1", "2-<plugin>" or "3-<standard>") in state $S; returns $false when it
 # needs nothing.
