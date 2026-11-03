@@ -4,7 +4,7 @@ language	Traditional Chinese with Taiwan usage
 none	無
 title.missing	（未提供）
 capped_note	（有 {severity} 扣分項，等級上限為 {grade}）
-standard.common	；通用檔案使用 {common}
+standard.global	；全域標準 {global}
 sep.list	、
 sep.bracket	｜
 sep.colon	：

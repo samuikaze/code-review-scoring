@@ -1,0 +1,12 @@
+# Scan rules of global.md (tests/score).
+# source: global.md v0.1 sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
+@scope	shell	-	\.(sh|bash|zsh)$
+@scope	docs	-	\.(md|markdown)$
+@scope	ci	-	(^|/)\.github/workflows/
+@scope	docker	-	(^|/)Dockerfile[^/]*$
+@pr	GL-F1	has:shell,no:docs	scripts changed without documentation
+@pr	GL-A1	modified:ci	existing CI workflow changed
+GL-A1	docker	-	^FROM[ \t]+[^ \t]+:latest	-	-	unpinned base image
+GL-B1	any	i	(token|password|secret)[a-z_]*[ \t]*[:=]	-	-	possible secret in a file
+GL-B1	shell	-	curl[^|]*\|[ \t]*(ba)?sh	-	-	downloaded script piped to a shell
+GL-B1	ci	-	curl[^|]*\|[ \t]*(ba)?sh	-	-	downloaded script piped to a shell

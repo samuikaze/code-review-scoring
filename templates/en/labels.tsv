@@ -4,7 +4,7 @@ language	English
 none	None
 title.missing	(not provided)
 capped_note	 ({severity} deductions cap the grade at {grade})
-standard.common	; common files use {common}
+standard.global	; global standard {global}
 sep.list	,
 sep.bracket	 |
 sep.colon	:

@@ -34,7 +34,8 @@ color: red
 - A6｜可調整為 Nit｜Minor｜Major,Nit｜條件
 - A7｜沒有條件｜Minor｜Major｜
 - B1｜放錯面向｜Major
-- CM-A8｜框架標準用了 CM｜Major
+- GL-A8｜框架標準用了 GL｜Major
+- CM-A12｜舊的通用代碼｜Major
 - 沒有分隔符號的項目
 - A9｜續行測試，第一行
   第二行｜Minor
@@ -68,6 +69,10 @@ color: red
 ### E. 效能與資源使用
 
 - E1｜正常｜Minor
+
+## 全域規則
+
+框架標準不應該有這個章節。
 
 ## 事先確認事項
 

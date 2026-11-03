@@ -3,7 +3,7 @@
 # Shared by standard.sh and standard.zsh; lib/standard.ps1 implements the same rules with the same messages.
 # Run with LC_ALL=C: text is handled as bytes, and the full-width separator ｜ is matched as a byte string.
 #
-# Variables: mode=doc        input: the Markdown document; role=common for the common standard; sevs=the severity
+# Variables: mode=doc        input: the Markdown document; role=global for the global standard; sevs=the severity
 #                            codes of its scale, comma-separated from the most to the least severe ("" = not checked)
 #            mode=scan       input: a scan rule file; codes=FILE with the "mode=doc" output of its document
 #            mode=rules      no input: rules=the rules.ini of the rules project, rroot=its folder, defaults=its
@@ -99,7 +99,7 @@ function doc_line(l,   k, v, t, had) {
     if (l ~ /^##[ \t]/) {
         close_item(); curdim = ""
         t = trim(substr(l, 3))
-        sec = (t == "面向" || t == "Dimensions") ? "dims" : (t == "檢查項" || t == "Check items") ? "checks" : (t == "事先確認事項" || t == "Confirmations") ? "confirms" : "free"
+        sec = (t == "面向" || t == "Dimensions") ? "dims" : (t == "檢查項" || t == "Check items") ? "checks" : (t == "事先確認事項" || t == "Confirmations") ? "confirms" : (t == "全域規則" || t == "Global rules") ? "grules" : "free"
         if (sec != "free") { if (secl[sec]) diag("error", FNR, "section ## " t " appears more than once"); else secl[sec] = FNR }
         return
     }
@@ -158,11 +158,12 @@ function check_item(text, line, dim,   n, f, i, code, ok, letter, a, na, s, adj)
     if (n != 3 && n != 5) { diag("error", line, "a check item has 3 or 5 fields separated by ｜, not " n (index(text, "|") ? " (the half-width | is not a separator)" : "")); return }
     for (i = 1; i <= n; i++) f[i] = trim(f[i])
     code = f[1]; ok = 1
-    if (role == "common") {
-        if (code !~ /^CM-[A-F][0-9]+$/) { diag("error", line, "check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not \"" code "\""); ok = 0 }
+    if (role == "global") {
+        if (code !~ /^GL-[A-F][0-9]+$/) { diag("error", line, "check codes of the global standard are GL- plus the dimension letter and a number (e.g. GL-A1), not \"" code "\"" (code ~ /^CM-/ ? "; CM- codes were renamed GL-" : "")); ok = 0 }
         else letter = substr(code, 4, 1)
     }
-    else if (code ~ /^CM/) { diag("error", line, "the CM prefix is reserved for the common standard (role=\"common\"): " code); ok = 0 }
+    else if (code ~ /^GL/) { diag("error", line, "the GL prefix is reserved for the global standard (role=\"global\"): " code); ok = 0 }
+    else if (code ~ /^CM-/) { diag("error", line, code ": CM- codes were renamed GL- and belong to the global standard (role=\"global\")"); ok = 0 }
     else if (code !~ /^[A-F][0-9]+$/) { diag("error", line, "check codes are the dimension letter and a number (e.g. A1), not \"" code "\""); ok = 0 }
     else letter = substr(code, 1, 1)
     if (ok && dim ~ /^[A-F]$/ && letter != dim) { diag("error", line, code " is under ### " dim "; the letter of a check code must match its dimension"); ok = 0 }
@@ -235,6 +236,8 @@ function doc_end(   i, x, per) {
         if (!nchk && !nbad) diag("error", secl["checks"], "the document has no check item")
     }
     for (i = 1; i <= ncref; i++) if (!(cref[i] in chkl)) diag("error", crefl[i], "the confirmation refers to " cref[i] ", which is not a check item")
+    if (role == "global" && !secl["grules"]) diag("warn", "", "section ## 全域規則 (Global rules) is missing; without it no rule applies to every report")
+    else if (role != "global" && secl["grules"]) diag("warn", secl["grules"], "## 全域規則 (Global rules) is only read from the global standard; move these rules there")
 
     print "name\t" fm["name"]; print "version\t" fm["version"]
     for (i = 1; i <= 6; i++) { x = LET[i]; if (x in dimrow) print "dim\t" x "\t" dimname[x] "\t" dimfocus[x] }
@@ -266,7 +269,8 @@ function check_re(re, line, what,   i, n, c, d, inb, bad) {
 }
 
 function check_id(id, line) {
-    if (id ~ /^(CM-)?[A-G][0-9]+$/) { if (!(id in known)) diag("error", line, id " is not a check item of the standard (removed or renamed?)") }
+    if (id ~ /^(GL-)?[A-G][0-9]+$/) { if (!(id in known)) diag("error", line, id " is not a check item of the standard (removed or renamed?)") }
+    else if (id ~ /^CM-[A-G][0-9]+$/) diag("error", line, id ": CM- codes were renamed GL-")
     else if (id !~ /^[A-Z][A-Z0-9_]*$/) diag("error", line, "rule ids are check codes or uppercase tags (e.g. API), not \"" id "\"")
 }
 
@@ -462,7 +466,7 @@ function glob_re(p,   i, n, c, r) {
 #   severity <name> <code> <points> <cap> <display name> <meaning>   (from the most severe)
 #   grade <name> <code> <min> <display name>                         (from the highest)
 # and "defaults <defaults.ini>" at the end.
-function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, n, a, x, src, gs, c, ok, ncommon, nen, ep, eg) {
+function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, n, a, x, src, gs, c, ok, nglobal, nen, ep, eg) {
     if (!ini_read(rules, "R")) { fdiag("error", rules, "", "file not found"); return }
     if (!ini_read(defaults, "D")) fdiag("error", defaults, "", "file not found; the rules project needs defaults.ini with the default points, severities and grades")
     else set_read(defaults, "D", "defaults")
@@ -491,10 +495,10 @@ function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, 
             else if (ikv[id, "rule", "standard"] == "") fdiag("error", setfile[id], isec[id, "rule"], "[rule] has no standard (the Markdown document)")
             doc = pjoin(d, ikv[id, "rule", "standard"]); scan = pjoin(d, ikv[id, "rule", "scan"])
             role = ikv[id, "rule", "role"]; apps = ikv[id, "rule", "applies"]
-            if (role != "" && role != "common") { fdiag("error", setfile[id], ikl[id, "rule", "role"], "role is \"common\" or not set, not \"" role "\""); role = "" }
-            if (role == "common") {
-                if (e == "true" && ++ncommon > 1) fdiag("error", rules, ln, "only one enabled rule can have role=\"common\"")
-                if (apps != "") fdiag("warn", setfile[id], ikl[id, "rule", "applies"], "applies is ignored for the common standard, which covers the files no framework rule covers")
+            if (role != "" && role != "global") { fdiag("error", setfile[id], ikl[id, "rule", "role"], "role is \"global\" or not set, not \"" role "\"" (role == "common" ? "; role=\"common\" was renamed role=\"global\"" : "")); role = "" }
+            if (role == "global") {
+                if (e == "true" && ++nglobal > 1) fdiag("error", rules, ln, "only one enabled rule can have role=\"global\"")
+                if (apps != "") fdiag("warn", setfile[id], ikl[id, "rule", "applies"], "applies is ignored for the global standard, which covers the files no framework rule covers")
             }
             else if ((id SUBSEP "rule") in isec && apps == "") fdiag("error", setfile[id], isec[id, "rule"], "[rule] has no applies (framework rules need one)")
             else {
@@ -511,16 +515,16 @@ function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, 
         # Empty values are written as - so that the shells can read the TAB-separated fields.
         print "std\t" s "\t" ln "\t" dash(doc) "\t" dash(scan) "\t" dash(role) "\t" e "\t" dash(setfile[id])
         if (!ok) continue
-        if (role != "common" && re != "") print "applies\t" s "\t" re
-        # The common rule never uses the [points], [grade:CODE] sections and caps of its own rule.ini: they are warned
+        if (role != "global" && re != "") print "applies\t" s "\t" re
+        # The global rule never uses the [points], [grade:CODE] sections and caps of its own rule.ini: they are warned
         # about, and its points and grades come from defaults.ini.
         ep = eff(id, "points"); eg = eff(id, "grade")
-        if (role == "common" && ep == id) {
-            fdiag("warn", setfile[id], isec[id, "points"], "[points] is never used by the common rule (role=\"common\"); its points come from defaults.ini")
+        if (role == "global" && ep == id) {
+            fdiag("warn", setfile[id], isec[id, "points"], "[points] is never used by the global rule (role=\"global\"); its points come from defaults.ini")
             ep = ((("D" SUBSEP "points") in grp) ? "D" : "")
         }
-        if (role == "common" && eg == id) {
-            fdiag("warn", setfile[id], gln[id, gc[id, 1]], "[grade:CODE] sections are never used by the common rule (role=\"common\"); its grades come from defaults.ini")
+        if (role == "global" && eg == id) {
+            fdiag("warn", setfile[id], gln[id, gc[id, 1]], "[grade:CODE] sections are never used by the global rule (role=\"global\"); its grades come from defaults.ini")
             eg = ((("D" SUBSEP "grade") in grp) ? "D" : "")
         }
         if (ep == "") fdiag("error", setfile[id], "", "no [points] in rule.ini or defaults.ini")
@@ -533,8 +537,8 @@ function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, 
         src = eff(id, "scoring"); print "merge\t" s "\t" (src == "" ? "false" : mergev[src])
         if ((src = eff(id, "sev")) != "") for (j = 1; j <= ns[src]; j++) {
             c = sc[src, j]; x = scap[src, c]
-            if (x != "" && role == "common" && src == id) {
-                fdiag("warn", setfile[id], ikl[id, "severity:" c, "cap"], "cap is never used by the common rule (role=\"common\")")
+            if (x != "" && role == "global" && src == id) {
+                fdiag("warn", setfile[id], ikl[id, "severity:" c, "cap"], "cap is never used by the global rule (role=\"global\")")
                 x = ""
             }
             # The grade a severity caps at must be one of the grades that apply (checked once per pair of files).
@@ -550,7 +554,7 @@ function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, 
         if ((src = eg) != "") for (j = 1; j <= ng[src]; j++) { c = gc[src, j]; print "grade\t" s "\t" c "\t" gmin[src, c] "\t" gname[src, c] }
     }
     if (nsec["R"] && !nen) fdiag("warn", rules, "", "no rule is enabled (enable=\"true\")")
-    if (nsec["R"] && !ncommon) fdiag("warn", rules, "", "no enabled common rule (role=\"common\"); files that no framework rule covers will not be scored")
+    if (nsec["R"] && !nglobal) fdiag("warn", rules, "", "no enabled global rule (role=\"global\"); files that no framework rule covers will not be scored and no global rule applies to the reports")
     print "defaults\t" defaults
 }
 
@@ -611,16 +615,16 @@ function plan_line(l,   p) {
     else if (nb > 0) blk[nb] = blk[nb] "\n" l
 }
 
-# Each file goes to the first framework standard whose applies matches it. The others are common files: with one
+# Each file goes to the first framework standard whose applies matches it. The others are global files: with one
 # report they go to it; with several, to the framework of the nearest folder above them that holds files of
 # frameworks, or to every report when that folder holds files of several frameworks (the repository root, for
-# example). With no framework file at all the common standard makes the only report.
+# example). With no framework file at all the global standard makes the only report.
 function plan_end(   l, a, i, j, k, p, d, n, hit, cm, f) {
     # Only the enabled rules score.
     while ((getline l < ini) > 0) {
         split(l, a, "\t")
         if (a[1] == "std" && a[7] != "true") continue
-        if (a[1] == "std" && a[6] == "common") cm = a[2]
+        if (a[1] == "std" && a[6] == "global") cm = a[2]
         else if (a[1] == "std") fw[++nfw] = a[2]
         else if (a[1] == "applies") app[a[2]] = a[3]
     }
@@ -632,13 +636,13 @@ function plan_end(   l, a, i, j, k, p, d, n, hit, cm, f) {
     }
     for (k = 1; k <= nfw; k++) if (cnt[fw[k]]) rep[++nrep] = fw[k]
     if (!nrep) {
-        if (cm == "") { diag("error", "", "no enabled framework rule covers the files of this PR and no common rule is enabled"); return }
+        if (cm == "") { diag("error", "", "no enabled framework rule covers the files of this PR and no global rule is enabled"); return }
         rep[++nrep] = cm
-        for (i = 1; i <= nb; i++) { to[i, cm] = 1; kind[i] = "common" }
+        for (i = 1; i <= nb; i++) { to[i, cm] = 1; kind[i] = "global" }
     }
     else for (i = 1; i <= nb; i++) {
         if (own[i] != "") { to[i, own[i]] = 1; kind[i] = "framework"; continue }
-        kind[i] = (cm != "") ? "common" : "none"
+        kind[i] = (cm != "") ? "global" : "none"
         if (nrep == 1) { to[i, rep[1]] = 1; continue }
         d = bpath[i]
         do {

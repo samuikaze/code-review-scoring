@@ -1,5 +1,5 @@
 ---
-name: common
+name: global
 version: v0.1
 ---
 
@@ -18,9 +18,10 @@ version: v0.1
 
 ### A. 正確性
 
-- CM-A1｜正常｜Minor
+- GL-A1｜正常｜Minor
 - A2｜少了前綴｜Minor
-- CM-B1｜字母不符｜Minor
+- GL-B1｜字母不符｜Minor
+- CM-A3｜舊的前綴｜Minor
 
 ### B. 安全性
 

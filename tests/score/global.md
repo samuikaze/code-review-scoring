@@ -1,5 +1,5 @@
 ---
-name: common
+name: global
 version: v0.1
 ---
 
@@ -18,13 +18,11 @@ version: v0.1
 
 ### A. 正確性
 
-- CM-A1｜正常｜Minor
-
-
+- GL-A1｜設定值錯誤｜Major
 
 ### B. 安全性
 
-無
+- GL-B1｜設定檔含有機密｜Major｜Critical｜機密已推到遠端
 
 ### C. 測試品質
 
@@ -40,5 +38,5 @@ version: v0.1
 
 ### F. 可讀性與可維護性
 
-無
+- GL-F1｜註解與程式不符｜Minor
 

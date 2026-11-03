@@ -67,9 +67,9 @@ full-width `｜` (U+FF5C):
 Field rules:
 
 - Code: the dimension letter plus a sequence number, for example `A1`, unique
-  within the document. The common standard (`role="common"`) prefixes its
-  codes with `CM-`, for example `CM-A1`; codes of framework standards cannot
-  start with `CM`.
+  within the document. The global standard (`role="global"`) prefixes its
+  codes with `GL-`, for example `GL-A1`; codes of framework standards cannot
+  start with `GL`.
 - Severity: only the severity codes of this rule (case-sensitive), that is the
   `[severity:CODE]` sections of `rule.ini`, or the scale of `defaults.ini`
   when `rule.ini` does not set one. The examples below use the default

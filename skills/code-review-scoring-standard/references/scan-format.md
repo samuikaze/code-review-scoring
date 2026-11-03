@@ -43,7 +43,7 @@ Written by `standard stamp` when a reviewed draft is saved. Lint compares the ha
 
 | Field | Meaning |
 | --- | --- |
-| id | a check id of the document (`A1`, or `CM-A1` in the common standard), or an uppercase tag for a list that serves several checks (for example `API` for added endpoints) |
+| id | a check id of the document (`A1`, or `GL-A1` in the global standard), or an uppercase tag for a list that serves several checks (for example `API` for added endpoints) |
 | scope | a defined scope or `any` |
 | flags | `i` case-insensitive, `c` also match comment lines (comments are skipped by default), `ic`, or `-` |
 | regex | matched against each added line |

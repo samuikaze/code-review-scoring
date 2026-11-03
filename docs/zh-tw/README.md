@@ -7,7 +7,7 @@
 
 PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，遵循 [Agent Skills](https://agentskills.io) 規格，可用於 Claude Code、GitHub Copilot、Codex 等支援 Skill 的工具。
 
-- **評分**：依規則專案中啟用的評分規則評分，不綁定任何技術。每套框架規則（例如 Spring Boot 3、Angular）各產出一份報告，不屬於任何框架的檔案（README、CI 設定、Dockerfile 等）以通用規則評分。規則（標準文件、配分、嚴重度分級與等級）存放在獨立的規則專案，例如 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)，由 `configs/settings.ini` 的 `[rules] root` 指定位置，見「評分標準」。
+- **評分**：依規則專案中啟用的評分規則評分，不綁定任何技術。每套框架規則（例如 Spring Boot 3、Angular）各產出一份報告，不屬於任何框架的檔案（README、CI 設定、Dockerfile 等）以全域規則評分，全域標準的「全域規則」章節也套用到每一份報告。規則（標準文件、配分、嚴重度分級與等級）存放在獨立的規則專案，例如 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)，由 `configs/settings.ini` 的 `[rules] root` 指定位置，見「評分標準」。
 - **CR**：其他技術（例如前端）或其他團隊的 CR 規範，以外掛 Skill 的方式掛進流程，不受技術限制。
 - **報告**：CR 結果與評分結果合併成一份報告。
 
@@ -29,8 +29,9 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 一個 PR 可能同時改到後端與前端。步驟 1 會依規則專案 `rules.ini` 中啟用的規則規劃這次的評分（`standard plan`）：
 
 - 每個框架評分標準（例如 `springboot-3`、`angular`）只要有檔案符合它的 `applies`，就各自產出一份報告；步驟 3～5 依標準分開執行，狀態也分開記錄。
-- 不屬於任何框架標準的檔案（README、CI 設定、Dockerfile 等）用通用標準評分，歸入同一個專案的報告：以檔案所在目錄往上找，最近的目錄中有哪個框架標準的檔案，就歸入那份報告；判斷不出來時（例如根目錄的 README）每份報告都會列入。
-- PR 完全沒有框架標準的檔案時，只用通用標準產出一份報告，所以每個 PR 至少有一份報告。
+- 不屬於任何框架標準的檔案（README、CI 設定、Dockerfile 等）用全域標準評分，歸入同一個專案的報告：以檔案所在目錄往上找，最近的目錄中有哪個框架標準的檔案，就歸入那份報告；判斷不出來時（例如根目錄的 README）每份報告都會列入。
+- PR 完全沒有框架標準的檔案時，只用全域標準產出一份報告，所以每個 PR 至少有一份報告。
+- 全域標準的「全域規則」章節套用到每一份報告的所有檔案，包含框架標準的檔案（例如第三方豁免）；框架標準的規定與全域規則不同時，以框架標準為準。
 - 每份報告只列出落在自己檔案上的 CR 意見；意見編號維持外掛原本的編號，方便對照。
 - 各標準的「事先確認事項」會列在 `spec-context.md` 的嚴重度事實中，於步驟 1 與缺少的文件一起詢問。
 - 步驟 1 會把每個標準解析後的內容存成快照（`step1/standards/<標準>.resolve`），並把標準名稱、版本與 sha256 記在 `request.md`。之後步驟 3～5 都以這份快照評分；若評分途中標準文件、掃描規則、該規則的 `rule.ini` 或規則專案的 `defaults.ini` 被修改，狀態腳本會拒絕繼續，請還原修改，或以 `init --reset` 重新開始評分。
@@ -177,6 +178,8 @@ skills/
     references/scan-format.md             # 掃描規則檔格式與正規表示式限制
     references/review-checklist.md        # 審核掃描規則的檢查清單與 review.md 格式
     assets/generator-prompt.md            # 產生掃描規則的 Sub-Agent 指令
+  code-review-scoring-rule-authoring/     # 新增或修改規則專案的規則用（不參與評分流程）
+    SKILL.md                              # 列出所有語言目錄的修改，確認後才寫入，再執行 lint
 scripts/
   link-skills.{sh,zsh,ps1}                # 依 skills/ 與 configs/plugins.ini 同步各工具讀取 Skill 的目錄
 configs/                                  # 設定檔（只有 *.example.ini 進版控）
@@ -198,8 +201,8 @@ templates/                                # 每種語言一個資料夾，見「
 tests/
   standards/                              # 評分標準 lint 的測試案例；compare.sh 比對三種 shell 的輸出與 expected.txt
   score/                                  # score 的測試案例（legacy.md 的檢查項與舊 rules.tsv 相同，確保分數不變）
-  prepare/                                # prepare-diff 的測試案例（legacy.tsv 為舊 scan-rules.tsv 的規則，另含通用標準的掃描規則）
-  plan/                                   # standard plan 的測試案例（兩套框架標準與通用標準、各層目錄的通用檔案）
+  prepare/                                # prepare-diff 的測試案例（legacy.tsv 為舊 scan-rules.tsv 的規則，另含全域標準的掃描規則）
+  plan/                                   # standard plan 的測試案例（兩套框架標準與全域標準、各層目錄的全域檔案）
   workflow/                               # 完整流程的測試案例（兩套框架標準，其中一套使用自訂分級與等級）
   workflow/                               # 完整流程的端對端測試（暫存 git 儲存庫、兩份報告、CR 意見分流、標準被修改時拒絕繼續）
 tmp/                                      # 評分過程的暫存檔（所有腳本的預設 review root，不進版控）
@@ -248,7 +251,7 @@ git add --renormalize .
   ```
 
 - `rules.ini` 的區段名稱就是規則名稱，必須和標準文件前置資料的 `name` 一致（英文小寫、數字與 `-`）；`path`、`enable`（`"true"` 或 `"false"`）都必填。停用的規則不參與評分，`lint` 仍會檢查。
-- `rule.ini` 依 `templates/<語言>/rule-template.ini` 撰寫：`[rule]` 設定標準文件（`standard`）、掃描規則檔（`scan`，選填）、適用的檔案（`applies`，框架規則必填）或 `role="common"`（通用規則，最多啟用一套，檢查代碼以 `CM-` 開頭，配分與等級一律使用 `defaults.ini`）。其他區段（`[points]`、`[scoring]`、`[severity:*]`、`[grade:*]`）省略時使用 `defaults.ini` 的設定，見「調整配分與嚴重度」。
+- `rule.ini` 依 `templates/<語言>/rule-template.ini` 撰寫：`[rule]` 設定標準文件（`standard`）、掃描規則檔（`scan`，選填）、適用的檔案（`applies`，框架規則必填）或 `role="global"`（全域規則，最多啟用一套，檢查代碼以 `GL-` 開頭，配分與等級一律使用 `defaults.ini`）。其他區段（`[points]`、`[scoring]`、`[severity:*]`、`[grade:*]`）省略時使用 `defaults.ini` 的設定，見「調整配分與嚴重度」。
 - 寫好或修改標準後，執行 `standard lint` 檢查格式、`applies` 是否重疊、配分加總與掃描規則：
 
   ```bash
@@ -266,12 +269,7 @@ git add --renormalize .
 ### 使用現有的評分標準
 
 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
-就是一個規則專案，目前提供下列規則，每套都包含英文（`en/`）與繁體中文（`zh-tw/`）兩個規則目錄，各有自己的 `rule.ini`、標準文件（`.md`）與掃描規則檔（`.tsv`），內容都以該目錄的語言撰寫。`rules.ini` 預設登錄繁體中文版，要改用英文版時把 `path` 的 `zh-tw` 改成 `en`；標準的語言不必和報告語言相同：
-
-| 規則名稱 | 類型 | 適用範圍 | 規則目錄 |
-| --- | --- | --- | --- |
-| `springboot-3` | 框架規則 | Java／Spring Boot 3 專案 | `springboot3-rule/<語言>/` |
-| `common` | 通用規則 | 其他檔案，例如 README、CI、Dockerfile | `common-rule/<語言>/` |
+就是一個規則專案，包含框架規則與全域規則；提供哪些規則、各有哪些語言目錄，見它的 README。標準的語言不必和報告語言相同。
 
 1. 把規則專案 clone 到本機，位置不限：
 
@@ -288,7 +286,19 @@ git add --renormalize .
 
 3. 執行 `standard lint` 確認設定與標準都沒有問題。
 
-規則更新時在規則專案 `git pull` 即可，不需要修改本專案。不要在評分途中更新，理由同上。新增或修改規則的方式見規則專案的 README。
+規則更新時在規則專案 `git pull` 即可，不需要修改本專案。不要在評分途中更新，理由同上。新增或修改規則的方式見「修改規則」。
+
+### 修改規則
+
+要請 AI 修改規則時，請在這個專案中提出，不要在規則專案中進行：`code-review-scoring-rule-authoring` Skill 知道範本的格式，也能執行檢查格式的腳本。它只在你提到新增或修改規則時觸發（例如「新增評分規則」「新增檢查項」「調整嚴重度」「修改全域規則」），評分流程不會載入它：
+
+1. 有評分正在進行時先提醒你：規則修改後，進行中的評分會拒絕繼續。
+2. 把每個要修改的檔案寫成新版本放在 `tmp/rule-authoring/`，包含這套規則其他語言目錄的相同修改，並調升修改過的標準文件版本。
+3. 列出所有差異與受影響的檢查代碼引用，你確認後才寫入規則專案。
+4. 以 `code-review-scoring-standard` 的產生或審核模式更新掃描規則，再執行 `standard lint` 並回報結果。
+5. 不會 commit：請自行在規則專案中審查並 commit。
+
+這個 Skill 會寫入本專案以外的目錄（`[rules] root` 指定的目錄），所以工具可能每次寫入都要求授權。不想每次確認的話，請自行在工具的設定中允許規則專案的目錄。
 
 ### 維護評分標準
 
@@ -303,7 +313,7 @@ git add --renormalize .
   5. 通過後列出和既有檔案的差異請你確認，確認後才以 `standard stamp` 寫入該規則 `rule.ini` 的 `scan` 指定的位置，並在檔頭記錄來源標準文件的版本與雜湊值。
 - **審核模式**：只對既有的掃描規則檔執行 lint 與審核，結果寫到 `review.md`，不修改任何檔案。
 
-不支援 Sub-Agent 的平台（或 `subagent=false`）由主 Agent 依序完成產生與審核，流程與檔案相同，但獨立性較低。標準文件、`rules.ini`、`defaults.ini` 與 `rule.ini` 一律由你自己修改，AI 只回報問題。
+不支援 Sub-Agent 的平台（或 `subagent=false`）由主 Agent 依序完成產生與審核，流程與檔案相同，但獨立性較低。這個 Skill 不會修改標準文件、`rules.ini`、`defaults.ini` 與 `rule.ini`，只回報問題；請自行修改，或透過 `code-review-scoring-rule-authoring` 修改（見「修改規則」）。
 
 ## 調整配分與嚴重度
 
@@ -311,7 +321,7 @@ git add --renormalize .
 
 - `defaults.ini`（規則專案根目錄）：所有規則共用的預設值。
 - 各規則的 `rule.ini`：只寫要覆寫的部分。覆寫以區塊群組為單位、不逐鍵合併：有任何 `[severity:*]` 就整組取代預設的嚴重度分級，有任何 `[grade:*]` 就整組取代預設的等級，`[points]`、`[scoring]` 各自整個區段取代。
-- 通用規則（`role="common"`）只能覆寫 `[scoring]` 與嚴重度分級，配分與等級一律使用 `defaults.ini`，單獨評分時也一樣；寫在其 `rule.ini` 的 `[points]`、`[grade:*]` 與 `cap` 會被忽略，`lint` 會顯示警告。
+- 全域規則（`role="global"`）只能覆寫 `[scoring]` 與嚴重度分級，配分與等級一律使用 `defaults.ini`，單獨評分時也一樣；寫在其 `rule.ini` 的 `[points]`、`[grade:*]` 與 `cap` 會被忽略，`lint` 會顯示警告。
 
 各區段的寫法見 `templates/<語言>/rule-template.ini`。預設值放在規則專案的 `defaults.ini`，不在這個專案中。
 
@@ -361,7 +371,7 @@ meaning="不影響品質的小地方。"
   - `merge="false"`（預設）：不合併，每一處問題各自是一筆扣分項，同一個檢查代碼出現在三處就扣三次。
   - `merge="true"`：合併，同一個檢查代碼只寫一筆並列出所有位置，只扣一次。
   - 分析程式碼步驟會從 `prepared.txt` 摘要的 `- deductions:` 一行得知目前的方式。
-- 通用規則的分級和框架規則不同時，通用檢查項（`CM-…`）先依通用規則的分級判斷，再依語意對應到框架分級中最接近的一級扣分。建議（非必填）把通用分級的嚴重度記在 findings.txt 的 `from:`，有寫時會依通用標準文件檢查。
+- 全域規則的分級和框架規則不同時，全域檢查項（`GL-…`）先依全域規則的分級判斷，再依語意對應到框架分級中最接近的一級扣分。建議（非必填）把全域分級的嚴重度記在 findings.txt 的 `from:`，有寫時會依全域標準文件檢查。
 - 規則設定在評分途中會被鎖定，修改後請重新開始評分（`init --reset`），或在下一次評分生效。
 
 ## 調整報告
@@ -530,8 +540,8 @@ CR 外掛設為 `mapped` 時，對應不到評分標準檢查項的意見會歸�
 - `setup`：每次執行完整流程前檢查 `configs/plugins.ini` 與 `configs/settings.ini`（含 `[rules] root` 指向的規則專案，並偵測已不再讀取的舊設定），並以逐步詢問或指令的方式建立，登記外掛時先驗證，避免設定錯誤到 CR 步驟才發現。
 - `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
-- `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以評分標準的掃描規則檔列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。框架標準的 `applies` 沒有涵蓋的檔案標上 `[common]`，改用通用標準的掃描規則；檔案分類（`@scope`）與 PR 層級的提示（`@pr`，例如主程式有異動卻沒有測試檔）也寫在掃描規則檔中，腳本不含任何框架的判斷。
-- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），挑出要評分的規則與通用規則、輸出檢查項、配分、嚴重度分級、等級、適用檔案與掃描規則檔給 `score` 與 `prepare-diff`（`resolve`），在步驟 1 依異動檔案決定要產出哪幾份報告、切出各報告的 diff（`plan`），以及把審核通過的掃描規則草稿加上來源檔頭後寫入正式位置（`stamp`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度是否在該規則的分級中、代碼重複、面向是否齊全、`rules.ini`、`defaults.ini` 與 `rule.ini` 的未知區段與鍵、配分加總、等級門檻與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `plan` 與 `review-state` 的檢查呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時直接停止（結束碼 2 或 3），請先執行 `lint` 修正。
+- `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以評分標準的掃描規則檔列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。框架標準的 `applies` 沒有涵蓋的檔案標上 `[global]`，改用全域標準的掃描規則；檔案分類（`@scope`）與 PR 層級的提示（`@pr`，例如主程式有異動卻沒有測試檔）也寫在掃描規則檔中，腳本不含任何框架的判斷。
+- `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），挑出要評分的規則與全域規則、輸出檢查項、配分、嚴重度分級、等級、適用檔案與掃描規則檔給 `score` 與 `prepare-diff`（`resolve`），在步驟 1 依異動檔案決定要產出哪幾份報告、切出各報告的 diff（`plan`），以及把審核通過的掃描規則草稿加上來源檔頭後寫入正式位置（`stamp`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度是否在該規則的分級中、代碼重複、面向是否齊全、`rules.ini`、`defaults.ini` 與 `rule.ini` 的未知區段與鍵、配分加總、等級門檻與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `plan` 與 `review-state` 的檢查呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時直接停止（結束碼 2 或 3），請先執行 `lint` 修正。
 - `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依規則的配分、嚴重度分級與等級計算分數與等級（含等級上限）；檢查代碼與可用的嚴重度讀自評分標準文件，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。
 

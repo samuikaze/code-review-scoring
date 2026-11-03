@@ -12,40 +12,44 @@ error: bad.md:33: A5 lists its default severity Minor as adjustable
 warning: bad.md:34: A6: Nit is the lowest severity, which is always allowed and does not need to be listed
 error: bad.md:35: A7 has no condition for the adjustment
 error: bad.md:36: B1 is under ### A; the letter of a check code must match its dimension
-error: bad.md:37: the CM prefix is reserved for the common standard (role="common"): CM-A8
-error: bad.md:38: a check item is - code｜content｜severity, or - code｜content｜severity｜adjustable to｜condition
-error: bad.md:48: unexpected text under a dimension heading; write check items (- code｜content｜severity), 無 (None), or an HTML comment
-error: bad.md:52: B2 has no content
-error: bad.md:54: headings under ## 檢查項 (Check items) are ### X. name, with X from A to F
-error: bad.md:56: headings under ## 檢查項 (Check items) are ### X. name, with X from A to F
-error: bad.md:58: headings under ## 檢查項 (Check items) are ### X. name, with X from A to F
-error: bad.md:60: check codes are the dimension letter and a number (e.g. A1), not "G1"
-error: bad.md:75: a confirmation needs the thing to confirm
-error: bad.md:76: a confirmation is - codes｜what to confirm (separate with the full-width ｜, not |)
-error: bad.md:78: section ## 檢查項 appears more than once
-error: bad.md:80: this HTML comment is not closed
+error: bad.md:37: the GL prefix is reserved for the global standard (role="global"): GL-A8
+error: bad.md:38: CM-A12: CM- codes were renamed GL- and belong to the global standard (role="global")
+error: bad.md:39: a check item is - code｜content｜severity, or - code｜content｜severity｜adjustable to｜condition
+error: bad.md:49: unexpected text under a dimension heading; write check items (- code｜content｜severity), 無 (None), or an HTML comment
+error: bad.md:53: B2 has no content
+error: bad.md:55: headings under ## 檢查項 (Check items) are ### X. name, with X from A to F
+error: bad.md:57: headings under ## 檢查項 (Check items) are ### X. name, with X from A to F
+error: bad.md:59: headings under ## 檢查項 (Check items) are ### X. name, with X from A to F
+error: bad.md:61: check codes are the dimension letter and a number (e.g. A1), not "G1"
+error: bad.md:80: a confirmation needs the thing to confirm
+error: bad.md:81: a confirmation is - codes｜what to confirm (separate with the full-width ｜, not |)
+error: bad.md:83: section ## 檢查項 appears more than once
+error: bad.md:85: this HTML comment is not closed
 error: bad.md:2: name may only contain lowercase letters, digits and -
 error: bad.md:1: the front matter has no version
 error: bad.md:14: dimension B must be named 安全性 or Security (dimension codes and names cannot be changed)
 error: bad.md:20: dimension F must be named 可讀性與可維護性 or Readability and maintainability (dimension codes and names cannot be changed)
-warning: bad.md:50: the heading should be ### B. 安全性 or ### B. Security
-warning: bad.md:50: ### B has no check item; write 無 or None if that is intended
-warning: bad.md:62: ### C has no check item; write 無 or None if that is intended
+warning: bad.md:51: the heading should be ### B. 安全性 or ### B. Security
+warning: bad.md:51: ### B has no check item; write 無 or None if that is intended
+warning: bad.md:63: ### C has no check item; write 無 or None if that is intended
 warning: bad.md:22: ### F. 可讀性與可維護性 is missing (keep the heading and write 無 or None when it has no check item)
-error: bad.md:74: the confirmation refers to Z9, which is not a check item
+error: bad.md:79: the confirmation refers to Z9, which is not a check item
+warning: bad.md:73: ## 全域規則 (Global rules) is only read from the global standard; move these rules there
 
-result: 26 error(s), 7 warning(s)
+result: 27 error(s), 8 warning(s)
 exit=1
-### lint --file bad-common.md --common --settings settings.ini
-document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0), 0 adjustable, 0 confirmations
-error: bad-common.md:22: check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not "A2"
-error: bad-common.md:23: CM-B1 is under ### A; the letter of a check code must match its dimension
+### lint --file bad-global.md --global --settings settings.ini
+document: global v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0), 0 adjustable, 0 confirmations
+error: bad-global.md:22: check codes of the global standard are GL- plus the dimension letter and a number (e.g. GL-A1), not "A2"
+error: bad-global.md:23: GL-B1 is under ### A; the letter of a check code must match its dimension
+error: bad-global.md:24: check codes of the global standard are GL- plus the dimension letter and a number (e.g. GL-A1), not "CM-A3"; CM- codes were renamed GL-
+warning: bad-global.md: section ## 全域規則 (Global rules) is missing; without it no rule applies to every report
 
-result: 2 error(s), 0 warning(s)
+result: 3 error(s), 1 warning(s)
 exit=1
 ### lint --file good-v1.md --scan bad-scan.tsv --settings settings.ini
 document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0), 1 adjustable, 0 confirmations
-scan rules: 12 line rules, 1 scopes, 2 PR hints
+scan rules: 13 line rules, 1 scopes, 2 PR hints
 error: bad-scan.tsv:3: scope test is already defined on line 2
 error: bad-scan.tsv:4: the scope any is built in and cannot be defined
 error: bad-scan.tsv:5: scope names may only contain lowercase letters, digits, _ and -
@@ -61,19 +65,20 @@ error: bad-scan.tsv:14: the regex uses [:class:], which POSIX ERE (awk) and .NET
 error: bad-scan.tsv:16: the regex uses /d, which POSIX ERE (awk) and .NET do not share; avoid /b /s /d /w, lookaround, lazy quantifiers, POSIX classes and back-references
 error: bad-scan.tsv:18: A99 is not a check item of the standard (removed or renamed?)
 error: bad-scan.tsv:19: G2 is not a check item of the standard (removed or renamed?)
-error: bad-scan.tsv:20: rule ids are check codes or uppercase tags (e.g. API), not "lower"
-error: bad-scan.tsv:21: flags are -, i, c or ic, not "q"
-error: bad-scan.tsv:22: the regex is required
-error: bad-scan.tsv:22: the hint is empty
-error: bad-scan.tsv:23: a line rule has 7 TAB-separated fields (id scope flags regex prev-regex exclude-regex hint), not 4
+error: bad-scan.tsv:20: CM-A1: CM- codes were renamed GL-
+error: bad-scan.tsv:21: rule ids are check codes or uppercase tags (e.g. API), not "lower"
+error: bad-scan.tsv:22: flags are -, i, c or ic, not "q"
+error: bad-scan.tsv:23: the regex is required
+error: bad-scan.tsv:23: the hint is empty
+error: bad-scan.tsv:24: a line rule has 7 TAB-separated fields (id scope flags regex prev-regex exclude-regex hint), not 4
 error: bad-scan.tsv:8: scope main is not defined (define it with @scope)
 error: bad-scan.tsv:9: scope ghost is not defined (define it with @scope)
-error: bad-scan.tsv:21: scope ghost is not defined (define it with @scope)
+error: bad-scan.tsv:22: scope ghost is not defined (define it with @scope)
 error: bad-scan.tsv:17: the regex does not compile in awk: (unclosed
 error: bad-scan.tsv:17: the regex does not compile in .NET: (unclosed
 warning: bad-scan.tsv:1: the scan rules were made from bad.md v1, and the document has changed since; regenerate them or run the review mode
 
-result: 25 error(s), 1 warning(s)
+result: 26 error(s), 1 warning(s)
 exit=1
 ### lint --file good-v2.md --scan good-scan.tsv --settings settings.ini
 document: springboot-3 v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0), 1 adjustable, 1 confirmations
@@ -106,7 +111,7 @@ result: 3 error(s), 2 warning(s)
 exit=1
 ### lint --settings settings-bad.ini
 == rules-bad/rules.ini
-rules: 9 registered (fw, fw2 (disabled), Bad Name, nopath, noenable (disabled), gone (disabled), cm, cm2, badkey)
+rules: 10 registered (fw, fw2 (disabled), Bad Name, nopath, noenable (disabled), gone (disabled), gl, gl2, badkey, legacy)
 error: rules-bad/rules.ini:2: key outside a [section]
 error: rules-bad/rules.ini:7: [fw] is already defined on line 3
 error: rules-bad/rules.ini:32: lines are [section], key="value" or ; comments
@@ -130,7 +135,7 @@ error: rules-bad/defaults.ini:22: grades go from the highest to the lowest: the 
 error: rules-bad/defaults.ini:24: the last grade C is the lowest; its min must be 0
 error: rules-bad/rules.ini:6: applies is set in the rule.ini of the rule, not in rules.ini
 error: rules-bad/fw/rule.ini:5: unknown key owner in [rule] (standard, scan, applies, role)
-error: rules-bad/fw/rule.ini:4: role is "common" or not set, not "weird"
+error: rules-bad/fw/rule.ini:4: role is "global" or not set, not "weird"
 error: rules-bad/fw/rule.ini:1: [rule] has no applies (framework rules need one)
 error: rules-bad/defaults.ini:11: cap Z is not one of the grades that apply to [fw] (A, F)
 error: rules-bad/rules.ini:12: unknown key color (path, enable)
@@ -142,14 +147,15 @@ error: rules-bad/rules.ini:16: [nopath] has no path (the folder of its rule.ini)
 error: rules-bad/rules.ini:18: [noenable] has no enable ("true" or "false")
 error: rules-bad/none/rule.ini: file not found (the path of [noenable] in rules.ini)
 error: rules-bad/gone/rule.ini: file not found (the path of [gone] in rules.ini)
-warning: rules-bad/cm/rule.ini:4: applies is ignored for the common standard, which covers the files no framework rule covers
-warning: rules-bad/cm/rule.ini:6: [points] is never used by the common rule (role="common"); its points come from defaults.ini
-warning: rules-bad/cm/rule.ini:24: [grade:CODE] sections are never used by the common rule (role="common"); its grades come from defaults.ini
-warning: rules-bad/cm/rule.ini:17: cap is never used by the common rule (role="common")
-error: rules-bad/cm2/rule.ini:1: [rule] has no standard (the Markdown document)
-error: rules-bad/rules.ini:26: only one enabled rule can have role="common"
+warning: rules-bad/gl/rule.ini:4: applies is ignored for the global standard, which covers the files no framework rule covers
+warning: rules-bad/gl/rule.ini:6: [points] is never used by the global rule (role="global"); its points come from defaults.ini
+warning: rules-bad/gl/rule.ini:24: [grade:CODE] sections are never used by the global rule (role="global"); its grades come from defaults.ini
+warning: rules-bad/gl/rule.ini:17: cap is never used by the global rule (role="global")
+error: rules-bad/gl2/rule.ini:1: [rule] has no standard (the Markdown document)
+error: rules-bad/rules.ini:26: only one enabled rule can have role="global"
 error: rules-bad/badkey/rule.ini:13: unknown key O in [points] (A to G)
 error: rules-bad/badkey/rule.ini:6: [points] needs A to G; G is missing
+error: rules-bad/legacy/rule.ini:3: role is "global" or not set, not "common"; role="common" was renamed role="global"
 
 == [fw] rules-bad/fw/rule.ini
 settings: points (defaults.ini), severities Critical, Major (defaults.ini), grades A, F (rule.ini), merge=false
@@ -177,18 +183,21 @@ error: good-v2.md: the front matter name springboot-3 does not match the section
 
 == [gone] rules-bad/gone/rule.ini (disabled)
 
-== [cm] rules-bad/cm/rule.ini
+== [gl] rules-bad/gl/rule.ini
 settings: points (defaults.ini), severities Critical, Major (rule.ini), grades A, B, C (defaults.ini), merge=false
-document: common v0.1, 0 check items (A 0, B 0, C 0, D 0, E 0, F 0), 0 adjustable, 0 confirmations
-error: bad-common.md:21: severity must be one of Critical, Major (case-sensitive), not "Minor"
-error: bad-common.md:22: check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not "A2"
-error: bad-common.md:22: severity must be one of Critical, Major (case-sensitive), not "Minor"
-error: bad-common.md:23: CM-B1 is under ### A; the letter of a check code must match its dimension
-error: bad-common.md:23: severity must be one of Critical, Major (case-sensitive), not "Minor"
-warning: bad-common.md:19: ### A has no check item; write 無 or None if that is intended
-error: bad-common.md: the front matter name common does not match the section [cm] in rules.ini
+document: global v0.1, 0 check items (A 0, B 0, C 0, D 0, E 0, F 0), 0 adjustable, 0 confirmations
+error: bad-global.md:21: severity must be one of Critical, Major (case-sensitive), not "Minor"
+error: bad-global.md:22: check codes of the global standard are GL- plus the dimension letter and a number (e.g. GL-A1), not "A2"
+error: bad-global.md:22: severity must be one of Critical, Major (case-sensitive), not "Minor"
+error: bad-global.md:23: GL-B1 is under ### A; the letter of a check code must match its dimension
+error: bad-global.md:23: severity must be one of Critical, Major (case-sensitive), not "Minor"
+error: bad-global.md:24: check codes of the global standard are GL- plus the dimension letter and a number (e.g. GL-A1), not "CM-A3"; CM- codes were renamed GL-
+error: bad-global.md:24: severity must be one of Critical, Major (case-sensitive), not "Minor"
+warning: bad-global.md:19: ### A has no check item; write 無 or None if that is intended
+warning: bad-global.md: section ## 全域規則 (Global rules) is missing; without it no rule applies to every report
+error: bad-global.md: the front matter name global does not match the section [gl] in rules.ini
 
-== [cm2] rules-bad/cm2/rule.ini
+== [gl2] rules-bad/gl2/rule.ini
 settings: points (defaults.ini), severities Critical, Major (defaults.ini), grades A, B, C (defaults.ini), merge=false
 
 == [badkey] rules-bad/badkey/rule.ini
@@ -199,11 +208,24 @@ warning: good-v2.md:22: A2: Major is the lowest severity, which is always allowe
 error: good-v2.md:46: the confirmation refers to A2, which is not a check item
 error: good-v2.md: the front matter name springboot-3 does not match the section [badkey] in rules.ini
 
-result: 54 error(s), 9 warning(s)
+== [legacy] rules-bad/legacy/rule.ini
+settings: points (defaults.ini), severities Critical, Major (defaults.ini), grades A, B, C (defaults.ini), merge=false
+document: global v0.1, 0 check items (A 0, B 0, C 0, D 0, E 0, F 0), 0 adjustable, 0 confirmations
+error: bad-global.md:21: the GL prefix is reserved for the global standard (role="global"): GL-A1
+error: bad-global.md:21: severity must be one of Critical, Major (case-sensitive), not "Minor"
+error: bad-global.md:22: severity must be one of Critical, Major (case-sensitive), not "Minor"
+error: bad-global.md:23: the GL prefix is reserved for the global standard (role="global"): GL-B1
+error: bad-global.md:23: severity must be one of Critical, Major (case-sensitive), not "Minor"
+error: bad-global.md:24: CM-A3: CM- codes were renamed GL- and belong to the global standard (role="global")
+error: bad-global.md:24: severity must be one of Critical, Major (case-sensitive), not "Minor"
+warning: bad-global.md:19: ### A has no check item; write 無 or None if that is intended
+error: bad-global.md: the front matter name global does not match the section [legacy] in rules.ini
+
+result: 65 error(s), 11 warning(s)
 exit=1
 ### lint --settings settings.ini
 == rules/rules.ini
-rules: 3 registered (springboot-3, common, angular (disabled))
+rules: 3 registered (springboot-3, global, angular (disabled))
 
 == [springboot-3] rules/springboot-3/rule.ini
 settings: points (rule.ini), severities Critical, Major, Minor, Nit (defaults.ini), grades A, B, C, D, F (defaults.ini), merge=false
@@ -211,9 +233,9 @@ document: springboot-3 v0.1, 2 check items (A 1, B 0, C 1, D 0, E 0, F 0), 1 adj
 scan rules: 2 line rules, 2 scopes, 1 PR hints
 warning: good-scan.tsv:2: the scan rules were made from good-v1.md v0.1, and the document has changed since; regenerate them or run the review mode
 
-== [common] rules/common/rule.ini
+== [global] rules/global/rule.ini
 settings: points (defaults.ini), severities Critical, Major, Minor, Nit (defaults.ini), grades A, B, C, D, F (defaults.ini), merge=false
-document: common v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0), 0 adjustable, 0 confirmations
+document: global v0.1, 1 check items (A 1, B 0, C 0, D 0, E 0, F 0), 0 adjustable, 0 confirmations
 
 == [angular] rules/angular/rule.ini (disabled)
 settings: points (defaults.ini), severities Critical, Major, Minor, Nit (rule.ini), grades S, C, F (rule.ini), merge=false
@@ -223,7 +245,7 @@ result: 0 error(s), 1 warning(s)
 exit=0
 ### lint --settings settings.ini springboot-3 angular nope
 == rules/rules.ini
-rules: 3 registered (springboot-3, common, angular (disabled))
+rules: 3 registered (springboot-3, global, angular (disabled))
 error: rules/rules.ini: [nope] is not registered
 
 == [springboot-3] rules/springboot-3/rule.ini
@@ -250,6 +272,17 @@ error: settings-noroot.ini: [rules] root is not set; set it to the folder of the
 
 result: 1 error(s), 0 warning(s)
 exit=1
+### lint --settings ../plan/settings-noglobal.ini
+== ROOT/tests/plan/rules-noglobal/rules.ini
+rules: 1 registered (springboot-3)
+warning: ROOT/tests/plan/rules-noglobal/rules.ini: no enabled global rule (role="global"); files that no framework rule covers will not be scored and no global rule applies to the reports
+
+== [springboot-3] ROOT/tests/plan/rules-noglobal/springboot-3/rule.ini
+settings: points (defaults.ini), severities Critical, Major, Minor, Nit (defaults.ini), grades A, B, C, D, F (defaults.ini), merge=false
+document: springboot-3 v0.2, 3 check items (A 2, B 0, C 1, D 0, E 0, F 0), 1 adjustable, 1 confirmations
+
+result: 0 error(s), 1 warning(s)
+exit=0
 ### lint --settings none.ini
 == none.ini
 error: none.ini: file not found; run setup check
@@ -275,7 +308,7 @@ document: english v1.0, 7 check items (A 2, B 1, C 1, D 1, E 1, F 1), 1 adjustab
 result: 0 error(s), 0 warning(s)
 exit=0
 ### lint --scan good-scan.tsv
-error: --scan and --common go with --file
+error: --scan and --global go with --file
 exit=2
 ### parse --file good-v2.md
 name	springboot-3
@@ -311,6 +344,9 @@ exit=0
 ### diff good-v1.md good-v1.md
 0 added, 0 removed, 0 changed
 exit=0
+### diff --global good-global.md good-global.md
+0 added, 0 removed, 0 changed
+exit=0
 ### diff good-v1.md bad.md
 error: bad.md:15: dimension B is listed more than once; run standard lint first
 exit=3
@@ -341,18 +377,18 @@ grade	D	60	D
 grade	F	0	F
 check	A1	Minor	-	-	正常	21
 check	C1	Major	Critical	沒有測試時	測試	29
-common	common	v0.1	sha256:07176e9a2491c8c275cb16a90fefab9b96757be0850eb654a8c7751ef2a3156f	good-common.md
-ruleini	rules/common/rule.ini	sha256:38279a83a8434b18997040c5bc6944ce0dfc044393c469c0496e44525a2a47d1
-cseverity	Critical	Critical	資料損毀、資安事件或服務中斷。|上線前一定要修正。
-cseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
-cseverity	Minor	Minor	能運作，但有更好的寫法。
-cseverity	Nit	Nit	風格偏好。
-check	CM-A1	Minor	-	-	正常	21
+global	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	good-global.md
+ruleini	rules/global/rule.ini	sha256:b893522125806cdbb0df3666501dd9f04654041054a5eeec1135748960200025
+gseverity	Critical	Critical	資料損毀、資安事件或服務中斷。|上線前一定要修正。
+gseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
+gseverity	Minor	Minor	能運作，但有更好的寫法。
+gseverity	Nit	Nit	風格偏好。
+check	GL-A1	Minor	-	-	正常	21
 defaults	rules/defaults.ini	sha256:a18f6c759558364499fedb8fb4485b064bfbf365ea359fedf9b92c24d81470df
 exit=0
-### resolve --settings settings.ini common
-standard	common	v0.1	sha256:07176e9a2491c8c275cb16a90fefab9b96757be0850eb654a8c7751ef2a3156f	good-common.md
-ruleini	rules/common/rule.ini	sha256:38279a83a8434b18997040c5bc6944ce0dfc044393c469c0496e44525a2a47d1
+### resolve --settings settings.ini global
+standard	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	good-global.md
+ruleini	rules/global/rule.ini	sha256:b893522125806cdbb0df3666501dd9f04654041054a5eeec1135748960200025
 points	A	25
 points	B	15
 points	C	15
@@ -370,7 +406,7 @@ grade	B	85	B
 grade	C	70	C
 grade	D	60	D
 grade	F	0	F
-check	CM-A1	Minor	-	-	正常	21
+check	GL-A1	Minor	-	-	正常	21
 defaults	rules/defaults.ini	sha256:a18f6c759558364499fedb8fb4485b064bfbf365ea359fedf9b92c24d81470df
 exit=0
 ### resolve --settings settings.ini angular

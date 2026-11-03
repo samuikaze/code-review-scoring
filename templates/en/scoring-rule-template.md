@@ -28,9 +28,14 @@ How to write this document (delete this comment after copying the template):
 - The points of the dimensions, the severity scale and the grades are set in
   rule.ini; what rule.ini does not set comes from defaults.ini of the rules
   project.
-- General rules such as the scoring scope, deductions requiring evidence and
+- Workflow rules such as the scoring scope, deductions requiring evidence and
   upstream factors are handled by the scoring workflow; write only what is
   specific to this standard here.
+- The global standard (role="global" in rule.ini) also has a section
+  ## Global rules for rules that apply to every file of every report, such
+  as the third-party exemption or no double counting with static analysis.
+  Framework standards do not have this section. Where a framework standard
+  says otherwise, the framework standard wins.
 - The section headings may also be written in Chinese (面向, 檢查項,
   事先確認事項); both are accepted.
 -->
@@ -68,9 +73,9 @@ full-width `｜` (U+FF5C):
 Field rules:
 
 - Code: the dimension letter plus a sequence number, for example `A1`, unique
-  within the document. The common standard (`role="common"`) prefixes its
-  codes with `CM-`, for example `CM-A1`; codes of framework standards cannot
-  start with `CM`.
+  within the document. The global standard (`role="global"`) prefixes its
+  codes with `GL-`, for example `GL-A1`; codes of framework standards cannot
+  start with `GL`.
 - Severity: only the severity codes of this rule (case-sensitive), that is the
   `[severity:CODE]` sections of `rule.ini`, or the scale of `defaults.ini`
   when `rule.ini` does not set one. The examples below use the default

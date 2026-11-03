@@ -1,20 +1,20 @@
 ### --diff multi.diff --settings settings.ini
 2 report(s):
-  - springboot-3 v0.2: 4 file(s) (3 scored with the common standard)
-  - angular v0.2: 5 file(s) (3 scored with the common standard)
+  - springboot-3 v0.2: 4 file(s) (3 scored with the global standard)
+  - angular v0.2: 5 file(s) (3 scored with the global standard)
 wrote OUT/plan/plan.tsv
 exit=0
 --- plan.tsv
 report	springboot-3	4
 report	angular	5
 file	backend/src/main/java/A.java	springboot-3	framework
-file	backend/README.md	springboot-3	common
+file	backend/README.md	springboot-3	global
 file	frontend/src/app.ts	angular	framework
-file	frontend/package.json	angular	common
-file	README.md	springboot-3	common
-file	README.md	angular	common
-file	.github/workflows/ci.yml	springboot-3	common
-file	.github/workflows/ci.yml	angular	common
+file	frontend/package.json	angular	global
+file	README.md	springboot-3	global
+file	README.md	angular	global
+file	.github/workflows/ci.yml	springboot-3	global
+file	.github/workflows/ci.yml	angular	global
 file	frontend/src/app.html	angular	framework
 --- confirm.tsv
 springboot-3	A2	資料量多大
@@ -49,12 +49,12 @@ severity	Info	0	-	參考	不影響品質的小地方。
 grade	S	90	優
 grade	C	60	普通
 grade	F	0	待加強
-common	common	v0.1	sha256:07176e9a2491c8c275cb16a90fefab9b96757be0850eb654a8c7751ef2a3156f	ROOT/tests/standards/good-common.md
-ruleini	rules/common/rule.ini	sha256:da8b81c44d4f2c4c5660b10c6ffefadbafbc6f0511383104144bcf30965a6f28
-cseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
-cseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
-cseverity	Minor	Minor	能運作，但有更好的寫法。
-cseverity	Nit	Nit	風格偏好。
+global	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	ROOT/tests/standards/good-global.md
+ruleini	rules/global/rule.ini	sha256:9336da926e0e2a0641524d5767cc0d9c07a9eda51236fec00b80a64679b6607c
+gseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
+gseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
+gseverity	Minor	Minor	能運作，但有更好的寫法。
+gseverity	Nit	Nit	風格偏好。
 defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
 --- springboot-3.resolve
 standard	springboot-3	v0.2	sha256:7a33b9f46d0553c46fb81af8296ac99ec9aa15faf082612969834b07b73f14f6	ROOT/tests/standards/good-v2.md
@@ -77,29 +77,29 @@ grade	B	85	B
 grade	C	70	C
 grade	D	60	D
 grade	F	0	F
-common	common	v0.1	sha256:07176e9a2491c8c275cb16a90fefab9b96757be0850eb654a8c7751ef2a3156f	ROOT/tests/standards/good-common.md
-ruleini	rules/common/rule.ini	sha256:da8b81c44d4f2c4c5660b10c6ffefadbafbc6f0511383104144bcf30965a6f28
-cseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
-cseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
-cseverity	Minor	Minor	能運作，但有更好的寫法。
-cseverity	Nit	Nit	風格偏好。
+global	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	ROOT/tests/standards/good-global.md
+ruleini	rules/global/rule.ini	sha256:9336da926e0e2a0641524d5767cc0d9c07a9eda51236fec00b80a64679b6607c
+gseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
+gseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
+gseverity	Minor	Minor	能運作，但有更好的寫法。
+gseverity	Nit	Nit	風格偏好。
 defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
-### --diff common-only.diff --settings settings.ini
+### --diff global-only.diff --settings settings.ini
 1 report(s):
-  - common v0.1: 2 file(s)
+  - global v0.1: 2 file(s)
 wrote OUT/plan/plan.tsv
 exit=0
 --- plan.tsv
-report	common	2
-file	README.md	common	common
-file	.github/workflows/ci.yml	common	common
+report	global	2
+file	README.md	global	global
+file	.github/workflows/ci.yml	global	global
 --- confirm.tsv
---- common.diff
+--- global.diff
 diff --git a/README.md b/README.md
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
---- common.resolve
-standard	common	v0.1	sha256:07176e9a2491c8c275cb16a90fefab9b96757be0850eb654a8c7751ef2a3156f	ROOT/tests/standards/good-common.md
-ruleini	rules/common/rule.ini	sha256:da8b81c44d4f2c4c5660b10c6ffefadbafbc6f0511383104144bcf30965a6f28
+--- global.resolve
+standard	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	ROOT/tests/standards/good-global.md
+ruleini	rules/global/rule.ini	sha256:9336da926e0e2a0641524d5767cc0d9c07a9eda51236fec00b80a64679b6607c
 points	A	25
 points	B	15
 points	C	15
@@ -120,13 +120,13 @@ grade	F	0	F
 defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
 ### --diff java-only.diff --settings settings.ini
 1 report(s):
-  - springboot-3 v0.2: 2 file(s) (1 scored with the common standard)
+  - springboot-3 v0.2: 2 file(s) (1 scored with the global standard)
 wrote OUT/plan/plan.tsv
 exit=0
 --- plan.tsv
 report	springboot-3	2
 file	src/main/java/A.java	springboot-3	framework
-file	docs/guide.md	springboot-3	common
+file	docs/guide.md	springboot-3	global
 --- confirm.tsv
 springboot-3	A2	資料量多大
 --- springboot-3.diff
@@ -153,18 +153,18 @@ grade	B	85	B
 grade	C	70	C
 grade	D	60	D
 grade	F	0	F
-common	common	v0.1	sha256:07176e9a2491c8c275cb16a90fefab9b96757be0850eb654a8c7751ef2a3156f	ROOT/tests/standards/good-common.md
-ruleini	rules/common/rule.ini	sha256:da8b81c44d4f2c4c5660b10c6ffefadbafbc6f0511383104144bcf30965a6f28
-cseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
-cseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
-cseverity	Minor	Minor	能運作，但有更好的寫法。
-cseverity	Nit	Nit	風格偏好。
+global	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	ROOT/tests/standards/good-global.md
+ruleini	rules/global/rule.ini	sha256:9336da926e0e2a0641524d5767cc0d9c07a9eda51236fec00b80a64679b6607c
+gseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
+gseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
+gseverity	Minor	Minor	能運作，但有更好的寫法。
+gseverity	Nit	Nit	風格偏好。
 defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
 ### --diff empty.diff --settings settings.ini
 error: empty.diff: the diff lists no file
 exit=2
-### --diff common-only.diff --settings settings-nocommon.ini
-error: common-only.diff: no enabled framework rule covers the files of this PR and no common rule is enabled
+### --diff global-only.diff --settings settings-noglobal.ini
+error: global-only.diff: no enabled framework rule covers the files of this PR and no global rule is enabled
 exit=2
 ### --diff java-only.diff --settings none.ini
 error: none.ini: file not found; run setup check

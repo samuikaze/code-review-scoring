@@ -100,11 +100,12 @@ function Invoke-StdDoc([string]$Path, [string]$Role, [string[]]$Sevs) {
         }
         for ($i = 0; $i -lt $n; $i++) { $f[$i] = Get-StdTrim $f[$i] }
         $code = $f[0]; $ok = $true; $letter = ''
-        if ($Role -ceq 'common') {
-            if ($code -cnotmatch '^CM-[A-F][0-9]+$') { & $diag 'error' $line "check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not `"$code`""; $ok = $false }
+        if ($Role -ceq 'global') {
+            if ($code -cnotmatch '^GL-[A-F][0-9]+$') { & $diag 'error' $line "check codes of the global standard are GL- plus the dimension letter and a number (e.g. GL-A1), not `"$code`"$(if ($code -cmatch '^CM-') { '; CM- codes were renamed GL-' })"; $ok = $false }
             else { $letter = $code.Substring(3, 1) }
         }
-        elseif ($code -cmatch '^CM') { & $diag 'error' $line "the CM prefix is reserved for the common standard (role=`"common`"): $code"; $ok = $false }
+        elseif ($code -cmatch '^GL') { & $diag 'error' $line "the GL prefix is reserved for the global standard (role=`"global`"): $code"; $ok = $false }
+        elseif ($code -cmatch '^CM-') { & $diag 'error' $line "${code}: CM- codes were renamed GL- and belong to the global standard (role=`"global`")"; $ok = $false }
         elseif ($code -cnotmatch '^[A-F][0-9]+$') { & $diag 'error' $line "check codes are the dimension letter and a number (e.g. A1), not `"$code`""; $ok = $false }
         else { $letter = $code.Substring(0, 1) }
         if ($ok -and $dim -cmatch '^[A-F]$' -and $letter -cne $dim) { & $diag 'error' $line "$code is under ### $dim; the letter of a check code must match its dimension"; $ok = $false }
@@ -182,7 +183,7 @@ function Invoke-StdDoc([string]$Path, [string]$Role, [string[]]$Sevs) {
         if ($l -cmatch '^##[ \t]') {
             . $sbClose; $curdim = ''
             $t = Get-StdTrim $l.Substring(2)
-            $sec = switch -CaseSensitive ($t) { '面向' { 'dims' } 'Dimensions' { 'dims' } '檢查項' { 'checks' } 'Check items' { 'checks' } '事先確認事項' { 'confirms' } 'Confirmations' { 'confirms' } default { 'free' } }
+            $sec = switch -CaseSensitive ($t) { '面向' { 'dims' } 'Dimensions' { 'dims' } '檢查項' { 'checks' } 'Check items' { 'checks' } '事先確認事項' { 'confirms' } 'Confirmations' { 'confirms' } '全域規則' { 'grules' } 'Global rules' { 'grules' } default { 'free' } }
             if ($sec -ne 'free') { if ($secl.ContainsKey($sec)) { & $diag 'error' $FNR "section ## $t appears more than once" } else { $secl[$sec] = $FNR } }
             continue
         }
@@ -241,6 +242,8 @@ function Invoke-StdDoc([string]$Path, [string]$Role, [string[]]$Sevs) {
         if ($nchk -eq 0 -and $nbad -eq 0) { & $diag 'error' $secl['checks'] 'the document has no check item' }
     }
     foreach ($r in $cref) { if (-not $chkl.ContainsKey($r[0])) { & $diag 'error' $r[1] "the confirmation refers to $($r[0]), which is not a check item" } }
+    if ($Role -ceq 'global' -and -not $secl.ContainsKey('grules')) { & $diag 'warn' '' 'section ## 全域規則 (Global rules) is missing; without it no rule applies to every report' }
+    elseif ($Role -cne 'global' -and $secl.ContainsKey('grules')) { & $diag 'warn' $secl['grules'] '## 全域規則 (Global rules) is only read from the global standard; move these rules there' }
 
     $out.Add("name`t$($fm['name'])"); $out.Add("version`t$($fm['version'])")
     foreach ($x in $Let) { if ($dimrow.ContainsKey($x)) { $out.Add("dim`t$x`t$($dimname[$x])`t$($dimfocus[$x])") } }
@@ -284,7 +287,8 @@ function Invoke-StdScan([string]$Path, [string[]]$DocLines) {
     }
     $sbCheckId = {
         param([string]$id, $line)
-        if ($id -cmatch '^(CM-)?[A-G][0-9]+$') { if (-not $known.ContainsKey($id)) { & $diag 'error' $line "$id is not a check item of the standard (removed or renamed?)" } }
+        if ($id -cmatch '^(GL-)?[A-G][0-9]+$') { if (-not $known.ContainsKey($id)) { & $diag 'error' $line "$id is not a check item of the standard (removed or renamed?)" } }
+        elseif ($id -cmatch '^CM-[A-G][0-9]+$') { & $diag 'error' $line "${id}: CM- codes were renamed GL-" }
         elseif ($id -cnotmatch '^[A-Z][A-Z0-9_]*$') { & $diag 'error' $line "rule ids are check codes or uppercase tags (e.g. API), not `"$id`"" }
     }
 
@@ -504,7 +508,7 @@ function Invoke-StdRules([string]$Rules, [string]$RRoot, [string]$Defaults) {
     if ($null -eq $def) { Add-StdDiag $out 'error' $Defaults '' 'file not found; the rules project needs defaults.ini with the default points, severities and grades' }
     else { Read-StdSet $out $def 'defaults' }
     if ($ri.secs.Count -eq 0) { Add-StdDiag $out 'error' $Rules '' 'no rule is registered; add a [name] section with path="..." and enable="true"' }
-    $owner = New-StdMap; $capdone = New-StdMap; $ncommon = 0; $nen = 0
+    $owner = New-StdMap; $capdone = New-StdMap; $nglobal = 0; $nen = 0
     foreach ($s in $ri.secs) {
         $ln = $ri.isec[$s]
         if ($s -cnotmatch '^[a-z0-9][a-z0-9-]*$') { Add-StdDiag $out 'error' $Rules $ln 'section names are the name of the rule: lowercase letters, digits and -' }
@@ -529,10 +533,10 @@ function Invoke-StdRules([string]$Rules, [string]$RRoot, [string]$Defaults) {
                 elseif ((Get-StdIniValue $rule 'rule' 'standard') -eq '') { Add-StdDiag $out 'error' $setfile $rule.isec['rule'] '[rule] has no standard (the Markdown document)' }
                 $doc = Join-StdPath $d (Get-StdIniValue $rule 'rule' 'standard'); $scan = Join-StdPath $d (Get-StdIniValue $rule 'rule' 'scan')
                 $role = Get-StdIniValue $rule 'rule' 'role'; $apps = Get-StdIniValue $rule 'rule' 'applies'
-                if ($role -ne '' -and $role -cne 'common') { Add-StdDiag $out 'error' $setfile $rule.kl["rule`trole"] "role is `"common`" or not set, not `"$role`""; $role = '' }
-                if ($role -ceq 'common') {
-                    if ($e -ceq 'true') { $ncommon++; if ($ncommon -gt 1) { Add-StdDiag $out 'error' $Rules $ln 'only one enabled rule can have role="common"' } }
-                    if ($apps -ne '') { Add-StdDiag $out 'warn' $setfile $rule.kl["rule`tapplies"] 'applies is ignored for the common standard, which covers the files no framework rule covers' }
+                if ($role -ne '' -and $role -cne 'global') { Add-StdDiag $out 'error' $setfile $rule.kl["rule`trole"] "role is `"global`" or not set, not `"$role`"$(if ($role -ceq 'common') { '; role="common" was renamed role="global"' })"; $role = '' }
+                if ($role -ceq 'global') {
+                    if ($e -ceq 'true') { $nglobal++; if ($nglobal -gt 1) { Add-StdDiag $out 'error' $Rules $ln 'only one enabled rule can have role="global"' } }
+                    if ($apps -ne '') { Add-StdDiag $out 'warn' $setfile $rule.kl["rule`tapplies"] 'applies is ignored for the global standard, which covers the files no framework rule covers' }
                 }
                 elseif ($rule.isec.ContainsKey('rule') -and $apps -eq '') { Add-StdDiag $out 'error' $setfile $rule.isec['rule'] '[rule] has no applies (framework rules need one)' }
                 else {
@@ -549,16 +553,16 @@ function Invoke-StdRules([string]$Rules, [string]$RRoot, [string]$Defaults) {
         # Empty values are written as - so that the shells can read the TAB-separated fields.
         $out.Add("std`t$s`t$ln`t$(Get-StdDash $doc)`t$(Get-StdDash $scan)`t$(Get-StdDash $role)`t$e`t$(Get-StdDash $setfile)")
         if ($null -eq $rule) { continue }
-        if ($role -cne 'common' -and $re -ne '') { $out.Add("applies`t$s`t$re") }
+        if ($role -cne 'global' -and $re -ne '') { $out.Add("applies`t$s`t$re") }
         $ep = Get-StdEff $rule $def 'points'; $es = Get-StdEff $rule $def 'sev'; $eg = Get-StdEff $rule $def 'grade'
-        # The common rule never uses the [points], [grade:CODE] sections and caps of its own rule.ini: they are warned
+        # The global rule never uses the [points], [grade:CODE] sections and caps of its own rule.ini: they are warned
         # about, and its points and grades come from defaults.ini.
-        if ($role -ceq 'common' -and [object]::ReferenceEquals($ep, $rule)) {
-            Add-StdDiag $out 'warn' $setfile $rule.isec['points'] '[points] is never used by the common rule (role="common"); its points come from defaults.ini'
+        if ($role -ceq 'global' -and [object]::ReferenceEquals($ep, $rule)) {
+            Add-StdDiag $out 'warn' $setfile $rule.isec['points'] '[points] is never used by the global rule (role="global"); its points come from defaults.ini'
             $ep = Get-StdEff $null $def 'points'
         }
-        if ($role -ceq 'common' -and [object]::ReferenceEquals($eg, $rule)) {
-            Add-StdDiag $out 'warn' $setfile $rule.gln[$rule.gc[0]] '[grade:CODE] sections are never used by the common rule (role="common"); its grades come from defaults.ini'
+        if ($role -ceq 'global' -and [object]::ReferenceEquals($eg, $rule)) {
+            Add-StdDiag $out 'warn' $setfile $rule.gln[$rule.gc[0]] '[grade:CODE] sections are never used by the global rule (role="global"); its grades come from defaults.ini'
             $eg = Get-StdEff $null $def 'grade'
         }
         if ($null -eq $ep) { Add-StdDiag $out 'error' $setfile '' 'no [points] in rule.ini or defaults.ini' }
@@ -573,8 +577,8 @@ function Invoke-StdRules([string]$Rules, [string]$RRoot, [string]$Defaults) {
         if ($null -ne $es) {
             foreach ($c in $es.sc) {
                 $cap = $es.scap[$c]
-                if ($cap -ne '' -and $role -ceq 'common' -and [object]::ReferenceEquals($es, $rule)) {
-                    Add-StdDiag $out 'warn' $setfile $rule.kl["severity:$c`tcap"] 'cap is never used by the common rule (role="common")'
+                if ($cap -ne '' -and $role -ceq 'global' -and [object]::ReferenceEquals($es, $rule)) {
+                    Add-StdDiag $out 'warn' $setfile $rule.kl["severity:$c`tcap"] 'cap is never used by the global rule (role="global")'
                     $cap = ''
                 }
                 # The grade a severity caps at must be one of the grades that apply (checked once per pair of files).
@@ -592,7 +596,7 @@ function Invoke-StdRules([string]$Rules, [string]$RRoot, [string]$Defaults) {
         if ($null -ne $eg) { foreach ($c in $eg.gc) { $out.Add("grade`t$s`t$c`t$($eg.gmin[$c])`t$($eg.gname[$c])") } }
     }
     if ($ri.secs.Count -gt 0 -and $nen -eq 0) { Add-StdDiag $out 'warn' $Rules '' 'no rule is enabled (enable="true")' }
-    if ($ri.secs.Count -gt 0 -and $ncommon -eq 0) { Add-StdDiag $out 'warn' $Rules '' 'no enabled common rule (role="common"); files that no framework rule covers will not be scored' }
+    if ($ri.secs.Count -gt 0 -and $nglobal -eq 0) { Add-StdDiag $out 'warn' $Rules '' 'no enabled global rule (role="global"); files that no framework rule covers will not be scored and no global rule applies to the reports' }
     $out.Add("defaults`t$Defaults")
     return , $out.ToArray()
 }
@@ -655,10 +659,10 @@ function Invoke-StdDiff([string[]]$Old, [string[]]$New) {
 
 # ---------------------------------------------------------------- plan of a review
 
-# Each file goes to the first framework standard whose applies matches it. The others are common files: with one
+# Each file goes to the first framework standard whose applies matches it. The others are global files: with one
 # report they go to it; with several, to the framework of the nearest folder above them that holds files of
 # frameworks, or to every report when that folder holds files of several frameworks (the repository root, for
-# example). With no framework file at all the common standard makes the only report. Writes OutDir/<name>.diff
+# example). With no framework file at all the global standard makes the only report. Writes OutDir/<name>.diff
 # with the blocks of the diff unchanged (read and written byte for byte, like awk).
 function Invoke-StdPlan([string]$DiffPath, [string[]]$Ini, [string]$OutDir) {
     $out = New-Object System.Collections.Generic.List[string]
@@ -669,7 +673,7 @@ function Invoke-StdPlan([string]$DiffPath, [string[]]$Ini, [string]$OutDir) {
     foreach ($l in $Ini) {
         $a = $l.Split("`t")
         if ($a[0] -ceq 'std' -and $a[6] -cne 'true') { continue }
-        if ($a[0] -ceq 'std' -and $a[5] -ceq 'common') { $cm = $a[1] }
+        if ($a[0] -ceq 'std' -and $a[5] -ceq 'global') { $cm = $a[1] }
         elseif ($a[0] -ceq 'std') { $fw.Add($a[1]) }
         elseif ($a[0] -ceq 'applies') { $app[$a[1]] = [regex]::new($a[2]) }
     }
@@ -696,14 +700,14 @@ function Invoke-StdPlan([string]$DiffPath, [string[]]$Ini, [string]$OutDir) {
     foreach ($f in $fw) { if ($cnt.ContainsKey($f)) { $rep.Add($f) } }
     $to = New-StdMap; $kind = @()
     if ($rep.Count -eq 0) {
-        if ($cm -eq '') { $out.Add("!error`t`tno enabled framework rule covers the files of this PR and no common rule is enabled"); return , $out.ToArray() }
+        if ($cm -eq '') { $out.Add("!error`t`tno enabled framework rule covers the files of this PR and no global rule is enabled"); return , $out.ToArray() }
         $rep.Add($cm)
-        for ($i = 0; $i -lt $paths.Count; $i++) { $to["$i`t$cm"] = 1; $kind += 'common' }
+        for ($i = 0; $i -lt $paths.Count; $i++) { $to["$i`t$cm"] = 1; $kind += 'global' }
     }
     else {
         for ($i = 0; $i -lt $paths.Count; $i++) {
             if ($own[$i] -ne '') { $to["$i`t$($own[$i])"] = 1; $kind += 'framework'; continue }
-            $kind += $(if ($cm -ne '') { 'common' } else { 'none' })
+            $kind += $(if ($cm -ne '') { 'global' } else { 'none' })
             if ($rep.Count -eq 1) { $to["$i`t$($rep[0])"] = 1; continue }
             $d = $paths[$i]
             do {

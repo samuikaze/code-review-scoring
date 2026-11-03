@@ -34,8 +34,8 @@ F|-|Minor|-
 problem: PR 沒有附上 API 異動說明。
 suggestion: 在 PR 描述補上異動的端點與欄位。
 source: backend-code-review#3
-# 通用標準的分級與框架標準不同時，CM- 檢查項第 3 欄寫框架分級中最接近的一級，建議以 from: 記錄通用標準的嚴重度
-F|CM-F1|Minor|README.md:3
+# 全域標準的分級與框架標準不同時，GL- 檢查項第 3 欄寫框架分級中最接近的一級，建議以 from: 記錄全域標準的嚴重度
+F|GL-F1|Minor|README.md:3
 problem: 文件中的指令缺少必要參數。
 suggestion: 補上 --root 參數。
 from: Low
@@ -62,7 +62,7 @@ R|未提供靜態分析報告，純格式問題不扣分。
 
 Each record is listed with its fields and, after "with", its continuation keys.
 
-- `F` finding: `F|check id|severity|location(s)|condition for a non-default severity`, with `problem` and `suggestion` (required), `assumption` (when a lower severity was used because information was unavailable), `source` (the code review comments the finding confirms, by their ids `<plugin>#<n>` from `prepared.txt`, several separated by `、`), `from` (`CM-` check items only, when the common standard has its own severity scale: the severity on that scale)
+- `F` finding: `F|check id|severity|location(s)|condition for a non-default severity`, with `problem` and `suggestion` (required), `assumption` (when a lower severity was used because information was unavailable), `source` (the code review comments the finding confirms, by their ids `<plugin>#<n>` from `prepared.txt`, several separated by `、`), `from` (`GL-` check items only, when the global standard has its own severity scale: the severity on that scale)
 - `U` upstream factor: `U|type|subtype|impact|severity|reference`, with `content` (required), `code` (locations), `ticket` (vendor ticket), `source` (as for `F`)
 - `X` rejected code review comment: `X|<plugin>#<n>|reason`
 - `M` mapped code review comment: `M|<plugin>#<n>|severity`
@@ -75,7 +75,7 @@ Each record is listed with its fields and, after "with", its continuation keys.
 ## Rules
 
 - Severity: a severity code of the scoring standard's scale, listed in the `- severity scale` lines of the `prepared.txt` summary (by default `Critical`, `Major`, `Minor` and `Nit`). Every `F` and `U` record is deducted, the lowest severity included.
-- Check id: a check item of the scoring standard (`A1`; its first letter is the dimension), a check item of the common standard for `[common]` files (`CM-A1`; the letter after `CM-` is the dimension), or `-`. The examples below use check ids of a Java standard.
+- Check id: a check item of the scoring standard (`A1`; its first letter is the dimension), a check item of the global standard for `[global]` files (`GL-A1`; the letter after `GL-` is the dimension), or `-`. The examples below use check ids of a Java standard.
 - Check id `-`: no check item of the standard covers the problem. Choose the severity by the meanings of the scale (for a code review comment, the severity of its `M` line); it is deducted from dimension G (other and upstream factors). Use `-` only when no check item applies: when one does, record it under that check item, even if its dimension has no points left. Only these records may use location `-` for a problem of the whole PR.
 - Location: `full/path/from/diff:line` or `path:start-end`, using new-file line numbers. `U` records may list several comma-separated locations in `code:`.
 - How `F` lines are written depends on `[scoring] merge` of the standard (its `rule.ini`, or `defaults.ini` of the rules project), shown in the `- deductions:` line of the `prepared.txt` summary:
@@ -85,6 +85,6 @@ Each record is listed with its fields and, after "with", its continuation keys.
 - Every comment of a `mapped` code review plugin listed in `prepared.txt` must appear exactly once in one of two ways: in `source:` of `F` or `U` records (one comment may confirm several records), or in an `X` line. Comments of `advisory` plugins appear in neither.
 - Every code review comment listed in `prepared.txt` (of `mapped` and `advisory` plugins) needs exactly one `M` line: the severity of the standard's scale whose meaning is closest to the comment. The plugin's own severity is on its own scale; the report counts and sorts the comments by the `M` severity.
 - Column 5 is required whenever the severity is neither the default nor the lowest severity of the scale; it must state the condition from the check item that was met.
-- `from:`: when the `prepared.txt` summary also lists a `- severity scale of the common standard`, the common standard uses another scale. Judge `CM-` check items on that scale (the default, its lowest severity, or an adjustment whose condition is in column 5), and write the closest severity of the standard's scale in column 3. Column 3 can be any severity of the standard's scale. Writing that severity of the common scale in `from:` is recommended but optional; when present, the script checks it against the common document. Without that line, `CM-` items use the standard's scale and take no `from:`.
+- `from:`: when the `prepared.txt` summary also lists a `- severity scale of the global standard`, the global standard uses another scale. Judge `GL-` check items on that scale (the default, its lowest severity, or an adjustment whose condition is in column 5), and write the closest severity of the standard's scale in column 3. Column 3 can be any severity of the standard's scale. Writing that severity of the global scale in `from:` is recommended but optional; when present, the script checks it against the global document. Without that line, `GL-` items use the standard's scale and take no `from:`.
 - `U` type is `spec-gap`, `third-party` or `ownership-change`. Impact is `high`, `medium` or `low` for `spec-gap`, and `-` for the others. Subtypes are listed in [upstream.md](upstream.md). Severity follows the severity meaning; the record is deducted from dimension G.
 - Do not put `|` inside field text.
