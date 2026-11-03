@@ -16,6 +16,7 @@ A1	test	-	[:=]x	-	-	not a class
 A1	test	-	\d+	-	-	digit
 A1	test	-	(unclosed	-	-	compile error
 A99	test	-	x	-	-	unknown code
+G2	test	-	x	-	-	merged into F
 lower	test	-	x	-	-	bad tag
 API	ghost	q	x	-	-	bad scope and flags
 API	any	-	-	-	-	

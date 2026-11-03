@@ -30,14 +30,14 @@ step 1: success
 exit=0
 --- request.md
 ## Scoring standards
-- springboot-3: springboot-3 v0.2 sha256:28801aba8ae9d5bb7d08cf4f8472cb5ca628efb871204f41bd9debfe6ac2b948 WORK/std/good-v2.md
+- springboot-3: springboot-3 v0.2 sha256:7a33b9f46d0553c46fb81af8296ac99ec9aa15faf082612969834b07b73f14f6 WORK/std/good-v2.md
   - rule.ini: sha256:f27c7c5f88da218b91ebcb49f3c20f8675ce90a4acc58e104f9c8122a17c5144 WORK/rules/springboot-3/rule.ini
-  - common standard: common v0.1 sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742 WORK/std/good-common.md
+  - common standard: common v0.1 sha256:07176e9a2491c8c275cb16a90fefab9b96757be0850eb654a8c7751ef2a3156f WORK/std/good-common.md
   - common rule.ini: sha256:bf961643219d55ad71567e5537c2beded15e8712fc16a9ab8469754ca9581e47 WORK/rules/common/rule.ini
   - defaults.ini: sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64 WORK/rules/defaults.ini
-- angular: angular v0.2 sha256:0465ef8820c3d07d2303488e209e50b40dd0fce5b0b295ced065091d62d72632 WORK/std/angular.md
+- angular: angular v0.2 sha256:5f4f9b9d82eabd280250d8e43ab175b0413c78d00432ed690b1a1f39139ba9b3 WORK/std/angular.md
   - rule.ini: sha256:668f557e4fbc4aefb8be288d347d17f56416944728218b6c7f2ddb814657d2fc WORK/rules/angular/rule.ini
-  - common standard: common v0.1 sha256:a21c2b0b8fbb31228c06cc6a4aae0fdb1081e84a2521c911675531c8b9378742 WORK/std/good-common.md
+  - common standard: common v0.1 sha256:07176e9a2491c8c275cb16a90fefab9b96757be0850eb654a8c7751ef2a3156f WORK/std/good-common.md
   - common rule.ini: sha256:bf961643219d55ad71567e5537c2beded15e8712fc16a9ab8469754ca9581e47 WORK/rules/common/rule.ini
   - defaults.ini: sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64 WORK/rules/defaults.ini
 ### prompt --step 3

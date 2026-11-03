@@ -1,0 +1,8 @@
+F|-|Critical|-
+problem: x
+suggestion: y
+F|-|Major|-
+problem: x
+suggestion: y
+U|spec-gap|missing|high|Major|規格書 v1
+content: x

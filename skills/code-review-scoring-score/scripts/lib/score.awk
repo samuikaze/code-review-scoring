@@ -158,7 +158,7 @@ BEGIN {
     if (t == "F") {
         id = $2; sev = $3; locs = $4; reason = $5
         rec = "skip"; recid = id; recline = NR; recreason = reason
-        # Check id "-": no check item of the standard covers the problem; deducted from the total by its severity.
+        # Check id "-": no check item of the standard covers the problem; deducted from dimension G by its severity.
         other = (id == "-")
         if (!other && !(id in def)) { err("unknown check id " id " (use - when no check covers the problem)"); next }
         if (!(sev in pts)) { err(id ": severity \"" sev "\" is not one of the scale of the standard (" sevlist ")"); next }
@@ -255,9 +255,13 @@ END {
         while (j >= 1 && after(forder[j], v)) { forder[j + 1] = forder[j]; j-- }
         forder[j + 1] = v
     }
+    # Records without a check id and upstream factors share dimension G. The severities found cap the grade.
+    othded = 0; upded = 0
+    for (i = 1; i <= nf_; i++) { if (fid[i] == "-") othded += pts[fsev[i]]; used_sev[fsev[i]] = 1 }
+    for (i = 1; i <= nu; i++) { upded += pts[usev[i]]; used_sev[usev[i]] = 1 }
     total = 0
     for (k = 1; k <= 7; k++) {
-        d = dims[k]; ded = 0
+        d = dims[k]; ded = (d == "G") ? othded + upded : 0
         for (i = 1; i <= nf_; i++) {
             x = forder[i]
             if (dimof(fid[x]) != d) continue
@@ -266,11 +270,6 @@ END {
         sc[d] = dmax[d] - ded; if (sc[d] < 0) sc[d] = 0
         total += sc[d]
     }
-    # Records without a check id and upstream factors are deducted from the total. The severities found cap the grade.
-    othded = 0; upded = 0
-    for (i = 1; i <= nf_; i++) { if (fid[i] == "-") othded += pts[fsev[i]]; used_sev[fsev[i]] = 1 }
-    for (i = 1; i <= nu; i++) { upded += pts[usev[i]]; used_sev[usev[i]] = 1 }
-    total -= othded + upded; if (total < 0) total = 0
     grade = gcode[ngr]
     for (i = 1; i <= ngr; i++) if (total >= gmin[gcode[i]]) { grade = gcode[i]; break }
     # The strictest cap (the lowest grade) of the severities found; the most severe of them names it.

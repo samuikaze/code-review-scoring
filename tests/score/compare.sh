@@ -18,6 +18,7 @@ cases=(
   "--findings common-scaled.txt --config settings.ini --standard scaled"
   "--findings scaled-bad.txt --config settings.ini --standard scaled"
   "--findings capped.txt --config settings.ini --standard scaled"
+  "--findings overflow.txt --config settings.ini --standard legacy"
   "--findings findings.txt --config settings.ini"
   "--findings findings.txt --config settings.ini --standard off"
   "--findings findings.txt --config settings.ini --standard nope"

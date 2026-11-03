@@ -13,8 +13,8 @@ dim.B	Security
 dim.C	Test quality
 dim.D	Architecture and design
 dim.E	Performance and resource use
-dim.F	Readability
-dim.G	Maintainability
+dim.F	Readability and maintainability
+dim.G	Other and upstream factors
 field.problem	Problem
 field.suggestion	Suggestion
 field.assumption	Assumption
@@ -24,8 +24,6 @@ field.code	Related code
 field.ticket	Vendor ticket
 check.none	Other
 loc.pr_wide	Whole PR
-row.other	Other (no matching check item)
-row.upstream	Upstream factors
 upstream.spec-gap	Suspected spec gap
 upstream.third-party	Suspected third-party issue
 upstream.ownership-change	Suspected change of ownership

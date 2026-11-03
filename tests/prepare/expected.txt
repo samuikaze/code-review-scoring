@@ -24,10 +24,10 @@
   - (excluded: marked as generated) src/main/java/com/ex/Mapper.java
 
 ## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
-- G6: existing migration file modified
+- F11: existing migration file modified
   - src/main/resources/db/migration/V1__init.sql (modified)
   - src/main/resources/db/migration/V2__old.sql (deleted)
-- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, F9 OpenAPI annotations
   - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
 - A1 (1 hits) possible Optional.get() without check
   - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
@@ -78,11 +78,11 @@
   - src/main/java/com/ex/order/OrderController.java:11  if (order.getQty() > 100) {
 - F5 (1 hits) System.out or commented-out code
   - src/main/java/com/ex/order/OrderController.java:12  System.out.println("big order");
-- G2 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
+- F7 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
   - src/main/java/com/ex/order/OrderService.java:26  rt.getForObject("http://pay.example.com/api", String.class);
-- G3 (1 hits) log message built by concatenation
+- F8 (1 hits) log message built by concatenation
   - src/main/java/com/ex/order/OrderController.java:15  log.info("created " + order.getId());
-- G5 (1 hits) TODO without issue number
+- F10 (1 hits) TODO without issue number
   - src/main/java/com/ex/order/OrderController.java:14  // TODO handle errors
 - CM-A1 (1 hits) unpinned base image
   - Dockerfile:1  FROM eclipse-temurin:latest
@@ -198,10 +198,10 @@ exit=0
 ### --input no-test.diff --mode scan --config settings.ini
 ## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
 - C1: main code changed but the PR touches no test file (meets the C1 Critical condition if the change is business logic)
-- G6: existing migration file modified
+- F11: existing migration file modified
   - src/main/resources/db/migration/V1__init.sql (modified)
   - src/main/resources/db/migration/V2__old.sql (deleted)
-- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, F9 OpenAPI annotations
   - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
 - A1 (1 hits) possible Optional.get() without check
   - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
@@ -244,11 +244,11 @@ exit=0
   - src/main/java/com/ex/order/OrderController.java:11  if (order.getQty() > 100) {
 - F5 (1 hits) System.out or commented-out code
   - src/main/java/com/ex/order/OrderController.java:12  System.out.println("big order");
-- G2 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
+- F7 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
   - src/main/java/com/ex/order/OrderService.java:26  rt.getForObject("http://pay.example.com/api", String.class);
-- G3 (1 hits) log message built by concatenation
+- F8 (1 hits) log message built by concatenation
   - src/main/java/com/ex/order/OrderController.java:15  log.info("created " + order.getId());
-- G5 (1 hits) TODO without issue number
+- F10 (1 hits) TODO without issue number
   - src/main/java/com/ex/order/OrderController.java:14  // TODO handle errors
 
 exit=0
@@ -326,10 +326,10 @@ exit=0
 exit=0
 ### --input pr.diff --mode scan --config none.ini --scan legacy.tsv
 ## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
-- G6: existing migration file modified
+- F11: existing migration file modified
   - src/main/resources/db/migration/V1__init.sql (modified)
   - src/main/resources/db/migration/V2__old.sql (deleted)
-- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
+- API (1 hits) Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, F9 OpenAPI annotations
   - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
 - A1 (1 hits) possible Optional.get() without check
   - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
@@ -381,11 +381,11 @@ exit=0
   - src/main/java/com/ex/order/OrderController.java:11  if (order.getQty() > 100) {
 - F5 (1 hits) System.out or commented-out code
   - src/main/java/com/ex/order/OrderController.java:12  System.out.println("big order");
-- G2 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
+- F7 (1 hits) @Value or hard-coded URL; check @ConfigurationProperties
   - src/main/java/com/ex/order/OrderService.java:26  rt.getForObject("http://pay.example.com/api", String.class);
-- G3 (1 hits) log message built by concatenation
+- F8 (1 hits) log message built by concatenation
   - src/main/java/com/ex/order/OrderController.java:15  log.info("created " + order.getId());
-- G5 (4 hits) TODO without issue number
+- F10 (4 hits) TODO without issue number
   - src/main/java/com/ex/order/OrderController.java:14  // TODO handle errors
   - README.md:3  TODO: document the API
   - .github/workflows/ci.yml:7  # TODO pin the action versions

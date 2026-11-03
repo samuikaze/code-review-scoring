@@ -516,23 +516,23 @@ longer has scoring settings:
   when it scores files on its own; `[points]`, `[grade:*]` and `cap` in its
   `rule.ini` are ignored with a lint warning.
 
-`templates/<language>/rule-template.ini` explains every section; its defaults
-are:
+`templates/<language>/rule-template.ini` explains every section. The default
+values live in `defaults.ini` of the rules project, not in this project.
 
-| Dimension | Default max | | Severity | Default deduction | Caps the grade at | | Grade | Default minimum total |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A Correctness | 25 | | Critical | 10 | B | | A | 95 |
-| B Security | 15 | | Major | 5 | | | B | 85 |
-| C Test quality | 15 | | Minor | 2 | | | C | 70 |
-| D Architecture and design | 15 | | Nit | 1 | | | D | 60 |
-| E Performance and resources | 10 | | | | | | F | 0 |
-| F Readability | 10 | | | | | | | |
-| G Maintainability | 10 | | | | | | | |
+`[points]` has seven keys that must total 100:
 
-In the default scale, problems that must be fixed use the classic SonarQube
-severities Critical, Major and Minor, and small style issues use Nit from the
-Google code review guide. A frontend rule could, for example, use a scale of
-its own with display names:
+| Key | Takes the deductions of |
+| --- | --- |
+| A | Correctness check items |
+| B | Security check items |
+| C | Test quality check items |
+| D | Architecture and design check items |
+| E | Performance and resource use check items |
+| F | Readability and maintainability check items |
+| G | Problems without a check item, and upstream factors |
+
+A frontend rule could, for example, use a severity scale of its own with
+display names:
 
 ```ini
 [severity:Critical]
@@ -571,11 +571,11 @@ meaning="A detail that does not affect the quality."
   grade must be 0, and `name` is the name shown in the report (optional). The
   grade is the first one whose minimum the total reaches; with several caps,
   the lowest applies.
-- The seven dimensions must total 100, and all values are integers; otherwise
+- A to G must total 100, and all values are integers; otherwise
   `standard lint` lists the errors and scoring stops.
-- Problems that match no A to G check item (check code `-`) and upstream
-  factors are deducted from the total by severity, not from any dimension;
-  dimension scores and the total are at least 0.
+- Problems that match no A to F check item (check code `-`) and upstream
+  factors share `G` and are deducted from it by severity. Every score is at
+  least 0, and the total is the sum of A to G.
 - Whether deductions are merged is decided by `merge` in `[scoring]`:
   - `merge="false"` (default): not merged; every occurrence is its own
     deduction, so a check code at three locations deducts three times.
@@ -705,7 +705,7 @@ mode="advisory"
 | `mode` | No | `mapped` (default): step 3 confirms the CR comments; every confirmed comment deducts points, and a rejected one needs a reason. `advisory`: the CR comments only appear in the report and do not affect the score |
 
 With a CR plugin in `mapped` mode, comments that match no check item of the
-scoring standard go to "other" and are deducted from the total by the
+scoring standard go to "other" and are deducted from `G` by the
 severity they were mapped to on the standard's scale. When no scoring standard covers the technology a plugin
 reviews, or you do not want the plugin to affect the score, use `advisory`.
 Each report lists only the comments on its standard's files.
@@ -789,10 +789,10 @@ Each report lists only the comments on its standard's files.
 - Every comment of a `mapped` plugin is checked against the code during the
   analysis, with one of two outcomes:
   - **Confirmed**: always deducts points, with `source: <comment id>` naming
-    the comment. A comment matching an A to G check item deducts under that
+    the comment. A comment matching an A to F check item deducts under that
     item with the scoring rules' default severity and adjustment conditions;
-    one matching no check item uses check code `-` and is deducted from the
-    total by its mapped severity; one whose root cause seems to be upstream
+    one matching no check item uses check code `-` and is deducted from `G`
+    by its mapped severity; one whose root cause seems to be upstream
     is recorded as an upstream factor and deducted.
   - **Rejected** (the plugin was wrong, it is outside this change, or it
     cannot be confirmed in the code): written as `X|<comment id>|reason`, and
@@ -844,9 +844,9 @@ The final report has two parts:
 - **Part 2, scoring results**: the score per dimension, the problem details,
   suggestions, upstream factors, highlights, scoring notes and the structured
   result.
-  - After the seven dimensions, the score table has two more rows for the
-    deductions of 「其他（未對應檢查項）」 (other, no matching check item) and
-    「上游因素」 (upstream factors).
+  - The last row of the score table is `G`, 「其他與上游因素」 (other and
+    upstream factors). Upstream factors are still listed in a section of their
+    own for human confirmation.
   - The problem details include deductions of the lowest severity;
     deductions confirmed from CR comments show the comment id they came from.
     Severities and grades are shown by their `name` (or code when unset).

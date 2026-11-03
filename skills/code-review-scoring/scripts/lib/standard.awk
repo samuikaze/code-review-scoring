@@ -34,11 +34,12 @@ BEGIN {
     nsev = split(sevs, t, ","); sevlist = ""
     for (i = 1; i <= nsev; i++) { sev[t[i]] = 1; sevlist = sevlist (i > 1 ? ", " : "") t[i] }
     lowest = (nsev > 0) ? t[nsev] : ""
-    split("A B C D E F G", LET, " ")
-    split("正確性 安全性 測試品質 架構與設計 效能與資源使用 可讀性 可維護性", t, " ")
-    for (i = 1; i <= 7; i++) canon[LET[i]] = t[i]
-    split("Correctness|Security|Test quality|Architecture and design|Performance and resource use|Readability|Maintainability", t, "|")
-    for (i = 1; i <= 7; i++) canonen[LET[i]] = t[i]
+    split("A B C D E F", LET, " ")
+    split("A B C D E F G", PTS, " ")
+    split("正確性 安全性 測試品質 架構與設計 效能與資源使用 可讀性與可維護性", t, " ")
+    for (i = 1; i <= 6; i++) canon[LET[i]] = t[i]
+    split("Correctness|Security|Test quality|Architecture and design|Performance and resource use|Readability and maintainability", t, "|")
+    for (i = 1; i <= 6; i++) canonen[LET[i]] = t[i]
     sec = "free"
     if (mode == "scan") {
         while ((getline l < codes) > 0) { split(l, a, "\t"); if (a[1] == "check") known[a[2]] = 1 }
@@ -104,7 +105,7 @@ function doc_line(l,   k, v, t, had) {
     }
     if (sec == "checks" && l ~ /^#/) {
         close_item()
-        if (l !~ /^###[ \t]+[A-G]\.[ \t]*[^ \t]/) { diag("error", FNR, "headings under ## 檢查項 (Check items) are ### X. name, with X from A to G"); curdim = "?"; return }
+        if (l !~ /^###[ \t]+[A-F]\.[ \t]*[^ \t]/) { diag("error", FNR, "headings under ## 檢查項 (Check items) are ### X. name, with X from A to F"); curdim = "?"; return }
         t = l; sub(/^###[ \t]+/, "", t); curdim = substr(t, 1, 1); t = trim(substr(t, 3))
         if (curdim in dimhl) diag("error", FNR, "dimension " curdim " has more than one heading")
         else { dimhl[curdim] = FNR; dimh[curdim] = t }
@@ -134,7 +135,7 @@ function dim_row(l,   n, c, code) {
     n = split(l, c, "|")
     if (n < 4) { diag("error", FNR, "a dimension row is | code | name | focus |"); return }
     code = trim(c[2])
-    if (code !~ /^[A-G]$/) { diag("error", FNR, "dimension codes are A to G, not \"" code "\""); return }
+    if (code !~ /^[A-F]$/) { diag("error", FNR, "dimension codes are A to F, not \"" code "\""); return }
     if (code in dimrow) { diag("error", FNR, "dimension " code " is listed more than once"); return }
     dimrow[code] = FNR; dimname[code] = trim(c[3]); dimfocus[code] = (n >= 5) ? trim(c[4]) : ""
 }
@@ -158,13 +159,13 @@ function check_item(text, line, dim,   n, f, i, code, ok, letter, a, na, s, adj)
     for (i = 1; i <= n; i++) f[i] = trim(f[i])
     code = f[1]; ok = 1
     if (role == "common") {
-        if (code !~ /^CM-[A-G][0-9]+$/) { diag("error", line, "check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not \"" code "\""); ok = 0 }
+        if (code !~ /^CM-[A-F][0-9]+$/) { diag("error", line, "check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not \"" code "\""); ok = 0 }
         else letter = substr(code, 4, 1)
     }
     else if (code ~ /^CM/) { diag("error", line, "the CM prefix is reserved for the common standard (role=\"common\"): " code); ok = 0 }
-    else if (code !~ /^[A-G][0-9]+$/) { diag("error", line, "check codes are the dimension letter and a number (e.g. A1), not \"" code "\""); ok = 0 }
+    else if (code !~ /^[A-F][0-9]+$/) { diag("error", line, "check codes are the dimension letter and a number (e.g. A1), not \"" code "\""); ok = 0 }
     else letter = substr(code, 1, 1)
-    if (ok && dim ~ /^[A-G]$/ && letter != dim) { diag("error", line, code " is under ### " dim "; the letter of a check code must match its dimension"); ok = 0 }
+    if (ok && dim ~ /^[A-F]$/ && letter != dim) { diag("error", line, code " is under ### " dim "; the letter of a check code must match its dimension"); ok = 0 }
     if (ok && (code in chkl)) { diag("error", line, code " is already defined on line " chkl[code]); ok = 0 }
     if (f[2] == "") { diag("error", line, code " has no content"); ok = 0 }
     if (!sevok(f[3])) { diag("error", line, sevmsg(f[3])); ok = 0 }
@@ -216,14 +217,14 @@ function doc_end(   i, x, per) {
         if (fm["version"] == "") diag("error", 1, "the front matter has no version")
     }
     if (!secl["dims"]) diag("error", "", "section ## 面向 (Dimensions) is missing")
-    else for (i = 1; i <= 7; i++) {
+    else for (i = 1; i <= 6; i++) {
         x = LET[i]
         if (!(x in dimrow)) diag("error", secl["dims"], "dimension " x " (" canon[x] ") is missing from the ## 面向 (Dimensions) table")
         else if (dimname[x] != canon[x] && dimname[x] != canonen[x]) diag("error", dimrow[x], "dimension " x " must be named " canon[x] " or " canonen[x] " (dimension codes and names cannot be changed)")
     }
     if (!secl["checks"]) diag("error", "", "section ## 檢查項 (Check items) is missing")
     else {
-        for (i = 1; i <= 7; i++) {
+        for (i = 1; i <= 6; i++) {
             x = LET[i]
             if (!(x in dimhl)) diag("warn", secl["checks"], "### " x ". " canon[x] " is missing (keep the heading and write 無 or None when it has no check item)")
             else {
@@ -236,11 +237,11 @@ function doc_end(   i, x, per) {
     for (i = 1; i <= ncref; i++) if (!(cref[i] in chkl)) diag("error", crefl[i], "the confirmation refers to " cref[i] ", which is not a check item")
 
     print "name\t" fm["name"]; print "version\t" fm["version"]
-    for (i = 1; i <= 7; i++) { x = LET[i]; if (x in dimrow) print "dim\t" x "\t" dimname[x] "\t" dimfocus[x] }
+    for (i = 1; i <= 6; i++) { x = LET[i]; if (x in dimrow) print "dim\t" x "\t" dimname[x] "\t" dimfocus[x] }
     for (i = 1; i <= nrec; i++) print rec[i]
     for (i = 1; i <= ncon; i++) print con[i]
     per = ""
-    for (i = 1; i <= 7; i++) per = per (i > 1 ? ", " : "") LET[i] " " (cnt[LET[i]] + 0)
+    for (i = 1; i <= 6; i++) per = per (i > 1 ? ", " : "") LET[i] " " (cnt[LET[i]] + 0)
     print "stats\t" (nchk + 0) "\t" per "\t" (nadj + 0) "\t" (ncon + 0)
 }
 
@@ -389,15 +390,15 @@ function set_read(file, id, kind,    i, j, s, k, v, c, ln, sum, x, all) {
             grp[id, "points"] = ln; sum = 0; all = 1
             for (j = 1; j <= nkey[id, s]; j++) {
                 k = keyn[id, s, j]
-                if (k !~ /^[A-G]$/) fdiag("error", file, ikl[id, s, k], "unknown dimension " k " in [points] (A to G)")
+                if (k !~ /^[A-G]$/) fdiag("error", file, ikl[id, s, k], "unknown key " k " in [points] (A to G)")
                 else if (ikv[id, s, k] !~ /^[0-9]+$/) { fdiag("error", file, ikl[id, s, k], k " must be a whole number, not \"" ikv[id, s, k] "\""); all = 0 }
             }
             for (j = 1; j <= 7; j++) {
-                x = LET[j]
-                if (!((id SUBSEP s SUBSEP x) in ikl)) { fdiag("error", file, ln, "[points] needs all seven dimensions; " x " is missing"); all = 0 }
+                x = PTS[j]
+                if (!((id SUBSEP s SUBSEP x) in ikl)) { fdiag("error", file, ln, "[points] needs A to G; " x " is missing"); all = 0 }
                 else { pv[id, x] = ikv[id, s, x] + 0; sum += pv[id, x] }
             }
-            if (all && sum != 100) fdiag("error", file, ln, "the seven dimensions of [points] must add up to 100, not " sum)
+            if (all && sum != 100) fdiag("error", file, ln, "A to G of [points] must add up to 100, not " sum)
         }
         else if (s ~ /^severity:/) {
             c = substr(s, 10)
@@ -528,7 +529,7 @@ function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, 
         print "from\t" s "\tpoints\t" shortof(ep)
         print "from\t" s "\tseverities\t" shortof(eff(id, "sev"))
         print "from\t" s "\tgrades\t" shortof(eg)
-        if ((src = ep) != "") for (j = 1; j <= 7; j++) print "points\t" s "\t" LET[j] "\t" pv[src, LET[j]] + 0
+        if ((src = ep) != "") for (j = 1; j <= 7; j++) print "points\t" s "\t" PTS[j] "\t" pv[src, PTS[j]] + 0
         src = eff(id, "scoring"); print "merge\t" s "\t" (src == "" ? "false" : mergev[src])
         if ((src = eff(id, "sev")) != "") for (j = 1; j <= ns[src]; j++) {
             c = sc[src, j]; x = scap[src, c]
@@ -584,7 +585,7 @@ function item(k, c,   s) {
 function diff_end(   i, j, c, x, f, nf, add, del, chg, d) {
     split("content severity adjustable condition", f, " ")
     if (ver["o"] != ver["n"]) print "version: " ver["o"] " -> " ver["n"]
-    for (i = 1; i <= 7; i++) { x = LET[i]; if (focus["o", x] != focus["n", x]) { print "~ dimension " x " focus: " focus["o", x] " -> " focus["n", x]; chg++ } }
+    for (i = 1; i <= 6; i++) { x = LET[i]; if (focus["o", x] != focus["n", x]) { print "~ dimension " x " focus: " focus["o", x] " -> " focus["n", x]; chg++ } }
     for (i = 1; i <= nid["n"]; i++) {
         c = ids["n", i]
         if (!has["o", c]) { print "+ " item("n", c); add++; continue }

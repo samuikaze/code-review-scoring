@@ -164,18 +164,16 @@ $blk = @{}
 $sb = New-Object System.Text.StringBuilder
 foreach ($d in $dims) {
     # Dimension of a check id: its first letter, or the letter after CM- for the common standard (CM-B1 is B).
-    $items = @($scored | Where-Object { $(if ($_.Id.StartsWith('CM-')) { $_.Id.Substring(3, 1) } else { $_.Id.Substring(0, 1) }) -ceq $d.Code } | ForEach-Object { "$($_.Id) $(Get-SevName $_.Sev) -$($_.Pts)" }) -join (L 'sep.list')
+    $items = @($scored | Where-Object { $(if ($_.Id.StartsWith('CM-')) { $_.Id.Substring(3, 1) } else { $_.Id.Substring(0, 1) }) -ceq $d.Code } | ForEach-Object { "$($_.Id) $(Get-SevName $_.Sev) -$($_.Pts)" })
+    # Dimension G: the records without a check id and the upstream factors.
+    if ($d.Code -ceq 'G') {
+        $items += @($scored | Where-Object { $_.Id -eq '-' } | ForEach-Object { "$(L 'check.none') $(Get-SevName $_.Sev) -$($_.Pts)" })
+        $items += @($ups | ForEach-Object { "$(L 'cr.upstream') $(Get-SevName $_.Sev) -$($_.Pts)" })
+    }
+    $items = @($items) -join (L 'sep.list')
     if (-not $items) { $items = L 'none' }
     [void]$sb.Append("| $($d.Code) $(L "dim.$($d.Code)") | $($d.Score)/$($d.Max) | $items |`n")
 }
-# Records without a check id and upstream factors are deducted from the total.
-$other = @($scored | Where-Object { $_.Id -eq '-' })
-$sum = 0; foreach ($x in $other) { $sum += [int]$x.Pts }
-$items = @($other | ForEach-Object { "$(Get-SevName $_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
-[void]$sb.Append("| $(L 'row.other') | $(if ($sum) { "-$sum" } else { 0 }) | $items |`n")
-$sum = 0; foreach ($u in $ups) { $sum += [int]$u.Pts }
-$items = @($ups | ForEach-Object { "$(Get-SevName $_.Sev) -$($_.Pts)" }) -join (L 'sep.list'); if (-not $items) { $items = L 'none' }
-[void]$sb.Append("| $(L 'row.upstream') | $(if ($sum) { "-$sum" } else { 0 }) | $items |`n")
 $blk['SCORE_ROWS'] = $sb.ToString()
 
 $sb = New-Object System.Text.StringBuilder; $i = 0

@@ -26,10 +26,10 @@ F|E2|Major|src/main/java/com/ex/order/OrderService.java:26|PR 描述說明 order
 problem: findAll() 一次載入整張 orders 資料表。
 suggestion: 改用 Pageable 分頁查詢。
 # 使用者表示無法提供資訊而採用較低嚴重度時，加上一行 assumption: …
-F|G5|Nit|src/main/java/com/ex/order/OrderService.java:24
+F|F10|Nit|src/main/java/com/ex/order/OrderService.java:24
 problem: TODO 沒有 issue 編號，但 PR 描述已說明後續處理方式。
 suggestion: 在 TODO 加上 issue 編號。
-# 沒有任何檢查項涵蓋的問題，檢查代碼寫 -，依嚴重度從總分扣；整個 PR 層級的問題位置寫 -
+# 沒有任何檢查項涵蓋的問題，檢查代碼寫 -，依嚴重度從 G（其他與上游因素）扣；整個 PR 層級的問題位置寫 -
 F|-|Minor|-
 problem: PR 沒有附上 API 異動說明。
 suggestion: 在 PR 描述補上異動的端點與欄位。
@@ -76,7 +76,7 @@ Each record is listed with its fields and, after "with", its continuation keys.
 
 - Severity: a severity code of the scoring standard's scale, listed in the `- severity scale` lines of the `prepared.txt` summary (by default `Critical`, `Major`, `Minor` and `Nit`). Every `F` and `U` record is deducted, the lowest severity included.
 - Check id: a check item of the scoring standard (`A1`; its first letter is the dimension), a check item of the common standard for `[common]` files (`CM-A1`; the letter after `CM-` is the dimension), or `-`. The examples below use check ids of a Java standard.
-- Check id `-`: no check item of the standard covers the problem. Choose the severity by the meanings of the scale (for a code review comment, the severity of its `M` line); it is deducted from the total instead of a dimension. Only these records may use location `-` for a problem of the whole PR.
+- Check id `-`: no check item of the standard covers the problem. Choose the severity by the meanings of the scale (for a code review comment, the severity of its `M` line); it is deducted from dimension G (other and upstream factors). Use `-` only when no check item applies: when one does, record it under that check item, even if its dimension has no points left. Only these records may use location `-` for a problem of the whole PR.
 - Location: `full/path/from/diff:line` or `path:start-end`, using new-file line numbers. `U` records may list several comma-separated locations in `code:`.
 - How `F` lines are written depends on `[scoring] merge` of the standard (its `rule.ini`, or `defaults.ini` of the rules project), shown in the `- deductions:` line of the `prepared.txt` summary:
   - `merge=false` (default): one `F` line per occurrence with exactly one location (a range only for one occurrence). The same check id may appear on several lines, one per location, and each is deducted. The same check id at the same location may appear only once.
@@ -86,5 +86,5 @@ Each record is listed with its fields and, after "with", its continuation keys.
 - Every code review comment listed in `prepared.txt` (of `mapped` and `advisory` plugins) needs exactly one `M` line: the severity of the standard's scale whose meaning is closest to the comment. The plugin's own severity is on its own scale; the report counts and sorts the comments by the `M` severity.
 - Column 5 is required whenever the severity is neither the default nor the lowest severity of the scale; it must state the condition from the check item that was met.
 - `from:`: when the `prepared.txt` summary also lists a `- severity scale of the common standard`, the common standard uses another scale. Judge `CM-` check items on that scale (the default, its lowest severity, or an adjustment whose condition is in column 5), and write the closest severity of the standard's scale in column 3. Column 3 can be any severity of the standard's scale. Writing that severity of the common scale in `from:` is recommended but optional; when present, the script checks it against the common document. Without that line, `CM-` items use the standard's scale and take no `from:`.
-- `U` type is `spec-gap`, `third-party` or `ownership-change`. Impact is `high`, `medium` or `low` for `spec-gap`, and `-` for the others. Subtypes are listed in [upstream.md](upstream.md). Severity follows the severity meaning; the record is deducted from the total.
+- `U` type is `spec-gap`, `third-party` or `ownership-change`. Impact is `high`, `medium` or `low` for `spec-gap`, and `-` for the others. Subtypes are listed in [upstream.md](upstream.md). Severity follows the severity meaning; the record is deducted from dimension G.
 - Do not put `|` inside field text.

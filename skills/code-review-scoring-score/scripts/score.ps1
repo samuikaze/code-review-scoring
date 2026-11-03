@@ -248,7 +248,7 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
         'F' {
             $id = $c[1]; $sev = $c[2]; $locs = $c[3]; $reason = $c[4]
             $rec = 'skip'; $recId = $id; $recLine = $no; $recReason = $reason
-            # Check id "-": no check item of the standard covers the problem; deducted from the total by its severity.
+            # Check id "-": no check item of the standard covers the problem; deducted from dimension G by its severity.
             $other = ($id -eq '-')
             if (-not $other -and -not $def.ContainsKey($id)) { Add-Error $no "unknown check id $id (use - when no check covers the problem)"; break }
             if (-not $pts.ContainsKey($sev)) { Add-Error $no "${id}: severity `"$sev`" is not one of the scale of the standard ($sevList)"; break }
@@ -362,18 +362,17 @@ function Join-JsonArray($items) {
 
 # Sorted by severity, then check id with records without one (-) last; occurrences of one id keep their order in findings.txt
 $sorted = @($found | Sort-Object @{ Expression = { $sevs.IndexOf($_.Severity) } }, @{ Expression = { [int]($_.Id -eq '-') } }, @{ Expression = { $_.Id } }, @{ Expression = { $_.Seq } })
+# Records without a check id and upstream factors share dimension G. The severities found cap the grade.
+$othDed = 0; foreach ($x in $sorted) { if ($x.Id -eq '-') { $othDed += $pts[$x.Severity] } }
+$upDed = 0; foreach ($u in $upstream) { $upDed += $pts[$u.Severity] }
+$usedSev = New-Map; foreach ($x in $found) { $usedSev[$x.Severity] = 1 }; foreach ($u in $upstream) { $usedSev[$u.Severity] = 1 }
 $scores = [ordered]@{}; $total = 0
 foreach ($d in $dimMax.Keys) {
-    $ded = 0
+    $ded = if ($d -ceq 'G') { $othDed + $upDed } else { 0 }
     foreach ($x in $sorted) { if ((Get-Dimension $x.Id) -ceq $d) { $ded += $pts[$x.Severity] } }
     $scores[$d] = [Math]::Max(0, $dimMax[$d] - $ded)
     $total += $scores[$d]
 }
-# Records without a check id and upstream factors are deducted from the total. The severities found cap the grade.
-$othDed = 0; foreach ($x in $sorted) { if ($x.Id -eq '-') { $othDed += $pts[$x.Severity] } }
-$upDed = 0; foreach ($u in $upstream) { $upDed += $pts[$u.Severity] }
-$usedSev = New-Map; foreach ($x in $found) { $usedSev[$x.Severity] = 1 }; foreach ($u in $upstream) { $usedSev[$u.Severity] = 1 }
-$total = [Math]::Max(0, $total - $othDed - $upDed)
 $grade = $grades[$grades.Count - 1]
 foreach ($g in $grades) { if ($total -ge $gradeMin[$g]) { $grade = $g; break } }
 # The strictest cap (the lowest grade) of the severities found; the most severe of them names it.

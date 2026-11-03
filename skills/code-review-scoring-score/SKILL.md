@@ -46,24 +46,14 @@ The check ids, their severities, the severity scale, the points and the grades c
 
 The points, the severity scale (codes, deductions, grade caps), the grades and whether deductions are merged are settings of the rules project: the `[points]`, `[severity:CODE]`, `[grade:CODE]` and `[scoring]` sections of the standard's `rule.ini`, or of `defaults.ini` of the rules project for the groups that `rule.ini` does not set (see `templates/<language>/rule-template.ini`). `standard lint` checks them, and the script refuses a standard whose settings cannot be read with exit 2. Never change them on your own; they are the user's choice.
 
-Defaults of the template (`rule-template.ini`):
-
-| Dimension | Points | | Severity | Deduction | Caps the grade at | | Grade | Lowest total |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A Correctness | 25 | | Critical | 10 | B | | A | 95 |
-| B Security | 15 | | Major | 5 | | | B | 85 |
-| C Test quality | 15 | | Minor | 2 | | | C | 70 |
-| D Architecture and design | 15 | | Nit | 1 | | | D | 60 |
-| E Performance and resource use | 10 | | | | | | F | 0 |
-| F Readability | 10 | | | | | | | |
-| G Maintainability | 10 | | | | | | | |
+`[points]` has seven keys that must total 100: A Correctness, B Security, C Test quality, D Architecture and design, E Performance and resource use, F Readability and maintainability (the check items of these six dimensions), and G Other and upstream factors. The default values are in `defaults.ini` of the rules project.
 
 - `[scoring] merge` decides how a check id found in several places is deducted:
   - `false` (default): every `F` record is one occurrence with one location and is deducted on its own, so a check id found in three places is deducted three times. A record with several locations, or the same check id twice at the same location, fails validation.
   - `true`: one `F` record per check id with all its locations, deducted once. The same check id in two records fails validation.
 - Every `F` and `U` record is deducted, the lowest severity of the scale included. A severity outside the scale fails validation.
 - A check id belongs to the dimension of its first letter; ids of the common standard to the letter after `CM-` (`CM-B1` is B).
-- Dimension score = points − sum of its deductions, never below 0. Total = sum of the seven dimension scores − deductions of `F` records without a check id (`-`) − deductions of suspected upstream factors (`U`), never below 0.
+- Dimension score = points − sum of its deductions, never below 0. `F` records without a check id (`-`) and suspected upstream factors (`U`) are deducted from G. Total = sum of the scores of A to G, so the rows of the score table always add up to the total.
 - Grade: the first grade, from the highest, whose lowest total the total reaches.
 - A deduction whose severity has a cap limits the grade to that grade at most; with several, the lowest cap applies. `score.tsv` (`cap` record) and `score.json` (`cap`) name the severity and the grade.
 - Allowed severities per check come from the standard document: the default, the adjustment written for the check item, or the lowest severity of the scale. Records without a check id and `U` records take any severity of the scale.

@@ -1,6 +1,6 @@
 ---
 name: code-review-scoring-code-analysis
-description: Step 3 of code-review-scoring, usable on its own. Reviews the changed lines of a PR against the check items (A–G) of the scoring standards of the rules project ([rules] root of configs/settings.ini), maps code review comments to the standard's severity scale, turns confirmed code review plugin comments into findings, separates suspected upstream causes, and writes findings.txt. Use when dispatched by code-review-scoring, or when the user says 「分析 PR 程式碼」、「審查程式碼」、「Code Review 這個 PR」、「找出 PR 的問題」、「檢查 PR 程式碼品質」.
+description: Step 3 of code-review-scoring, usable on its own. Reviews the changed lines of a PR against the check items (A–F) of the scoring standards of the rules project ([rules] root of configs/settings.ini), maps code review comments to the standard's severity scale, turns confirmed code review plugin comments into findings, separates suspected upstream causes, and writes findings.txt. Use when dispatched by code-review-scoring, or when the user says 「分析 PR 程式碼」、「審查程式碼」、「Code Review 這個 PR」、「找出 PR 的問題」、「檢查 PR 程式碼品質」.
 compatibility: Requires bash or zsh with awk and git, or Windows PowerShell 5.1 / PowerShell 7+.
 metadata:
   workflow-step: "3/5"
@@ -80,7 +80,7 @@ Step 2 ran the code review plugins listed in `tmp/step2/plan.tsv` (columns: plug
 - **Every problem is deducted.** The lowest severity of the scale is deducted too. A problem that no check covers is recorded with check id `-` and the severity that matches its meaning; never move a problem to `N` or `R` lines to avoid a deduction.
 - **Evidence required.** Every deduction must point to a file and line in the diff (only check id `-` may use `-` for a problem of the whole PR). "Might be a problem" that the diff cannot confirm gets the lowest severity of the scale.
 - **No double counting with static analysis.** If a static analysis report was provided, issues it already lists are not deducted. Without a report, pure formatting (indentation, whitespace, import order) is not deducted.
-- **Third-party workaround exemption.** Code that works around a third-party core-system problem is exempt from F and G checks when it has a comment explaining why **and** the vendor ticket number. Missing either one: deduct as usual.
+- **Third-party workaround exemption.** Code that works around a third-party core-system problem is exempt from F checks when it has a comment explaining why **and** the vendor ticket number. Missing either one: deduct as usual.
 - **Severity scale.** The `- severity scale` lines of the `prepared.txt` summary list the severities of the standard from the most severe, with their points, the grade they cap and their meaning. Judge conditions and problems without a check id by these meanings, and write only these codes.
 - **Common items on another scale.** When the summary also lists a `- severity scale of the common standard`, the `CM-` check items are written on that scale: choose their severity there with the rules above and write the closest severity of the standard's scale in column 3; writing the severity on the common scale in `from:` is recommended (optional) (see [references/findings-format.md](references/findings-format.md)).
 

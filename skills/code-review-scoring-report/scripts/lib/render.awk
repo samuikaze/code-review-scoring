@@ -267,15 +267,13 @@ BEGIN {
     for (k = 1; k <= nd; k++) {
         items = ""
         for (i = 1; i <= nf; i++) if (dimof(sid[i]) == dcode[k]) items = items (items == "" ? "" : L("sep.list")) sid[i] " " sevname(ssev[i]) " -" spts[i]
+        # Dimension G: the records without a check id and the upstream factors.
+        if (dcode[k] == "G") {
+            for (i = 1; i <= nf; i++) if (sid[i] == "-") items = items (items == "" ? "" : L("sep.list")) L("check.none") " " sevname(ssev[i]) " -" spts[i]
+            for (i = 1; i <= nus; i++) items = items (items == "" ? "" : L("sep.list")) L("cr.upstream") " " sevname(usev[i]) " -" upts[i]
+        }
         blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " dcode[k] " " L("dim." dcode[k]) " | " dsc[k] "/" dmx[k] " | " (items == "" ? L("none") : items) " |\n"
     }
-    # Records without a check id and upstream factors are deducted from the total.
-    items = ""; sum = 0
-    for (i = 1; i <= nf; i++) if (sid[i] == "-") { items = items (items == "" ? "" : L("sep.list")) sevname(ssev[i]) " -" spts[i]; sum += spts[i] }
-    blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " L("row.other") " | " (sum ? "-" sum : 0) " | " (items == "" ? L("none") : items) " |\n"
-    items = ""; sum = 0
-    for (i = 1; i <= nu; i++) { items = items (items == "" ? "" : L("sep.list")) sevname(usev[i]) " -" upts[i]; sum += upts[i] }
-    blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " L("row.upstream") " | " (sum ? "-" sum : 0) " | " (items == "" ? L("none") : items) " |\n"
     b = L("sep.bracket"); c = L("sep.colon"); out = ""
     for (i = 1; i <= nf; i++) {
         key = "F:" sseq[i]

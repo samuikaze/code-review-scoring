@@ -4,9 +4,10 @@
 # Saved as UTF-8 with BOM so Windows PowerShell 5.1 reads the Chinese text correctly. Keep the BOM when editing.
 
 $script:FW = [string][char]0xFF5C
-$script:Let = @('A', 'B', 'C', 'D', 'E', 'F', 'G')
-$script:Canon = @{ A = '正確性'; B = '安全性'; C = '測試品質'; D = '架構與設計'; E = '效能與資源使用'; F = '可讀性'; G = '可維護性' }
-$script:CanonEn = @{ A = 'Correctness'; B = 'Security'; C = 'Test quality'; D = 'Architecture and design'; E = 'Performance and resource use'; F = 'Readability'; G = 'Maintainability' }
+$script:Let = @('A', 'B', 'C', 'D', 'E', 'F')
+$script:PointKeys = @('A', 'B', 'C', 'D', 'E', 'F', 'G')
+$script:Canon = @{ A = '正確性'; B = '安全性'; C = '測試品質'; D = '架構與設計'; E = '效能與資源使用'; F = '可讀性與可維護性' }
+$script:CanonEn = @{ A = 'Correctness'; B = 'Security'; C = 'Test quality'; D = 'Architecture and design'; E = 'Performance and resource use'; F = 'Readability and maintainability' }
 
 function New-StdMap { return [hashtable]::new([StringComparer]::Ordinal) }
 function Get-StdTrim([string]$s) { return $s.Trim([char[]]@(' ', "`t")) }
@@ -76,7 +77,7 @@ function Invoke-StdDoc([string]$Path, [string]$Role, [string[]]$Sevs) {
         $c = $rl.Split('|')
         if ($c.Count -lt 4) { & $diag 'error' $FNR 'a dimension row is | code | name | focus |'; return }
         $code = Get-StdTrim $c[1]
-        if ($code -cnotmatch '^[A-G]$') { & $diag 'error' $FNR "dimension codes are A to G, not `"$code`""; return }
+        if ($code -cnotmatch '^[A-F]$') { & $diag 'error' $FNR "dimension codes are A to F, not `"$code`""; return }
         if ($dimrow.ContainsKey($code)) { & $diag 'error' $FNR "dimension $code is listed more than once"; return }
         $dimrow[$code] = $FNR; $dimname[$code] = Get-StdTrim $c[2]
         $dimfocus[$code] = if ($c.Count -ge 5) { Get-StdTrim $c[3] } else { '' }
@@ -100,13 +101,13 @@ function Invoke-StdDoc([string]$Path, [string]$Role, [string[]]$Sevs) {
         for ($i = 0; $i -lt $n; $i++) { $f[$i] = Get-StdTrim $f[$i] }
         $code = $f[0]; $ok = $true; $letter = ''
         if ($Role -ceq 'common') {
-            if ($code -cnotmatch '^CM-[A-G][0-9]+$') { & $diag 'error' $line "check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not `"$code`""; $ok = $false }
+            if ($code -cnotmatch '^CM-[A-F][0-9]+$') { & $diag 'error' $line "check codes of the common standard are CM- plus the dimension letter and a number (e.g. CM-A1), not `"$code`""; $ok = $false }
             else { $letter = $code.Substring(3, 1) }
         }
         elseif ($code -cmatch '^CM') { & $diag 'error' $line "the CM prefix is reserved for the common standard (role=`"common`"): $code"; $ok = $false }
-        elseif ($code -cnotmatch '^[A-G][0-9]+$') { & $diag 'error' $line "check codes are the dimension letter and a number (e.g. A1), not `"$code`""; $ok = $false }
+        elseif ($code -cnotmatch '^[A-F][0-9]+$') { & $diag 'error' $line "check codes are the dimension letter and a number (e.g. A1), not `"$code`""; $ok = $false }
         else { $letter = $code.Substring(0, 1) }
-        if ($ok -and $dim -cmatch '^[A-G]$' -and $letter -cne $dim) { & $diag 'error' $line "$code is under ### $dim; the letter of a check code must match its dimension"; $ok = $false }
+        if ($ok -and $dim -cmatch '^[A-F]$' -and $letter -cne $dim) { & $diag 'error' $line "$code is under ### $dim; the letter of a check code must match its dimension"; $ok = $false }
         if ($ok -and $chkl.ContainsKey($code)) { & $diag 'error' $line "$code is already defined on line $($chkl[$code])"; $ok = $false }
         if ($f[1] -eq '') { & $diag 'error' $line "$code has no content"; $ok = $false }
         if (-not (& $sevok $f[2])) { & $diag 'error' $line (& $sevmsg $f[2]); $ok = $false }
@@ -187,7 +188,7 @@ function Invoke-StdDoc([string]$Path, [string]$Role, [string[]]$Sevs) {
         }
         if ($sec -eq 'checks' -and $l -cmatch '^#') {
             . $sbClose
-            if ($l -cnotmatch '^###[ \t]+[A-G]\.[ \t]*[^ \t]') { & $diag 'error' $FNR 'headings under ## 檢查項 (Check items) are ### X. name, with X from A to G'; $curdim = '?'; continue }
+            if ($l -cnotmatch '^###[ \t]+[A-F]\.[ \t]*[^ \t]') { & $diag 'error' $FNR 'headings under ## 檢查項 (Check items) are ### X. name, with X from A to F'; $curdim = '?'; continue }
             $t = $l -creplace '^###[ \t]+', ''; $curdim = $t.Substring(0, 1); $t = Get-StdTrim $t.Substring(2)
             if ($dimhl.ContainsKey($curdim)) { & $diag 'error' $FNR "dimension $curdim has more than one heading" }
             else { $dimhl[$curdim] = $FNR; $dimh[$curdim] = $t }
@@ -370,7 +371,7 @@ function Read-StdIni($out, [string]$File) {
             continue
         }
         if ($l -cnotmatch '^[A-Za-z0-9_.]+[ \t]*=') { Add-StdDiag $out 'error' $File $ln 'lines are [section], key="value" or ; comments'; continue }
-        if ($s -eq '') { Add-StdDiag $out 'error' $File $ln 'key outside a [section]'; continue }
+        if ($s.Length -eq 0) { Add-StdDiag $out 'error' $File $ln 'key outside a [section]'; continue }
         if ($s -eq $dup) { continue }
         $k = Get-StdTrim $l.Substring(0, $l.IndexOf('=', [StringComparison]::Ordinal)); $v = Get-StdUnquote (Get-StdTrim $l.Substring($l.IndexOf('=', [StringComparison]::Ordinal) + 1))
         # meaning of a [severity:CODE] section may be repeated: the lines are joined with newlines.
@@ -414,14 +415,14 @@ function Read-StdSet($out, $ini, [string]$Kind) {
         elseif ($s -ceq 'points') {
             $ini.grp['points'] = $ln; $sum = 0; $all = $true
             foreach ($k in $ini.keys[$s]) {
-                if ($k -cnotmatch '^[A-G]$') { Add-StdDiag $out 'error' $file $ini.kl["$s`t$k"] "unknown dimension $k in [points] (A to G)" }
+                if ($k -cnotmatch '^[A-G]$') { Add-StdDiag $out 'error' $file $ini.kl["$s`t$k"] "unknown key $k in [points] (A to G)" }
                 elseif ((Get-StdIniValue $ini $s $k) -cnotmatch '^[0-9]+$') { Add-StdDiag $out 'error' $file $ini.kl["$s`t$k"] "$k must be a whole number, not `"$(Get-StdIniValue $ini $s $k)`""; $all = $false }
             }
-            foreach ($x in $Let) {
-                if (-not $ini.kl.ContainsKey("$s`t$x")) { Add-StdDiag $out 'error' $file $ln "[points] needs all seven dimensions; $x is missing"; $all = $false }
+            foreach ($x in $PointKeys) {
+                if (-not $ini.kl.ContainsKey("$s`t$x")) { Add-StdDiag $out 'error' $file $ln "[points] needs A to G; $x is missing"; $all = $false }
                 else { $ini.pv[$x] = Get-StdNumber (Get-StdIniValue $ini $s $x); $sum += $ini.pv[$x] }
             }
-            if ($all -and $sum -ne 100) { Add-StdDiag $out 'error' $file $ln "the seven dimensions of [points] must add up to 100, not $sum" }
+            if ($all -and $sum -ne 100) { Add-StdDiag $out 'error' $file $ln "A to G of [points] must add up to 100, not $sum" }
         }
         elseif ($s -cmatch '^severity:') {
             $c = $s.Substring(9)
@@ -566,7 +567,7 @@ function Invoke-StdRules([string]$Rules, [string]$RRoot, [string]$Defaults) {
         $out.Add("from`t$s`tpoints`t$(Get-StdShort $ep $def)")
         $out.Add("from`t$s`tseverities`t$(Get-StdShort $es $def)")
         $out.Add("from`t$s`tgrades`t$(Get-StdShort $eg $def)")
-        if ($null -ne $ep) { foreach ($x in $Let) { $out.Add("points`t$s`t$x`t$([int]$ep.pv[$x])") } }
+        if ($null -ne $ep) { foreach ($x in $PointKeys) { $out.Add("points`t$s`t$x`t$([int]$ep.pv[$x])") } }
         $em = Get-StdEff $rule $def 'scoring'
         $out.Add("merge`t$s`t$(if ($null -eq $em) { 'false' } else { $em.merge })")
         if ($null -ne $es) {
