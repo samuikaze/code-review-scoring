@@ -14,7 +14,7 @@ standard	legacy	v1.0	sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a2
 global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0
 ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	5	25
 dim	B	14	15
 dim	C	3	15
@@ -51,7 +51,7 @@ gradedef	F	F	0
   "cap": null,
   "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a215cb11f7af27", "ruleIniHash": "sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0" },
   "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Critical", "name": "Critical", "points": 10, "cap": "B" },
     { "code": "Major", "name": "Major", "points": 5, "cap": null },
@@ -109,7 +109,7 @@ standard	points	v1.0	sha256:263c6ee8aa44221c12be5872bdb5b2e07d381d7cdd059f7011e3
 global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:78e5b34a585350d23f00ad8c05ea7dd7efced3c99a0a2bc0d4f1431398a5e5c6
 ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	5	25
 dim	B	14	15
 dim	C	8	20
@@ -146,7 +146,7 @@ gradedef	F	F	0
   "cap": null,
   "standard": { "name": "points", "version": "v1.0", "hash": "sha256:263c6ee8aa44221c12be5872bdb5b2e07d381d7cdd059f7011e332292b660fe2", "ruleIniHash": "sha256:78e5b34a585350d23f00ad8c05ea7dd7efced3c99a0a2bc0d4f1431398a5e5c6" },
   "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Critical", "name": "Critical", "points": 10, "cap": "B" },
     { "code": "Major", "name": "Major", "points": 5, "cap": null },
@@ -211,7 +211,7 @@ standard	legacy	v1.0	sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a2
 global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0
 ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	15	25
 dim	B	5	15
 dim	C	15	15
@@ -239,7 +239,7 @@ gradedef	F	F	0
   "cap": null,
   "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a215cb11f7af27", "ruleIniHash": "sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0" },
   "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Critical", "name": "Critical", "points": 10, "cap": "B" },
     { "code": "Major", "name": "Major", "points": 5, "cap": null },
@@ -283,7 +283,7 @@ standard	scaled	v1.0	sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad
 global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1
 ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	15	25
 dim	B	5	15
 dim	C	15	15
@@ -311,7 +311,7 @@ gradedef	F	待加強	0
   "cap": null,
   "standard": { "name": "scaled", "version": "v1.0", "hash": "sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad239c1b93b9b6", "ruleIniHash": "sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1" },
   "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Blocker", "name": "阻斷", "points": 15, "cap": "C" },
     { "code": "Critical", "name": "嚴重", "points": 10, "cap": null },
@@ -355,7 +355,7 @@ standard	scaled	v1.0	sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad
 global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1
 ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	0	25
 dim	B	0	15
 dim	C	15	15
@@ -386,7 +386,7 @@ gradedef	F	待加強	0
   "cap": null,
   "standard": { "name": "scaled", "version": "v1.0", "hash": "sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad239c1b93b9b6", "ruleIniHash": "sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1" },
   "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Blocker", "name": "阻斷", "points": 15, "cap": "C" },
     { "code": "Critical", "name": "嚴重", "points": 10, "cap": null },
@@ -451,7 +451,7 @@ standard	scaled	v1.0	sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad
 global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1
 ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	10	25
 dim	B	15	15
 dim	C	15	15
@@ -476,7 +476,7 @@ gradedef	F	待加強	0
   "cap": { "severity": "Blocker", "grade": "C" },
   "standard": { "name": "scaled", "version": "v1.0", "hash": "sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad239c1b93b9b6", "ruleIniHash": "sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1" },
   "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Blocker", "name": "阻斷", "points": 15, "cap": "C" },
     { "code": "Critical", "name": "嚴重", "points": 10, "cap": null },
@@ -517,7 +517,7 @@ standard	legacy	v1.0	sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a2
 global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0
 ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	25	25
 dim	B	15	15
 dim	C	15	15
@@ -544,7 +544,7 @@ gradedef	F	F	0
   "cap": null,
   "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a215cb11f7af27", "ruleIniHash": "sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0" },
   "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Critical", "name": "Critical", "points": 10, "cap": "B" },
     { "code": "Major", "name": "Major", "points": 5, "cap": null },
@@ -588,4 +588,13 @@ exit=2
 validation failed with 2 error(s). Fix findings.txt and run again:
   - line 5: A1: a.java:9 is outside the diff hunks
   - line 8: A3: file "b.java" is not in the diff (use the full path from the diff, no ...)
+exit=1
+### --findings case.txt --diff pr.diff --config settings.ini --standard legacy
+validation failed with 6 error(s). Fix findings.txt and run again:
+  - line 3: A1: file "A.java" is not in the diff (use the full path from the diff, no ...)
+  - line 6: A1: severity "major" is not one of the scale of the standard (Critical, Major, Minor, Nit)
+  - line 9: upstream type must be spec-gap, third-party or ownership-change
+  - line 11: upstream subtype for spec-gap must be one of: missing,wrong,ambiguous
+  - line 13: spec-gap needs impact high, medium or low
+  - line 15: upstream type must be spec-gap, third-party or ownership-change
 exit=1

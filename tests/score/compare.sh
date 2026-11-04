@@ -24,6 +24,7 @@ cases=(
   "--findings findings.txt --config settings.ini --standard nope"
   "--findings findings.txt --config none.ini --standard legacy"
   "--findings diff-check.txt --diff pr.diff --config settings.ini --standard legacy"
+  "--findings case.txt --diff pr.diff --config settings.ini --standard legacy"
 )
 
 out="$(mktemp -d)"

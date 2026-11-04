@@ -142,13 +142,17 @@ function Invoke-StdDoc([string]$Path, [string]$Role, [string[]]$Sevs) {
             $hint = if ($f.Count -eq 1 -and $text.Contains('|')) { ' (separate with the full-width ｜, not |)' } else { '' }
             & $diag 'error' $line "a confirmation is - codes｜what to confirm$hint"; return
         }
-        $list = ''
+        # The codes are check codes, or - alone for a confirmation about the whole standard (its global rules, for example).
+        $list = ''; $whole = $false
         $parts = if ($f[0] -eq '') { @() } else { $f[0].Split(',') }
         foreach ($p in $parts) {
             $s = Get-StdTrim $p; if ($s -eq '') { continue }
+            if ($s -ceq '-') { $whole = $true; continue }
             $cref.Add(@($s, $line)); $list = $list + $(if ($list -eq '') { '' } else { ',' }) + $s
         }
-        if ($list -eq '') { & $diag 'error' $line 'a confirmation needs at least one check code'; return }
+        if ($whole -and $list -ne '') { & $diag 'error' $line '- (the whole standard) cannot be listed with check codes'; return }
+        if ($whole) { $list = '-' }
+        if ($list -eq '') { & $diag 'error' $line 'a confirmation needs check codes, or - for the whole standard'; return }
         if ((Get-StdTrim $f[1]) -eq '') { & $diag 'error' $line 'a confirmation needs the thing to confirm'; return }
         $con.Add("confirm`t$list`t$(Get-StdTrim $f[1])`t$line")
     }
@@ -389,9 +393,10 @@ function Get-StdIniValue($ini, [string]$s, [string]$k) { $v = $ini.kv["$s`t$k"];
 
 # Checks a rule.ini (kind "rule") or defaults.ini (kind "defaults") read with Read-StdIni, and adds the groups it
 # defines (grp: name = line): "scoring" (merge), "points" (pv), "sev" (sc, the codes from the most severe) and
-# "grade" (gc, the codes from the highest).
+# "grade" (gc, the codes from the highest). The [exclude] regexes of defaults.ini go to excl (key = regex).
 function Read-StdSet($out, $ini, [string]$Kind) {
     $file = $ini.file
+    $ini.excl = New-StdMap; $ini.hasexcl = $false
     $ini.grp = New-StdMap; $ini.merge = 'false'; $ini.pv = New-StdMap
     $ini.sc = New-Object System.Collections.Generic.List[string]; $ini.sname = New-StdMap; $ini.spts = New-StdMap; $ini.scap = New-StdMap; $ini.smean = New-StdMap
     $ini.gc = New-Object System.Collections.Generic.List[string]; $ini.gname = New-StdMap; $ini.gmin = New-StdMap; $ini.gln = New-StdMap
@@ -406,6 +411,19 @@ function Read-StdSet($out, $ini, [string]$Kind) {
         if ($s -ceq 'rule') {
             if ($Kind -cne 'rule') { Add-StdDiag $out 'error' $file $ln '[rule] belongs in the rule.ini of a rule'; continue }
             foreach ($k in $ini.keys[$s]) { if ($k -cnotmatch '^(standard|scan|applies|role)$') { Add-StdDiag $out 'error' $file $ini.kl["$s`t$k"] "unknown key $k in [rule] (standard, scan, applies, role)" } }
+        }
+        elseif ($s -ceq 'exclude') {
+            if ($Kind -cne 'defaults') { Add-StdDiag $out 'error' $file $ln '[exclude] is only read from defaults.ini of the rules project; move it there'; continue }
+            $ini.hasexcl = $true
+            foreach ($k in $ini.keys[$s]) {
+                $v = Get-StdIniValue $ini $s $k
+                if ($k -cnotmatch '^(build|lock|binary|generated)$') { Add-StdDiag $out 'error' $file $ini.kl["$s`t$k"] "unknown key $k in [exclude] (build, lock, binary, generated)"; continue }
+                if ($v -eq '') { continue }
+                $bad = Get-StdReProblem $v
+                if ($bad -ne '') { Add-StdDiag $out 'error' $file $ini.kl["$s`t$k"] "$k uses $bad, which POSIX ERE (awk) and .NET do not share; avoid \b \s \d \w, lookaround, lazy quantifiers, POSIX classes and back-references"; continue }
+                $out.Add("!re`t$($ini.kl["$s`t$k"])`t$v")
+                $ini.excl[$k] = $v
+            }
         }
         elseif ($s -ceq 'scoring') {
             $ini.grp['scoring'] = $ln
@@ -453,7 +471,8 @@ function Read-StdSet($out, $ini, [string]$Kind) {
         }
         else {
             $known = if ($Kind -ceq 'rule') { 'rule, ' } else { '' }
-            Add-StdDiag $out 'error' $file $ln "unknown section [$s] (${known}scoring, points, severity:CODE, grade:CODE)"
+            $more = if ($Kind -ceq 'defaults') { ', exclude' } else { '' }
+            Add-StdDiag $out 'error' $file $ln "unknown section [$s] (${known}scoring, points, severity:CODE, grade:CODE$more)"
         }
     }
     # Grades go from the highest to the lowest; the last one takes every total down to 0.
@@ -499,14 +518,17 @@ function Get-StdGlobRe([string]$p) {
 #   applies <name> <regex>, points <name> <dim> <points>, merge <name> true|false, from <name> <group> <file>,
 #   severity <name> <code> <points> <cap> <display name> <meaning>   (from the most severe)
 #   grade <name> <code> <min> <display name>                         (from the highest)
-# and "defaults <defaults.ini>" at the end.
+# then "exclude <key> <regex>" for the [exclude] of defaults.ini and "defaults <defaults.ini>" at the end.
 function Invoke-StdRules([string]$Rules, [string]$RRoot, [string]$Defaults) {
     $out = New-Object System.Collections.Generic.List[string]
     $ri = Read-StdIni $out $Rules
     if ($null -eq $ri) { Add-StdDiag $out 'error' $Rules '' 'file not found'; return , $out.ToArray() }
     $def = Read-StdIni $out $Defaults
     if ($null -eq $def) { Add-StdDiag $out 'error' $Defaults '' 'file not found; the rules project needs defaults.ini with the default points, severities and grades' }
-    else { Read-StdSet $out $def 'defaults' }
+    else {
+        Read-StdSet $out $def 'defaults'
+        if (-not $def.hasexcl) { Add-StdDiag $out 'warn' $Defaults '' 'no [exclude] section; build output, lock files, binary files and generated code are scored like any other file' }
+    }
     if ($ri.secs.Count -eq 0) { Add-StdDiag $out 'error' $Rules '' 'no rule is registered; add a [name] section with path="..." and enable="true"' }
     $owner = New-StdMap; $capdone = New-StdMap; $nglobal = 0; $nen = 0
     foreach ($s in $ri.secs) {
@@ -597,6 +619,7 @@ function Invoke-StdRules([string]$Rules, [string]$RRoot, [string]$Defaults) {
     }
     if ($ri.secs.Count -gt 0 -and $nen -eq 0) { Add-StdDiag $out 'warn' $Rules '' 'no rule is enabled (enable="true")' }
     if ($ri.secs.Count -gt 0 -and $nglobal -eq 0) { Add-StdDiag $out 'warn' $Rules '' 'no enabled global rule (role="global"); files that no framework rule covers will not be scored and no global rule applies to the reports' }
+    if ($null -ne $def) { foreach ($k in 'build', 'lock', 'binary', 'generated') { if ($def.excl.ContainsKey($k)) { $out.Add("exclude`t$k`t$($def.excl[$k])") } } }
     $out.Add("defaults`t$Defaults")
     return , $out.ToArray()
 }
@@ -664,11 +687,27 @@ function Invoke-StdDiff([string[]]$Old, [string[]]$New) {
 # frameworks, or to every report when that folder holds files of several frameworks (the repository root, for
 # example). With no framework file at all the global standard makes the only report. Writes OutDir/<name>.diff
 # with the blocks of the diff unchanged (read and written byte for byte, like awk).
+# Why a file block is not scored ([exclude] of defaults.ini, the exclude records of the rules), or '': the same rules
+# as prepare-diff of code-analysis (generated looks at the first 15 added lines).
+function Get-StdPlanExcl($ex, [string]$p, [string]$b) {
+    if ($ex.ContainsKey('build') -and $ex['build'].IsMatch($p)) { return 'build output / generated' }
+    if ($ex.ContainsKey('lock') -and $ex['lock'].IsMatch($p)) { return 'lock file' }
+    if ($ex.ContainsKey('binary') -and $ex['binary'].IsMatch($p)) { return 'binary file' }
+    if (-not $ex.ContainsKey('generated')) { return '' }
+    $x = $b.Split("`n"); $h = $false; $adds = 0
+    for ($i = 1; $i -lt $x.Count -and $adds -lt 15; $i++) {
+        if ($x[$i].StartsWith('@@', [StringComparison]::Ordinal)) { $h = $true; continue }
+        if ($h -and $x[$i].StartsWith('+', [StringComparison]::Ordinal)) { $adds++; if ($ex['generated'].IsMatch($x[$i].Substring(1))) { return 'marked as generated' } }
+    }
+    return ''
+}
+
+# Files that [exclude] excludes go to no report; the others are planned as in standard.awk (plan_end).
 function Invoke-StdPlan([string]$DiffPath, [string[]]$Ini, [string]$OutDir) {
     $out = New-Object System.Collections.Generic.List[string]
     $bytes = New-Object System.Text.UTF8Encoding($false)
     $latin = [Text.Encoding]::GetEncoding(28591)
-    $fw = New-Object System.Collections.Generic.List[string]; $app = New-StdMap; $cm = ''
+    $fw = New-Object System.Collections.Generic.List[string]; $app = New-StdMap; $cm = ''; $ex = New-StdMap
     # Only the enabled rules score.
     foreach ($l in $Ini) {
         $a = $l.Split("`t")
@@ -676,6 +715,7 @@ function Invoke-StdPlan([string]$DiffPath, [string[]]$Ini, [string]$OutDir) {
         if ($a[0] -ceq 'std' -and $a[5] -ceq 'global') { $cm = $a[1] }
         elseif ($a[0] -ceq 'std') { $fw.Add($a[1]) }
         elseif ($a[0] -ceq 'applies') { $app[$a[1]] = [regex]::new($a[2]) }
+        elseif ($a[0] -ceq 'exclude') { $ex[$a[1]] = [regex]::new($a[2]) }
     }
     $paths = New-Object System.Collections.Generic.List[string]; $blocks = New-Object System.Collections.Generic.List[object]
     $lines = $latin.GetString([IO.File]::ReadAllBytes($DiffPath)).Split("`n")
@@ -690,6 +730,16 @@ function Invoke-StdPlan([string]$DiffPath, [string[]]$Ini, [string]$OutDir) {
         elseif ($blocks.Count -gt 0) { [void]$blocks[$blocks.Count - 1].Append("`n").Append($l) }
     }
     if ($paths.Count -eq 0) { $out.Add("!error`t`tthe diff lists no file"); return , $out.ToArray() }
+    # The excluded blocks are dropped; the others keep their order.
+    $xs = New-Object System.Collections.Generic.List[string]
+    $kp = New-Object System.Collections.Generic.List[string]; $kb = New-Object System.Collections.Generic.List[object]
+    for ($i = 0; $i -lt $paths.Count; $i++) {
+        $r = Get-StdPlanExcl $ex $paths[$i] $blocks[$i].ToString()
+        if ($r -ne '') { $xs.Add("excluded`t$($bytes.GetString($latin.GetBytes($paths[$i])))`t$r"); continue }
+        $kp.Add($paths[$i]); $kb.Add($blocks[$i])
+    }
+    $paths = $kp; $blocks = $kb
+    if ($paths.Count -eq 0) { $out.Add("!error`t`tevery file of the diff is excluded by [exclude] of defaults.ini; there is nothing to score"); return , $out.ToArray() }
     $own = @(); $cnt = New-StdMap
     foreach ($p in $paths) {
         $o = ''
@@ -730,5 +780,6 @@ function Invoke-StdPlan([string]$DiffPath, [string[]]$Ini, [string]$OutDir) {
         $p = $bytes.GetString($latin.GetBytes($paths[$i]))
         foreach ($r in $rep) { if ($to.ContainsKey("$i`t$r")) { $out.Add("file`t$p`t$r`t$($kind[$i])") } }
     }
+    foreach ($x in $xs) { $out.Add($x) }
     return , $out.ToArray()
 }

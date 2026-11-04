@@ -25,7 +25,7 @@ Apply every rule literally. When no check covers a problem, record it with check
 
 ## Script
 
-`prepare-diff` drops files that are not scored (generated code, build output, lock files), numbers every new-file line, and lists heuristic candidates from the scan rules of the scoring standard (`scan=` in the `rule.ini` of the standard, read with `standard resolve` of `code-review-scoring`). Files that the framework standard's `applies` does not cover are marked `[global]` and scanned with the rules of the global standard. With several framework standards, name one with `--standard NAME` (PowerShell `-Standard`). Exit 2 with a standards error: tell the user, who fixes it with `standard lint`; never edit the standards yourself. Paths are relative to this skill's directory.
+`prepare-diff` drops files that are not scored (`[exclude]` of `defaults.ini` in the rules project: build output, lock files, binary files, generated code), numbers every new-file line, and lists heuristic candidates from the scan rules of the scoring standard (`scan=` in the `rule.ini` of the standard, read with `standard resolve` of `code-review-scoring`). Files that the framework standard's `applies` does not cover are marked `[global]` and scanned with the rules of the global standard. With several framework standards, name one with `--standard NAME` (PowerShell `-Standard`). Exit 2 with a standards error: tell the user, who fixes it with `standard lint`; never edit the standards yourself. Paths are relative to this skill's directory.
 
 | bash | zsh | PowerShell |
 | --- | --- | --- |
@@ -67,7 +67,7 @@ Step 2 ran the code review plugins listed in `tmp/step2/plan.tsv` (columns: plug
 
 - Score only the added or changed lines in the diff. Problems in untouched existing code are not deducted.
 - Added or changed code that copies an existing bad pattern **is** deducted.
-- Not scored: generated code, build output, lock files (`prepare-diff` already drops them).
+- Not scored: the files that `[exclude]` of `defaults.ini` in the rules project excludes, such as build output, lock files, binary files and generated code (the plan of step 1 already leaves them out of every report; `prepare-diff` run on a diff of its own drops them and lists them as excluded).
 - Out of scope, never mention them: judging the author's ability, attitude or performance; comparing with other PRs or people; whether the score counts for performance reviews or onboarding periods; daily reports.
 
 ## Severity rules

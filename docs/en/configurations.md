@@ -95,7 +95,9 @@ Required.
 | `root` | The root folder of the rules project (for example code-review-scoring-rules), as a full path or relative to `configs/`. On Windows, use forward slashes, for example `C:/Users/me/Documents/code-review-scoring-rules`. |
 
 The root of the rules project has `rules.ini` (registers and enables the
-rules), `defaults.ini` (the default points, severity scale and grades) and
+rules), `defaults.ini` (the default points, severity scale and grades, and
+the files never scored in `[exclude]`; see
+[the README](../../README.md#files-that-are-not-scored)) and
 one folder per rule (`rule.ini`, the scoring rule document and the scan
 rules); see
 [`templates/en/rule-template.ini`](../../templates/en/rule-template.ini) for

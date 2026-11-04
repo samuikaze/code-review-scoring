@@ -22,7 +22,8 @@ Usage: prepare-diff.zsh [--root DIR | --input FILE | --git RANGE] [options]
       --standard NAME  the scoring standard (an enabled rule of rules.ini) whose scan rules, severity scale and merge
                        are used; default: the only enabled framework rule, or the global rule when no framework rule is
                        enabled. Files its applies does not cover are scanned with the rules of the global rule
-      --scan FILE      use this scan rule file for every file instead of the rules project (no severity scale)
+      --scan FILE      use this scan rule file for every file instead of the rules project (no severity scale,
+                       and no [exclude] of defaults.ini: no file is excluded)
   -h, --help           show this help
 
 Output: summary, code review comments of ROOT/step2 with their ids (root mode only), heuristic candidates

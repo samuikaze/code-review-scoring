@@ -120,7 +120,7 @@ $sameScale = ($csevs.Count -eq 0) -or (($csevs -join ',') -ceq ($sevs -join ',')
 $cList = $csevs -join ', '; $cLowest = if ($csevs.Count -gt 0) { $csevs[$csevs.Count - 1] } else { $lowest }
 
 # Line index of the diff: key = "path|line", value = '+' (added) or ' ' (context)
-$kind = @{}; $known = @{}; $useIndex = $false
+$kind = New-Map; $known = New-Map; $useIndex = $false
 if ($Diff -or $Git) {
     $useIndex = $true
     $diffText = Get-DiffText -InputPath $Diff -Git $Git -Repo $Repo
@@ -153,34 +153,33 @@ else {
     [Console]::Error.WriteLine('note: no diff given, location checks skipped')
 }
 
-$uTypes = @{
-    'spec-gap'         = @('missing', 'wrong', 'ambiguous')
-    'third-party'      = @('spec-missing', 'spec-wrong', 'behavior-mismatch', 'not-delivered', 'bug')
-    'ownership-change' = @('spec', 'interface', 'process')
-}
+$uTypes = New-Map
+$uTypes['spec-gap'] = @('missing', 'wrong', 'ambiguous')
+$uTypes['third-party'] = @('spec-missing', 'spec-wrong', 'behavior-mismatch', 'not-delivered', 'bug')
+$uTypes['ownership-change'] = @('spec', 'interface', 'process')
 $errors = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
 $found = New-Object System.Collections.Generic.List[object]
-$seen = @{}; $idSeen = @{}
+$seen = New-Map; $idSeen = New-Map
 $upstream = New-Object System.Collections.Generic.List[object]
 $skipped = New-Object System.Collections.Generic.List[object]
 
 function Add-Error([int]$Line, [string]$Message) { $script:errors.Add("  - line ${Line}: $Message") }
 
 # Comment ids are <plugin>#<n>: the n-th C record of the plugin's cr.txt (prepare-diff lists them in prepared.txt).
-$commentMode = [ordered]@{}; $hasCr = $false
+$commentMode = New-Object System.Collections.Specialized.OrderedDictionary ([StringComparer]::Ordinal); $hasCr = $false
 if ($Root -and (Test-UserFile (Join-Path $Root 'step2/plan.tsv'))) {
     $hasCr = $true
     foreach ($l in (Read-Utf8Lines (Join-Path $Root 'step2/plan.tsv') | Where-Object { $_ })) {
         $p = $l -split "`t"; $crFile = Join-Path $Root "step2/$($p[0])/cr.txt"; $n = 0
         if (Test-UserFile $crFile) {
             foreach ($x in (Read-Utf8Lines $crFile)) {
-                if ($x -match '^\s*C\s*\|') { $n++; if (Test-CommentOwner $cplan $cstd (@($x -split '\|') + '')[2].Trim()) { $commentMode["$($p[0])#$n"] = $p[2] } }
+                if ($x -cmatch '^\s*C\s*\|') { $n++; if (Test-CommentOwner $cplan $cstd (@($x -split '\|') + '')[2].Trim()) { $commentMode["$($p[0])#$n"] = $p[2] } }
             }
         }
     }
 }
-$used = @{}; $rejected = New-Object System.Collections.Generic.List[object]; $rejectedIds = @{}
+$used = New-Map; $rejected = New-Object System.Collections.Generic.List[object]; $rejectedIds = New-Map
 function Test-Comment([int]$Line, [string]$Id, [string]$What) {
     if ($Id -notmatch '^[^#]+#[0-9]+$') { Add-Error $Line "$What`"$Id`" is not a comment id <plugin>#<n> (listed in prepared.txt)"; return $false }
     if (-not $script:hasCr) { return $true }
@@ -222,7 +221,7 @@ function Test-From {
 }
 
 $rec = ''; $fld = @{}; $recId = ''; $recLine = 0; $recFrom = $false; $recReason = ''
-$mapped = [ordered]@{}
+$mapped = New-Object System.Collections.Specialized.OrderedDictionary ([StringComparer]::Ordinal)
 $no = 0
 foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
     $no++
@@ -289,8 +288,8 @@ foreach ($raw in ((Read-Utf8Text $Findings) -split "`n")) {
             $rec = 'skip'; $recLine = $no
             if (-not $uTypes.ContainsKey($c[1])) { Add-Error $no 'upstream type must be spec-gap, third-party or ownership-change'; break }
             if ($uTypes[$c[1]] -cnotcontains $c[2]) { Add-Error $no "upstream subtype for $($c[1]) must be one of: $($uTypes[$c[1]] -join ',')"; break }
-            if ($c[1] -eq 'spec-gap' -and $c[3] -cnotin 'high', 'medium', 'low') { Add-Error $no 'spec-gap needs impact high, medium or low'; break }
-            if ($c[1] -ne 'spec-gap' -and $c[3] -and $c[3] -ne '-') { Add-Error $no 'impact is only used for spec-gap; write - instead'; break }
+            if ($c[1] -ceq 'spec-gap' -and $c[3] -cnotin 'high', 'medium', 'low') { Add-Error $no 'spec-gap needs impact high, medium or low'; break }
+            if ($c[1] -cne 'spec-gap' -and $c[3] -and $c[3] -ne '-') { Add-Error $no 'impact is only used for spec-gap; write - instead'; break }
             if (-not $pts.ContainsKey($c[4])) { Add-Error $no "upstream severity `"$($c[4])`" is not one of the scale of the standard ($sevList)"; break }
             if (-not $c[5]) { Add-Error $no 'upstream record needs a reference (spec section/version, change-log date or vendor ticket); without one, do not list it'; break }
             $upstream.Add([pscustomobject]@{ Type = $c[1]; Subtype = $c[2]; Impact = $c[3]; Severity = $c[4]; Reference = $c[5] })

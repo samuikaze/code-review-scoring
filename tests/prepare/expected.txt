@@ -288,6 +288,23 @@ exit=0
   - (excluded: marked as generated) src/main/java/com/ex/Mapper.java
 
 exit=0
+### --input case.diff --mode summary --config settings.ini
+## Summary
+- standard: legacy v1.0; the files it does not cover ([global]) use the global standard global v0.1
+- deductions: not merged (merge=false): one F line per location; every occurrence is deducted
+- severity scale (from the most severe; deducted per finding; the lowest, Nit, is always allowed and is used when a problem cannot be confirmed):
+  - Critical: -10, caps the grade at B. 資料損毀、資安事件或服務中斷。
+    上線前一定要修正。
+  - Major: -5. 特定情境下會出錯，或明顯降低品質。
+  - Minor: -2. 能運作，但有更好的寫法。
+  - Nit: -1. 風格偏好。
+- reviewable files: 3, excluded: 1; main code changed: 0, test files: 0, migrations: 0, global standard files: 1
+  - Target/App.java [added +1 -0]
+  - (excluded: build output / generated) target/App.class
+  - docs/logo.PNG [added +1 -0] [global]
+  - src/Gen.java [added +2 -0]
+
+exit=0
 ### --input pr.diff --mode scan --config settings-noscan.ini
 ## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)
 - none: the standard has no scan rules (scan= in the rule.ini of the standard)
@@ -333,8 +350,9 @@ exit=0
   - src/main/java/com/ex/order/OrderController.java:9  @PostMapping("/orders")
 - A1 (1 hits) possible Optional.get() without check
   - src/main/java/com/ex/order/OrderService.java:17  Order x = repo.findById(o.getId()).get();
-- A2 (1 hits) money-like variable uses double/float
+- A2 (2 hits) money-like variable uses double/float
   - src/main/java/com/ex/order/OrderService.java:16  double totalPrice = o.getQty() * 1.5;
+  - src/main/java/com/ex/Mapper.java:2  class Mapper { double price; }
 - A3 (1 hits) @Transactional on a private method
   - src/main/java/com/ex/order/OrderService.java:15  private void save(Order o) throws IOException {
 - A4 (1 hits) @Transactional method throws without rollbackFor (check if checked exception)
@@ -400,4 +418,7 @@ error: none.ini: file not found; run setup check
 exit=2
 ### --input pr.diff --config settings.ini --standard nope
 error: rules/rules.ini: [nope] is not registered
+exit=2
+### --input pr.diff --mode Scan --config settings.ini
+error: --mode must be all, summary, scan or view
 exit=2

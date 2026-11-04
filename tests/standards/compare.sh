@@ -45,10 +45,13 @@ cases=(
   "lint --file good-v2.md --scan stamped.tmp.tsv --settings settings.ini"
   "stamp --file bad.md --scan good-scan.tsv --out stamped.tmp.tsv"
   "stamp --file good-v2.md --out stamped.tmp.tsv"
+  "LINT --settings settings.ini"
+  "lint --Settings settings.ini"
 )
 
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"; root="$(cd ../.. && pwd)"; root_w="$(cd ../.. && { pwd -W 2>/dev/null || pwd; })"
-norm() { tr -d '\r' | tr '\134' '/' | sed -e "s#$here_w/##g" -e "s#$here/##g" -e "s#$root_w/#ROOT/#g" -e "s#$root/#ROOT/#g"; }
+# PowerShell points to Get-Help where bash and zsh point to --help.
+norm() { tr -d '\r' | tr '\134' '/' | sed -e "s#$here_w/##g" -e "s#$here/##g" -e "s#$root_w/#ROOT/#g" -e "s#$root/#ROOT/#g" -e 's/(see Get-Help)/(see --help)/'; }
 
 run_all() {  # $@ = command that runs the script; prints every case with its exit code
   local c

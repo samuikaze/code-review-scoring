@@ -47,19 +47,19 @@ $selfCmd = if ($isWin) { "powershell -NoProfile -ExecutionPolicy Bypass -File `"
 $linkCmd = "$(if ($isWin) { 'powershell -ExecutionPolicy Bypass' } else { 'pwsh' }) -File `"$(Join-Path $projectRoot 'scripts/link-skills.ps1')`" (bash: scripts/link-skills.sh)"
 
 $argv = @($args)
-if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
+if ($argv.Count -eq 0 -or $argv[0] -cin '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
 $opt = @{ plugins = (Join-Path $projectRoot 'configs/plugins.ini'); config = (Join-Path $projectRoot 'configs/settings.ini')
     platform = ''; name = ''; path = ''; applies = ''; mode = 'mapped'; none = $false }
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -eq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--config)' }
-    if ($a -in '--plugins', '--config', '--platform', '--name', '--path', '--applies', '--mode') {
+    if ($a -ceq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--config)' }
+    if ($a -cin '--plugins', '--config', '--platform', '--name', '--path', '--applies', '--mode') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]; $i += 2
     }
-    elseif ($a -eq '--none') { $opt.none = $true; $i++ }
+    elseif ($a -ceq '--none') { $opt.none = $true; $i++ }
     else { Exit-WithError "unknown option $a (see Get-Help)" }
 }
 if ($opt.platform -and $opt.platform -notmatch '^[A-Za-z0-9_-]+$') { Exit-WithError '--platform may only contain letters, digits, - and _' }
@@ -75,12 +75,12 @@ function Get-PluginNames {
 
 function Get-IniSection([string]$Section) {
     # key/value pairs of one configs/settings.ini section, read the same way as "review-state config"
-    $val = @{}
+    $val = [hashtable]::new([StringComparer]::Ordinal)
     if (-not [IO.File]::Exists($configFile)) { return $val }
     $inSec = $false
     foreach ($l in (Read-Utf8Lines $configFile)) {
         if ($l -match '^\s*\[(.*)\]\s*$') { $inSec = ($Matches[1] -ceq $Section); continue }
-        if ($inSec -and $l -match '^\s*([A-Za-z_]+)\s*=\s*"?(.*?)"?\s*$') { $val[$Matches[1]] = $Matches[2] }
+        if ($inSec -and $l -cmatch '^\s*([A-Za-z_]+)\s*=\s*"?(.*?)"?\s*$') { $val[$Matches[1]] = $Matches[2] }
     }
     return $val
 }
@@ -88,7 +88,7 @@ function Get-IniSection([string]$Section) {
 function Get-Subagent {
     $v = [string](Get-IniSection 'workflow')['subagent']
     $v = $v.ToLowerInvariant()
-    if ($v -in 'true', 'false') { return $v } return ''
+    if ($v -cin 'true', 'false') { return $v } return ''
 }
 # The [platform] section needs both model and reasoning.
 function Test-Platform { $val = Get-IniSection $opt.platform; return [bool]($val['model'] -and $val['reasoning']) }
@@ -99,7 +99,7 @@ function Get-SkillName([string]$SkillMd) {
     if ($lines.Count -eq 0 -or $lines[0] -notmatch '^---') { return '' }
     for ($k = 1; $k -lt $lines.Count; $k++) {
         if ($lines[$k] -match '^---') { break }
-        if ($lines[$k] -match '^name:\s*(.*?)\s*$') { return $Matches[1].Trim('"', "'") }
+        if ($lines[$k] -cmatch '^name:\s*(.*?)\s*$') { return $Matches[1].Trim('"', "'") }
     }
     return ''
 }
@@ -145,14 +145,14 @@ function New-PluginsFile {
 function Get-PluginProblem {
     if ($opt.name -notmatch '^[A-Za-z0-9_-]+$') { return 'name may only contain letters, digits, - and _' }
     if (-not $opt.path) { return 'path is required' }
-    if ($opt.mode -notin 'mapped', 'advisory') { return "mode must be mapped or advisory, not $($opt.mode)" }
+    if ($opt.mode -cnotin 'mapped', 'advisory') { return "mode must be mapped or advisory, not $($opt.mode)" }
     if (($opt.path + $opt.applies).Contains('"')) { return 'values may not contain double quotes' }
     $dir = $opt.path
     if (-not [IO.Path]::IsPathRooted($dir)) { $dir = Join-Path (Split-Path -Parent $pluginsFile) $dir }
     $md = Join-Path $dir 'SKILL.md'
     if (-not [IO.File]::Exists($md)) { return "$md not found" }
     $fn = Get-SkillName $md
-    if ($fn -ne $opt.name) { return "name must match the name in SKILL.md (`"$fn`")" }
+    if ($fn -cne $opt.name) { return "name must match the name in SKILL.md (`"$fn`")" }
     return ''
 }
 
@@ -167,7 +167,7 @@ function Save-Plugin {
     foreach ($l in (Read-Utf8Lines $pluginsFile)) {
         if ($l -match '^\s*\[(.*)\]\s*$') {
             $skip = $false
-            if ($Matches[1] -eq $opt.name) { $section | ForEach-Object { $lines.Add($_) }; $done = $true; $skip = $true; continue }
+            if ($Matches[1] -ceq $opt.name) { $section | ForEach-Object { $lines.Add($_) }; $done = $true; $skip = $true; continue }
             if ($lines.Count -gt 0 -and $lines[$lines.Count - 1].Trim()) { $lines.Add('') }
         }
         if ($skip -and $l.Trim()) { continue }
@@ -198,9 +198,9 @@ function Read-YesNo([string]$Prompt, [bool]$Default) {
     }
 }
 
-if ($cmd -in 'check', 'wizard', 'plugins', 'plugin') { Test-LegacySettings }
+if ($cmd -cin 'check', 'wizard', 'plugins', 'plugin') { Test-LegacySettings }
 
-switch ($cmd) {
+switch -CaseSensitive ($cmd) {
     'check' {
         $missing = $false
         if ([IO.File]::Exists($pluginsFile)) {
@@ -282,7 +282,7 @@ switch ($cmd) {
                     $opt.applies = Read-Answer 'File patterns, comma-separated (e.g. *.java,*.sql; empty = all changed files)'
                     while ($true) {
                         $opt.mode = Read-Answer 'Mode: mapped (confirmed comments can become deductions) or advisory (report only)' 'mapped'
-                        if ($opt.mode -in 'mapped', 'advisory') { break }
+                        if ($opt.mode -cin 'mapped', 'advisory') { break }
                         [Console]::WriteLine('Please enter mapped or advisory')
                     }
                     $problem = Get-PluginProblem

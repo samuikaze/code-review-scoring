@@ -68,7 +68,10 @@ from the enabled rules in `rules.ini` of the rules project (`standard plan`):
   keep the plugin's original numbering for easy cross-reference.
 - The confirmations (事先確認事項) of each standard are listed among the
   severity facts in `spec-context.md` and asked in step 1 together with the
-  missing documents.
+  missing documents. The global standard's confirmations about its check
+  items are asked only when the report has global files; those with the code
+  `-` (about the whole standard, such as whether a static analysis report
+  exists) are asked for every report.
 - Step 1 saves a snapshot of each parsed standard
   (`step1/standards/<standard>.resolve`) and records the standard names,
   versions and sha256 in `request.md`. Steps 3 to 5 then score with that
@@ -181,7 +184,7 @@ tmp/
   step2-<plugin>-<state>    status of each CR plugin in step 2
   stepN-<standard>-<state>  status of each scoring standard in steps 3 to 5
   step1/ … step5/      outputs of each step; questions.md (questions of the step), answers.md (the user's replies), errors.log (failures)
-  step1/standards/     the scoring plan: plan.tsv (which files go to which report), <standard>.diff (the report's diff), <standard>.resolve (snapshot of the standard), confirm.tsv (confirmations)
+  step1/standards/     the scoring plan: plan.tsv (which files go to which report, and the excluded files), <standard>.diff (the report's diff), <standard>.resolve (snapshot of the standard), confirm.tsv (confirmations)
   step2/<plugin>/      files.txt and diff.patch (the scope to review), raw/ (the plugin's own output), cr.txt (the normalized CR result)
   step3/<standard>/ … step5/<standard>/  outputs of steps 3 to 5 per scoring standard
   step3/<standard>/findings.draft.txt    draft deductions saved by step 3 before asking; work resumes from here after the reply
@@ -397,7 +400,7 @@ scoring workflow read the same document:
   ```text
   <rules project>/
     rules.ini        registers the rules: one section per rule, path = its folder, enable = whether it is used
-    defaults.ini     default points, deduction merging, severity scale and grades
+    defaults.ini     default points, deduction merging, severity scale and grades, and the files never scored
     <rule folder>/
       rule.ini       the rule: document, scan rules, files it applies to, and the points, scale and grades it overrides
       <document>.md
@@ -618,6 +621,32 @@ meaning="A detail that does not affect the quality."
 - The rules are locked during a scoring run; after a change, start over
   (`init --reset`), or the change applies from the next run.
 
+### Files that are not scored
+
+Build output, lock files, binary files and generated code are set by
+`[exclude]` in `defaults.ini` of the rules project, shared by all rules; it
+cannot be set in `rule.ini`:
+
+```ini
+[exclude]
+build="(^|/)(target|build|out|dist|\.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/"
+lock="(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$|\.lock$"
+binary="\.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$"
+generated="@(javax|jakarta)\.annotation\.(processing\.)?Generated|DO NOT EDIT|[Aa]uto-generated"
+```
+
+- `build`, `lock` and `binary` match the path of a file in the repository;
+  `generated` matches the first 15 added lines of a file.
+- The values are regular expressions in the subset of the scan rules (see
+  `skills/code-review-scoring-standard/references/scan-format.md`) and are
+  case-sensitive. Every key is optional; a key left out excludes nothing.
+- The plan of step 1, the file list that step 2 gives the plugins and
+  `prepared.txt` of step 3 use the same setting. An excluded file goes to no
+  report: it is listed as `excluded` in `step1/standards/plan.tsv`, and a
+  framework rule whose only changed files are excluded makes no report. When
+  every file of the PR is excluded, step 1 stops with an error.
+- Without `[exclude]` no file is excluded, and `standard lint` warns about it.
+
 ## Adjusting the report
 
 - Layout and text: edit `templates/<language>/report-template.md`; you can
@@ -776,7 +805,7 @@ Each report lists only the comments on its standard's files.
 ### How plugins run in the workflow (step 2)
 
 1. After step 1 succeeds, `review-state cr-plan` matches the files the PR
-   actually changed (excluding build output, generated files and lock files)
+   actually changed (excluding the files `[exclude]` of `defaults.ini` excludes)
    against each plugin's `applies` to decide which plugins run. The files each
    plugin reviews are written to `tmp/step2/<plugin>/files.txt`, with a
    `diff.patch` containing only those files. When no plugin applies, step 2
@@ -902,7 +931,7 @@ comments. Layout and wording can be adjusted in
   cuts the main agent's round trips and tokens.
 - `init-workspace` / `check-context`: fix where the handover files live, and
   block the later steps until all inputs and open questions are handled.
-- `prepare-diff`: excludes generated files and lock files, numbers the lines
+- `prepare-diff`: excludes the files `[exclude]` of `defaults.ini` names, numbers the lines
   of new files, and lists heuristic candidates with the scan rule files of the
   scoring standards, saving the tokens the AI would spend counting lines and
   scanning again. Files not covered by the `applies` of a framework standard

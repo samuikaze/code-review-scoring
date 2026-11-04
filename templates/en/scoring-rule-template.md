@@ -27,7 +27,11 @@ How to write this document (delete this comment after copying the template):
   this document.
 - The points of the dimensions, the severity scale and the grades are set in
   rule.ini; what rule.ini does not set comes from defaults.ini of the rules
-  project.
+  project. G of the points is for problems without a check item and for
+  upstream factors; the scoring workflow handles it, so it is not listed under
+  Dimensions.
+- At the start, the scoring workflow asks about the Confirmations together
+  with the missing documents.
 - Workflow rules such as the scoring scope, deductions requiring evidence and
   upstream factors are handled by the scoring workflow; write only what is
   specific to this standard here.
@@ -45,12 +49,10 @@ of scoring that this standard covers.
 
 ## Dimensions
 
-All standards share the following six dimensions. Points are set by
-`[points]` in `rule.ini`, or by `[points]` in `defaults.ini` of the rules
-project when `rule.ini` does not set them. The first letter of a check code is
-its dimension. `G` in `[points]` is for problems without a check item and for
-upstream factors; the scoring workflow handles it, so it is not listed here. Codes and dimension names cannot be changed; the "Focus" text can
-be adapted to this standard's technology.
+The first letter of a check code is its dimension.
+
+<!-- Codes and dimension names cannot be changed; the "Focus" text can be
+adapted to this standard's technology. -->
 
 | Code | Dimension | Focus |
 | --- | --- | --- |
@@ -122,10 +124,12 @@ the heading and write "None". -->
 
 ## Confirmations
 
-At the start, the scoring workflow asks about the items listed here together
-with the missing documents.
+<!--
 Format: `- related codes｜what to confirm`, with several codes separated by
-half-width commas.
+half-width commas. For something about the whole standard rather than one
+check item (for example, information the global rules need), write `-` as the
+code.
+-->
 
 - A2｜Does the feature involve business across time zones
 - E1｜Will the table of the new query keep growing, and roughly how many rows

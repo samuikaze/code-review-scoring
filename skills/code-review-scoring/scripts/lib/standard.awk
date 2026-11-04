@@ -11,8 +11,8 @@
 #            mode=scale      no input: rule=a rule.ini (may be ""), defaults=defaults.ini; prints the severity codes
 #                            that apply to it ("sev" records)
 #            mode=diff       input: the "mode=doc" outputs of the old and the new document
-#            mode=plan       input: the PR diff; ini=FILE with the "mode=rules" output, out=DIR where the diff of
-#                            each report is written (DIR/<name>.diff)
+#            mode=plan       input: the PR diff; ini=FILE with the "mode=rules" output (with the exclude records),
+#                            out=DIR where the diff of each report is written (DIR/<name>.diff)
 #            mode=re         input: "!re" records; prints the line of the first regex awk cannot compile
 #                            (awk itself stops with an error; only=N tests record N only)
 # Output: TAB-separated records, and diagnostics "!error<TAB>line<TAB>message[<TAB>file]" /
@@ -191,17 +191,22 @@ function check_item(text, line, dim,   n, f, i, code, ok, letter, a, na, s, adj)
     rec[++nrec] = "check\t" code "\t" f[3] "\t" adj "\t" (n == 5 ? f[5] : "-") "\t" f[2] "\t" line
 }
 
-function confirm_item(text, line,   n, f, c, nc, i, s, list) {
+# The codes of a confirmation are check codes, or - alone for a confirmation about the whole standard (its global
+# rules, for example).
+function confirm_item(text, line,   n, f, c, nc, i, s, list, whole) {
     gsub(/\t/, " ", text)
     n = split(text, f, FW)
     if (n != 2) { diag("error", line, "a confirmation is - codes｜what to confirm" ((n == 1 && index(text, "|")) ? " (separate with the full-width ｜, not |)" : "")); return }
-    list = ""
+    list = ""; whole = 0
     nc = split(f[1], c, ",")
     for (i = 1; i <= nc; i++) {
         s = trim(c[i]); if (s == "") continue
+        if (s == "-") { whole = 1; continue }
         cref[++ncref] = s; crefl[ncref] = line; list = list (list == "" ? "" : ",") s
     }
-    if (list == "") { diag("error", line, "a confirmation needs at least one check code"); return }
+    if (whole && list != "") { diag("error", line, "- (the whole standard) cannot be listed with check codes"); return }
+    if (whole) list = "-"
+    if (list == "") { diag("error", line, "a confirmation needs check codes, or - for the whole standard"); return }
     if (trim(f[2]) == "") { diag("error", line, "a confirmation needs the thing to confirm"); return }
     con[++ncon] = "confirm\t" list "\t" trim(f[2]) "\t" line
 }
@@ -251,8 +256,8 @@ function doc_end(   i, x, per) {
 # ---------------------------------------------------------------- scan rule file
 
 # Checks that a regex only uses syntax that POSIX ERE (awk) and .NET read the same way,
-# and queues it for the compile test.
-function check_re(re, line, what,   i, n, c, d, inb, bad) {
+# and queues it for the compile test. file names the file in the diagnostic ("" = the input file).
+function check_re(re, line, what, file,   i, n, c, d, inb, bad, m) {
     n = length(re); inb = 0; bad = ""
     for (i = 1; i <= n && bad == ""; i++) {
         c = substr(re, i, 1); d = substr(re, i + 1, 1)
@@ -263,7 +268,11 @@ function check_re(re, line, what,   i, n, c, d, inb, bad) {
         if (c == "(" && d == "?") bad = "(?"
         else if (c ~ /^[*+?}]$/ && d == "?") bad = c "?"
     }
-    if (bad != "") { diag("error", line, what " uses " bad ", which POSIX ERE (awk) and .NET do not share; avoid \\b \\s \\d \\w, lookaround, lazy quantifiers, POSIX classes and back-references"); return 0 }
+    if (bad != "") {
+        m = what " uses " bad ", which POSIX ERE (awk) and .NET do not share; avoid \\b \\s \\d \\w, lookaround, lazy quantifiers, POSIX classes and back-references"
+        if (file != "") fdiag("error", file, line, m); else diag("error", line, m)
+        return 0
+    }
     print "!re\t" line "\t" re
     return 1
 }
@@ -373,13 +382,22 @@ function oktext(file, id, s, k) {
 
 # Checks the rule.ini (kind "rule") or defaults.ini (kind "defaults") read as id, and records the groups it defines
 # (grp[id, g] = line): "scoring" (merge), "points" (pv), "sev" (ns severities sc[id, i] from the most severe) and
-# "grade" (ng grades gc[id, i] from the highest).
+# "grade" (ng grades gc[id, i] from the highest). The [exclude] regexes of defaults.ini go to exv (k = key).
 function set_read(file, id, kind,    i, j, s, k, v, c, ln, sum, x, all) {
     for (i = 1; i <= nsec[id]; i++) {
         s = secn[id, i]; ln = isec[id, s]
         if (s == "rule") {
             if (kind != "rule") { fdiag("error", file, ln, "[rule] belongs in the rule.ini of a rule"); continue }
             for (j = 1; j <= nkey[id, s]; j++) { k = keyn[id, s, j]; if (k !~ /^(standard|scan|applies|role)$/) fdiag("error", file, ikl[id, s, k], "unknown key " k " in [rule] (standard, scan, applies, role)") }
+        }
+        else if (s == "exclude") {
+            if (kind != "defaults") { fdiag("error", file, ln, "[exclude] is only read from defaults.ini of the rules project; move it there"); continue }
+            hasexcl = 1
+            for (j = 1; j <= nkey[id, s]; j++) {
+                k = keyn[id, s, j]; v = ikv[id, s, k]
+                if (k !~ /^(build|lock|binary|generated)$/) fdiag("error", file, ikl[id, s, k], "unknown key " k " in [exclude] (build, lock, binary, generated)")
+                else if (v != "" && check_re(v, ikl[id, s, k], k, file)) exv[k] = v
+            }
         }
         else if (s == "scoring") {
             grp[id, "scoring"] = ln; mergev[id] = "false"
@@ -427,7 +445,7 @@ function set_read(file, id, kind,    i, j, s, k, v, c, ln, sum, x, all) {
             if (ikv[id, s, "min"] !~ /^[0-9]+$/) fdiag("error", file, ln, "[" s "] needs min, the lowest total (a whole number) of the grade")
             gmin[id, c] = ikv[id, s, "min"] + 0
         }
-        else if (s != "\001") fdiag("error", file, ln, "unknown section [" s "] (" (kind == "rule" ? "rule, " : "") "scoring, points, severity:CODE, grade:CODE)")
+        else if (s != "\001") fdiag("error", file, ln, "unknown section [" s "] (" (kind == "rule" ? "rule, " : "") "scoring, points, severity:CODE, grade:CODE" (kind == "defaults" ? ", exclude" : "") ")")
     }
     # Grades go from the highest to the lowest; the last one takes every total down to 0.
     for (i = 1; i <= ng[id]; i++) {
@@ -465,11 +483,14 @@ function glob_re(p,   i, n, c, r) {
 #   applies <name> <regex>, points <name> <dim> <points>, merge <name> true|false, from <name> <group> <file>,
 #   severity <name> <code> <points> <cap> <display name> <meaning>   (from the most severe)
 #   grade <name> <code> <min> <display name>                         (from the highest)
-# and "defaults <defaults.ini>" at the end.
-function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, n, a, x, src, gs, c, ok, nglobal, nen, ep, eg) {
+# then "exclude <key> <regex>" for the [exclude] of defaults.ini and "defaults <defaults.ini>" at the end.
+function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, n, a, x, src, gs, c, ok, nglobal, nen, ep, eg, t) {
     if (!ini_read(rules, "R")) { fdiag("error", rules, "", "file not found"); return }
     if (!ini_read(defaults, "D")) fdiag("error", defaults, "", "file not found; the rules project needs defaults.ini with the default points, severities and grades")
-    else set_read(defaults, "D", "defaults")
+    else {
+        set_read(defaults, "D", "defaults")
+        if (!hasexcl) fdiag("warn", defaults, "", "no [exclude] section; build output, lock files, binary files and generated code are scored like any other file")
+    }
     if (!nsec["R"]) fdiag("error", rules, "", "no rule is registered; add a [name] section with path=\"...\" and enable=\"true\"")
     for (i = 1; i <= nsec["R"]; i++) {
         s = secn["R", i]; ln = isec["R", s]; id = "r" i
@@ -555,6 +576,8 @@ function rules_main(    i, j, s, id, ln, k, p, e, d, doc, scan, role, apps, re, 
     }
     if (nsec["R"] && !nen) fdiag("warn", rules, "", "no rule is enabled (enable=\"true\")")
     if (nsec["R"] && !nglobal) fdiag("warn", rules, "", "no enabled global rule (role=\"global\"); files that no framework rule covers will not be scored and no global rule applies to the reports")
+    split("build lock binary generated", t, " ")
+    for (j = 1; j <= 4; j++) if (t[j] in exv) print "exclude\t" t[j] "\t" exv[t[j]]
     print "defaults\t" defaults
 }
 
@@ -615,11 +638,27 @@ function plan_line(l,   p) {
     else if (nb > 0) blk[nb] = blk[nb] "\n" l
 }
 
-# Each file goes to the first framework standard whose applies matches it. The others are global files: with one
-# report they go to it; with several, to the framework of the nearest folder above them that holds files of
-# frameworks, or to every report when that folder holds files of several frameworks (the repository root, for
-# example). With no framework file at all the global standard makes the only report.
-function plan_end(   l, a, i, j, k, p, d, n, hit, cm, f) {
+# Why a file block is not scored ([exclude] of defaults.ini, the exclude records of ini), or "": the same rules as
+# prepare-diff of code-analysis (generated looks at the first 15 added lines).
+function plan_excl(p, b,   n, x, i, h, adds) {
+    if (("build" in ex) && p ~ ex["build"]) return "build output / generated"
+    if (("lock" in ex) && p ~ ex["lock"]) return "lock file"
+    if (("binary" in ex) && p ~ ex["binary"]) return "binary file"
+    if (!("generated" in ex)) return ""
+    n = split(b, x, "\n"); h = 0; adds = 0
+    for (i = 2; i <= n && adds < 15; i++) {
+        if (substr(x[i], 1, 2) == "@@") { h = 1; continue }
+        if (h && substr(x[i], 1, 1) == "+") { adds++; if (substr(x[i], 2) ~ ex["generated"]) return "marked as generated" }
+    }
+    return ""
+}
+
+# Files that [exclude] excludes go to no report. Each other file goes to the first framework standard whose applies
+# matches it. The others are global files: with one report they go to it; with several, to the framework of the
+# nearest folder above them that holds files of frameworks, or to every report when that folder holds files of
+# several frameworks (the repository root, for example). With no framework file at all the global standard makes the
+# only report.
+function plan_end(   l, a, i, j, k, p, d, n, hit, cm, f, nx, xp, xr, r) {
     # Only the enabled rules score.
     while ((getline l < ini) > 0) {
         split(l, a, "\t")
@@ -627,9 +666,19 @@ function plan_end(   l, a, i, j, k, p, d, n, hit, cm, f) {
         if (a[1] == "std" && a[6] == "global") cm = a[2]
         else if (a[1] == "std") fw[++nfw] = a[2]
         else if (a[1] == "applies") app[a[2]] = a[3]
+        else if (a[1] == "exclude") ex[a[2]] = a[3]
     }
     close(ini)
     if (!nb) { diag("error", "", "the diff lists no file"); return }
+    # The excluded blocks are dropped; the others keep their order.
+    n = 0
+    for (i = 1; i <= nb; i++) {
+        r = plan_excl(bpath[i], blk[i])
+        if (r != "") { nx++; xp[nx] = bpath[i]; xr[nx] = r; continue }
+        n++; bpath[n] = bpath[i]; blk[n] = blk[i]
+    }
+    nb = n
+    if (!nb) { diag("error", "", "every file of the diff is excluded by [exclude] of defaults.ini; there is nothing to score"); return }
     for (i = 1; i <= nb; i++) {
         own[i] = ""
         for (k = 1; k <= nfw; k++) if (bpath[i] ~ app[fw[k]]) { own[i] = fw[k]; cnt[fw[k]]++; break }
@@ -661,4 +710,5 @@ function plan_end(   l, a, i, j, k, p, d, n, hit, cm, f) {
         print "report\t" rep[k] "\t" n
     }
     for (i = 1; i <= nb; i++) for (k = 1; k <= nrep; k++) if ((i SUBSEP rep[k]) in to) print "file\t" bpath[i] "\t" rep[k] "\t" kind[i]
+    for (i = 1; i <= nx; i++) print "excluded\t" xp[i] "\t" xr[i]
 }

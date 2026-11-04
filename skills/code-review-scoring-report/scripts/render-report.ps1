@@ -76,7 +76,7 @@ if (Test-UserFile $planFile) {
     }
 }
 
-$lab = @{}
+$lab = [hashtable]::new([StringComparer]::Ordinal)
 foreach ($l in (Read-Utf8Lines $Labels)) {
     if ($l.StartsWith('#') -or $l -notmatch "`t") { continue }
     $i = $l.IndexOf("`t"); $lab[$l.Substring(0, $i)] = $l.Substring($i + 1)
@@ -91,7 +91,7 @@ function Format-LocList([string]$Field, [string]$Locs) {
 function Format-Where([string]$Locs) { if ($Locs -eq '-') { return L 'loc.pr_wide' } return Format-Codes $Locs }
 
 # findings.txt (already validated by the scoring skill)
-$fv = @{}; $fIds = New-Object System.Collections.Generic.List[string]
+$fv = [hashtable]::new([StringComparer]::Ordinal); $fIds = New-Object System.Collections.Generic.List[string]
 $rejects = New-Object System.Collections.Generic.List[object]
 $maps = New-Object System.Collections.Generic.List[object]
 $ups = New-Object System.Collections.Generic.List[object]
@@ -128,7 +128,7 @@ $dims = New-Object System.Collections.Generic.List[object]
 $scored = New-Object System.Collections.Generic.List[object]
 foreach ($l in (Read-Utf8Lines (Join-Path $step4 'score.tsv'))) {
     $a = $l -split "`t"
-    switch ($a[0]) {
+    switch -CaseSensitive ($a[0]) {
         'total' { $total = $a[1] }
         'grade' { $grade = $a[1] }
         'capped' { $capped = $a[1] }
@@ -151,7 +151,7 @@ if (-not $json) { Exit-WithError 'score.json is missing or empty; run the scorin
 if (-not $Title) {
     $ctx = Join-Path $Root 'step1/spec-context.md'
     if (Test-UserFile $ctx) {
-        $t = Read-Utf8Lines $ctx | Where-Object { $_ -match '^- Title:' } | Select-Object -First 1
+        $t = Read-Utf8Lines $ctx | Where-Object { $_ -cmatch '^- Title:' } | Select-Object -First 1
         if ($t) { $Title = ($t -replace '^- Title:\s*', '').Trim() }
     }
 }
@@ -160,7 +160,7 @@ if (-not $Title) { $Title = L 'title.missing' }
 
 # Block placeholders
 $b = L 'sep.bracket'; $c = L 'sep.colon'
-$blk = @{}
+$blk = [hashtable]::new([StringComparer]::Ordinal)
 $sb = New-Object System.Text.StringBuilder
 foreach ($d in $dims) {
     # Dimension of a check id: its first letter, or the letter after GL- for the global standard (GL-B1 is B).
@@ -328,19 +328,19 @@ $inl = [ordered]@{ PR_TITLE = $Title; REVIEW_DATE = (Get-Date -Format 'yyyy-MM-d
     STANDARD = $(if ($stdLabel) { $stdLabel } else { L 'none' }) + $(if ($globalLabel) { (L 'standard.global').Replace('{global}', $globalLabel) } else { '' }) }
 
 $outSb = New-Object System.Text.StringBuilder
-$unknown = @{}
+$unknown = [hashtable]::new([StringComparer]::Ordinal)
 $tplLines = (Read-Utf8Text $Template) -split "`n"
 if ($tplLines.Count -gt 0 -and $tplLines[-1] -eq '') { $tplLines = $tplLines[0..($tplLines.Count - 2)] }
 foreach ($raw in $tplLines) {
     $line = $raw.TrimEnd("`r")
-    if ($line -match '^\s*\{\{([A-Z_]+)\}\}\s*$' -and $blk.ContainsKey($Matches[1])) {
+    if ($line -cmatch '^\s*\{\{([A-Z_]+)\}\}\s*$' -and $blk.ContainsKey($Matches[1])) {
         $v = $blk[$Matches[1]]
-        if (-not $v -and $Matches[1] -notin 'SCORE_ROWS', 'CR_DETAILS') { $v = (L 'none') + "`n" }
+        if (-not $v -and $Matches[1] -cnotin 'SCORE_ROWS', 'CR_DETAILS') { $v = (L 'none') + "`n" }
         [void]$outSb.Append($v)
         continue
     }
     foreach ($k in $inl.Keys) { $line = $line.Replace("{{$k}}", [string]$inl[$k]) }
-    if ($line -match '\{\{[A-Z_]+\}\}') { $unknown[$Matches[0]] = $true }
+    if ($line -cmatch '\{\{[A-Z_]+\}\}') { $unknown[$Matches[0]] = $true }
     [void]$outSb.Append("$line`n")
 }
 foreach ($u in $unknown.Keys) { [Console]::Error.WriteLine("warning: unknown placeholder $u left as is (block placeholders must be alone on their line)") }

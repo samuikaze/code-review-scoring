@@ -16,10 +16,7 @@ A PR's quality depends on upstream material: the SD spec, which in turn relies o
 
 - If you suspect an upstream factor but the needed input was not provided, ask the user for it (record it under **Open questions**). If the user says it cannot be provided, you may not use that category: score as usual and explain the suspicion in an `R` line.
 - Every `U` line needs a reference: spec section or version, change-log date, or vendor ticket number. No reference, no `U` line.
-- Judge compliance against the spec and process versions **in effect when development started**. Later changes do not make a finished PR wrong.
-- A change communicated only verbally, without written confirmation, does not count; the original version still applies.
-- For 5 working days after a process change, not following the new process is a suspected ownership change (`ownership-change`, `process`), not an `F` line.
-- When it cannot be determined whether the cause is the SD spec or the third-party system (for example, the vendor spec version at the time is unknown), classify it as a suspected third-party issue.
+- The organization's rules for judging upstream factors (which spec version applies, which changes count, grace periods, how to classify an unclear cause) are in the `## 全域規則` (`## Global rules`) section of the global standard; apply them.
 - Do not decide who is responsible, and never name the author of a spec.
 
 ## Subtypes and impact

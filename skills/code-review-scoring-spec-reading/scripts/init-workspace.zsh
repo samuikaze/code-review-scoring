@@ -87,7 +87,7 @@ fi
 
 LC_ALL=C awk -v title="$title" -v range="$range" -v created="$(date +%Y-%m-%d)" -v ds="$diff_status" -v confirm="$confirm" -v note="$note" '
   function rep(s, a, b,    i, o) { o = ""; while ((i = index(s, a)) > 0) { o = o substr(s, 1, i - 1) b; s = substr(s, i + length(a)) } return o s }
-  BEGIN { while (confirm != "" && (getline l < confirm) > 0) { split(l, c, "\t"); cf = cf "- " c[2] " (" c[1] ") " c[3] ":\n" } if (cf == "") cf = note "\n" }
+  BEGIN { while (confirm != "" && (getline l < confirm) > 0) { split(l, c, "\t"); cf = cf "- " (c[2] == "-" ? "" : c[2] " ") "(" c[1] ") " c[3] ":\n" } if (cf == "") cf = note "\n" }
   $0 == "{{CONFIRMATIONS}}" { printf "%s", cf; next }
   { l = rep($0, "{{TITLE}}", title); l = rep(l, "{{RANGE}}", range); l = rep(l, "{{CREATED}}", created); print rep(l, "{{DIFF_STATUS}}", ds) }
 ' "$skill_dir/assets/spec-context-template.md" > "$dir/spec-context.md"

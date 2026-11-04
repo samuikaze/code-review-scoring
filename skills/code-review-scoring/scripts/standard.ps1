@@ -26,7 +26,7 @@ Uses the same GNU-style arguments as standard.sh:
       (path, sha256 of the scan rules), "points" (dimension, points), "merge", "severity" (code, points, cap,
       display name, meaning with its lines separated by |; from the most severe), "grade" (code, min, display
       name; from the highest), "gseverity" (code, display name, meaning of the global rule's scale), the "check"
-      records of each document
+      records of each document, "exclude" (key, regex of [exclude] in defaults.ini)
       and "defaults" (path, sha256 of defaults.ini).
       Stops when the rules project or a document has a format error (exit 3)
   standard.ps1 plan --diff PR.diff --out DIR [--settings FILE]
@@ -34,8 +34,10 @@ Uses the same GNU-style arguments as standard.sh:
       applies covers it; the other files are global files, scored with the global rule in the report of their
       project (the framework of the nearest folder above them; every report when that is unclear), or on their
       own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
-      report and kind framework|global|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
-      each report, and DIR/confirm.tsv (standard, check codes, what to confirm before scoring)
+      report and kind framework|global|none; "excluded" path and reason for the files that [exclude] of
+      defaults.ini excludes, which go to no report), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
+      each report, and DIR/confirm.tsv (standard, check codes or - for the whole standard, what to confirm
+      before scoring)
   standard.ps1 stamp --file DOC.md --scan DRAFT.tsv --out RULES.tsv [--global]
       write a reviewed scan rule file (--scan, e.g. a draft) to --out with the source line
       "# source: <document file> <version> sha256:<hash>" of the document (--file), so lint can tell when the
@@ -43,7 +45,8 @@ Uses the same GNU-style arguments as standard.sh:
 
 The rules project: [rules] root of the settings names its folder (relative to the folder of the settings file). It
 holds rules.ini (one [name] section per rule: path = the folder of its rule.ini, enable = true|false), defaults.ini
-(the points, severities and grades of the rules that do not set their own) and a folder per rule with rule.ini
+(the points, severities and grades of the rules that do not set their own, and the [exclude] files that are never
+scored) and a folder per rule with rule.ini
 ([rule] standard = the Markdown document, scan = the scan rule file, applies, role = global), the document and the
 scan rules.
 
@@ -66,20 +69,20 @@ $awkLib = Join-Path $PSScriptRoot 'lib/standard.awk'
 
 $argv = @($args)
 if ($argv.Count -eq 0) { Get-Help $PSCommandPath -Detailed; exit 2 }
-if ($argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 0 }
+if ($argv[0] -cin '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 0 }
 $cmd = [string]$argv[0]
 $opt = @{ settings = (Join-Path $projectRoot 'configs/settings.ini'); file = ''; scan = ''; role = ''; diff = ''; out = '' }
 $names = @()
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -in '--settings', '--file', '--scan', '--diff', '--out') {
+    if ($a -cin '--settings', '--file', '--scan', '--diff', '--out') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]; $i += 2
     }
-    elseif ($a -eq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--settings)' }
-    elseif ($a -eq '--global') { $opt.role = 'global'; $i++ }
-    elseif ($a -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 0 }
+    elseif ($a -ceq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--settings)' }
+    elseif ($a -ceq '--global') { $opt.role = 'global'; $i++ }
+    elseif ($a -cin '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 0 }
     elseif ($a.StartsWith('-', [StringComparison]::Ordinal)) { Exit-WithError "unknown option $a (see Get-Help)" }
     else { $names += $a; $i++ }
 }
@@ -219,7 +222,7 @@ function Get-ParsedDoc([string]$Doc, [string]$Role) {
     return , @($out | Where-Object { -not $_.StartsWith('!', [StringComparison]::Ordinal) -and -not $_.StartsWith("stats`t", [StringComparison]::Ordinal) })
 }
 
-switch ($cmd) {
+switch -CaseSensitive ($cmd) {
     'lint' {
         if ($opt.file) {
             # An unregistered document: the scale of the rule.ini in its folder, or that of defaults.ini.
@@ -249,6 +252,7 @@ switch ($cmd) {
                 $list = ($records | ForEach-Object { $_[1] + $(if ($_[6] -ceq 'true') { '' } else { ' (disabled)' }) }) -join ', '
                 Write-Line "rules: $($records.Count) registered$(if ($records.Count -gt 0) { " ($list)" })"
                 Write-Report $rulesIni $ini
+                Test-StdRegex "$($r[1])/defaults.ini" @($ini | Where-Object { $_.StartsWith("!re`t", [StringComparison]::Ordinal) })
                 foreach ($n in $names) {
                     if (-not ($records | Where-Object { $_[1] -ceq $n })) { Add-Problem 'error' "${rulesIni}: [$n] is not registered" }
                 }
@@ -364,6 +368,7 @@ switch ($cmd) {
             }
             foreach ($l in $out) { if ($l.StartsWith("check`t", [StringComparison]::Ordinal)) { [void]$sb.Append("$l`n") } }
         }
+        foreach ($l in $ini) { if ($l.StartsWith("exclude`t", [StringComparison]::Ordinal)) { [void]$sb.Append("$l`n") } }
         $d = Get-Field $ini 'defaults'
         [void]$sb.Append("defaults`t$(Get-PathOf $d)`tsha256:$(Get-Sha $d)`n")
         [Console]::Out.Write($sb.ToString())
@@ -391,20 +396,24 @@ switch ($cmd) {
             finally { $ErrorActionPreference = $prev }
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             [IO.File]::WriteAllText((Join-Path $outDir "$name.resolve"), (($res -join "`n") + "`n"), $utf8)
-            # The confirmations of the standard, and those of the global standard when the report has global files.
+            # The confirmations of the standard, and those of the global standard: all of them when the report has global
+            # files, otherwise only those about the whole standard (-), since its global rules apply to every report.
             $hasGlobal = $false
             foreach ($x in $plan) { $f = $x.Split("`t"); if ($f[0] -ceq 'file' -and $f[2] -ceq $name -and $f[3] -ceq 'global') { $hasGlobal = $true } }
             foreach ($r in $res) {
                 $f = $r.Split("`t")
                 if ($f[0] -cne 'standard' -and $f[0] -cne 'global') { continue }
                 $ver[$f[1]] = $f[2]
-                if (($f[0] -ceq 'global' -and -not $hasGlobal) -or $done.ContainsKey($f[1])) { continue }
-                $done[$f[1]] = 1
+                $all = ($f[0] -ceq 'standard' -or $hasGlobal)
                 $role = ''
                 foreach ($x in $ini) { $g = $x.Split("`t"); if ($g[0] -ceq 'std' -and $g[1] -ceq $f[1] -and $g[5] -ceq 'global') { $role = 'global' } }
                 foreach ($c in (Invoke-StdDoc $f[4] $role @())) {
                     $g = $c.Split("`t")
-                    if ($g[0] -ceq 'confirm') { [void]$confirm.Append("$($f[1])`t$($g[1])`t$($g[2])`n") }
+                    if ($g[0] -cne 'confirm' -or -not ($all -or $g[1] -ceq '-')) { continue }
+                    $line = "$($f[1])`t$($g[1])`t$($g[2])"
+                    if ($done.ContainsKey($line)) { continue }
+                    $done[$line] = 1
+                    [void]$confirm.Append("$line`n")
                 }
             }
         }
@@ -425,6 +434,8 @@ switch ($cmd) {
             if ($x -gt 0) { $line += " ($x not covered by any standard)" }
             Write-Line $line
         }
+        $nx = @($plan | Where-Object { $_.StartsWith("excluded`t", [StringComparison]::Ordinal) }).Count
+        if ($nx -gt 0) { Write-Line "  ($nx file(s) not scored: excluded by [exclude] of defaults.ini)" }
         Write-Line "wrote $(Join-Path $outDir 'plan.tsv')"
     }
     default { Exit-WithError "unknown command $cmd (see Get-Help)" }
