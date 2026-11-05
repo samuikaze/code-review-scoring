@@ -2,7 +2,7 @@
 # Runs score on the fixtures with every installed shell (bash, zsh, PowerShell) and compares the output, score.tsv and
 # score.json with expected.txt. The rules project rules/ registers legacy (the check items of the rules.tsv used before the
 # standards existed, so the scores of findings.txt must stay the same as before), points (other points), scaled (its own
-# five-level severity scale, grades and merge=true) and the common rule.
+# five-level severity scale, grades and merge=true) and the global rule.
 #   bash tests/score/compare.sh            compare
 #   bash tests/score/compare.sh --update   rewrite expected.txt from the bash output
 set -uo pipefail
@@ -13,29 +13,31 @@ cases=(
   "--findings findings.txt --config settings.ini --standard legacy"
   "--findings findings.txt --config settings.ini --standard points"
   "--findings invalid.txt --config settings.ini --standard legacy"
-  "--findings common.txt --config settings.ini --standard legacy"
-  "--findings common.txt --config settings.ini --standard scaled"
-  "--findings common-scaled.txt --config settings.ini --standard scaled"
+  "--findings global.txt --config settings.ini --standard legacy"
+  "--findings global.txt --config settings.ini --standard scaled"
+  "--findings global-scaled.txt --config settings.ini --standard scaled"
   "--findings scaled-bad.txt --config settings.ini --standard scaled"
   "--findings capped.txt --config settings.ini --standard scaled"
+  "--findings overflow.txt --config settings.ini --standard legacy"
   "--findings findings.txt --config settings.ini"
   "--findings findings.txt --config settings.ini --standard off"
   "--findings findings.txt --config settings.ini --standard nope"
   "--findings findings.txt --config none.ini --standard legacy"
   "--findings diff-check.txt --diff pr.diff --config settings.ini --standard legacy"
+  "--findings case.txt --diff pr.diff --config settings.ini --standard legacy"
 )
 
 out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"; out_w="$( (cd "$out" && pwd -W 2>/dev/null) || echo "$out")"
 norm() { tr -d '\r' | tr '\134' '/' | sed -e "s#$out_w#OUT#g" -e "s#$out#OUT#g" -e "s#$here_w/##g" -e "s#$here/##g"; }
-# PowerShell takes -Findings, -Config, ... instead of the GNU-style options.
+# PowerShell takes -Findings, -Config, ... instead of the GNU-style options; --out-dir is kept, so its alias is tested.
 psargs() {
   local a
   for a in "$@"; do
     case "$a" in
       --findings) echo -Findings ;; --config) echo -Config ;; --standard) echo -Standard ;;
-      --diff) echo -Diff ;; --out-dir) echo -OutDir ;; *) echo "$a" ;;
+      --diff) echo -Diff ;; *) echo "$a" ;;
     esac
   done
 }

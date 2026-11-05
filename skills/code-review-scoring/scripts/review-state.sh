@@ -104,6 +104,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+root="${root//\\//}" repo="${repo//\\//}" config="${config//\\//}" plugins_file="${plugins_file//\\//}"
 
 refuse() { echo "refused: $1" >&2; exit 5; }
 now() { date +%Y-%m-%dT%H:%M:%S%z; }
@@ -224,7 +226,7 @@ require_prev() {
 }
 # The scoring standard $1 must be the one step 1 planned with: its document, rule.ini, scan rules and defaults.ini (the
 # resolve output without the paths, which differ between shells) must not have changed.
-res_key() { tr -d '\r' | awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "standard" || $1 == "common" { $5 = "" } $1 == "scan" || $1 == "ruleini" || $1 == "defaults" { $2 = "" } { print }'; }
+res_key() { tr -d '\r' | awk -F'\t' 'BEGIN { OFS = "\t" } $1 == "standard" || $1 == "global" { $5 = "" } $1 == "scan" || $1 == "ruleini" || $1 == "defaults" { $2 = "" } { print }'; }
 std_gate() {
   local saved="$root/step1/standards/$1.resolve" now
   [[ -f "$saved" ]] || refuse "missing $saved; step 1 has not planned the review"
@@ -242,7 +244,7 @@ record_standards() {
   { echo; echo "## Scoring standards"
     for f in $(std_names); do
       awk -F'\t' -v r="$f" '{ sub(/\r$/, "") } $1 == "standard" { print "- " r ": " $2 " " $3 " " $4 " " $5; o = "" }
-        $1 == "common" { print "  - common standard: " $2 " " $3 " " $4 " " $5; o = "common " }
+        $1 == "global" { print "  - global standard: " $2 " " $3 " " $4 " " $5; o = "global " }
         $1 == "ruleini" { print "  - " o "rule.ini: " $3 " " $2 } $1 == "defaults" { print "  - defaults.ini: " $3 " " $2 }' "$root/step1/standards/$f.resolve"
     done; } >> "$tmpf"
   mv "$tmpf" "$root/request.md"
@@ -256,9 +258,25 @@ has_previous() {
   done
   [[ -n "$(find "$root" -maxdepth 1 -type f -name "step$CR-*" 2>/dev/null | head -1)" ]]
 }
-diff_files() {  # files added or changed by the PR, from step 1's diff, without build output, generated code or lock files
-  sed -n 's/^+++ //p' "$root/step1/pr.diff" | sed -e 's/\t.*$//' -e 's/^"//' -e 's/"$//' | grep -v '^/dev/null$' | sed 's|^b/||' |
-    grep -Ev '(^|/)(target|build|out|dist|\.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/|(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$|\.lock$' || true
+# Files added or changed by the PR, from step 1's diff, without the files [exclude] of defaults.ini excludes (the
+# exclude records of the plan's resolve output; the same rules as prepare-diff of code-analysis).
+diff_files() {
+  local res=""
+  [[ -f "$std_plan" ]] && res="$root/step1/standards/$(std_names | head -1).resolve"
+  LC_ALL=C awk -v res="$res" '
+    BEGIN { while (res != "" && (getline l < res) > 0) { sub(/\r$/, "", l); split(l, a, "\t"); if (a[1] == "exclude") ex[a[2]] = a[3] } }
+    function flush() { if (p != "" && !gen) print p; p = ""; gen = 0; adds = 0 }
+    { sub(/\r$/, "") }
+    /^diff --git / { flush(); hdr = 1; next }
+    hdr && /^\+\+\+ / {
+      p = substr($0, 5); sub(/\t.*$/, "", p); gsub(/^"|"$/, "", p); sub(/^b\//, "", p)
+      if (p == "/dev/null" || (("build" in ex) && p ~ ex["build"]) || (("lock" in ex) && p ~ ex["lock"]) || (("binary" in ex) && p ~ ex["binary"])) p = ""
+      next
+    }
+    /^@@/ { hdr = 0; next }
+    !hdr && /^\+/ && ++adds <= 15 && ("generated" in ex) && substr($0, 2) ~ ex["generated"] { gen = 1 }
+    END { flush() }
+  ' "$root/step1/pr.diff"
 }
 plugin_diff() {  # $1 = files.txt; prints the parts of step 1's diff that touch those files
   LC_ALL=C awk -v list="$1" '
@@ -325,7 +343,7 @@ file_opt() {  # $1 = option, $2 = file, $3 = default; prints ' $1 "<absolute fil
 # Prompt of step $step (plugin $plugin): the step template plus the shared status protocol. Lines marked
 # "[sub] " are only for subagents, lines marked "[inline] " only for the main agent ($1 = 1 for inline).
 render_prompt() {
-  local root_abs p_path="" p_mode="" unit_args="--step $step" dir s_doc="" c_doc="none" lang="" c_opt
+  local root_abs p_path="" p_mode="" unit_args="--step $step" dir s_doc="" g_doc="none" lang="" c_opt
   c_opt="$(file_opt --config "$config" "$project_root/configs/settings.ini")"
   root_abs="$(abs_root)"
   [[ "$step" -lt "$CR" ]] || lang="$(report_language)"
@@ -336,21 +354,21 @@ render_prompt() {
     unit_args+=" --plugin $plugin"; dir="$root_abs/step$CR/$plugin"
   elif [[ "$step" -gt "$CR" ]]; then
     s_doc="$(awk -F'\t' '$1 == "standard" { print $5 }' "$root/step1/standards/$standard.resolve")"
-    c_doc="$(awk -F'\t' '$1 == "common" { print $5 }' "$root/step1/standards/$standard.resolve")"
+    g_doc="$(awk -F'\t' '$1 == "global" { print $5 }' "$root/step1/standards/$standard.resolve")"
     unit_args+=" --standard $standard"; dir="$root_abs/step$step/$standard"
   fi
   cat "$skill_dir/assets/prompts/step$step.md" "$skill_dir/assets/prompts/protocol.md" |
     LC_ALL=C awk -v inline="$1" -v root="$root_abs" -v sc="$self_cmd set --root \"$root_abs\"$c_opt" -v copt="$c_opt" -v repo="$(req_field Repository)" \
       -v range="$(req_field 'Diff range')" -v title="$(req_field Title)" -v skills="$skills_dir" -v plugin="$plugin" \
       -v ppath="$p_path" -v pmode="$p_mode" -v unit="$unit_args" -v dir="$dir" -v step="$step" \
-      -v std="$standard" -v sdoc="$s_doc" -v cdoc="${c_doc:-none}" -v lang="$lang" '
+      -v std="$standard" -v sdoc="$s_doc" -v gdoc="${g_doc:-none}" -v lang="$lang" '
       function rep(s, a, b,    i, o) { o = ""; while ((i = index(s, a)) > 0) { o = o substr(s, 1, i - 1) b; s = substr(s, i + length(a)) } return o s }
       /^\[sub\] / { if (inline) next; sub(/^\[sub\] /, "") }
       /^\[inline\] / { if (!inline) next; sub(/^\[inline\] /, "") }
       { l = rep($0, "{{ROOT}}", root); l = rep(l, "{{STATE_CMD}}", sc); l = rep(l, "{{REPO}}", repo); l = rep(l, "{{RANGE}}", range)
         l = rep(l, "{{SKILLS_DIR}}", skills); l = rep(l, "{{PLUGIN_PATH}}", ppath); l = rep(l, "{{PLUGIN}}", plugin); l = rep(l, "{{MODE}}", pmode)
         l = rep(l, "{{UNIT}}", unit); l = rep(l, "{{DIR}}", dir); l = rep(l, "{{STEP}}", step)
-        l = rep(l, "{{STANDARD}}", std); l = rep(l, "{{STANDARD_DOC}}", sdoc); l = rep(l, "{{COMMON_DOC}}", cdoc)
+        l = rep(l, "{{STANDARD}}", std); l = rep(l, "{{STANDARD_DOC}}", sdoc); l = rep(l, "{{GLOBAL_DOC}}", gdoc)
         l = rep(l, "{{REPORT_LANGUAGE}}", lang); l = rep(l, "{{CONFIG_OPT}}", copt)
         print rep(l, "{{TITLE}}", title) }'
 }

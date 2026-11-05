@@ -13,8 +13,8 @@ and Codex.
 - **Scoring**: scores against the enabled scoring rules of a rules project,
   not tied to any technology. Each framework rule (for example Spring Boot 3
   or Angular) produces its own report; files that belong to no framework
-  (README, CI configuration, Dockerfile and so on) are scored with the common
-  rule. The rules (standard documents, points, severity scales and grades)
+  (README, CI configuration, Dockerfile and so on) are scored with the global
+  rule, whose global rules also apply to every report. The rules (standard documents, points, severity scales and grades)
   live in a separate rules project such as
   [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules),
   located by `[rules] root` in `configs/settings.ini`; see
@@ -53,18 +53,25 @@ from the enabled rules in `rules.ini` of the rules project (`standard plan`):
   least one file matching its `applies` produces its own report; steps 3 to 5
   run separately per standard, with separate status.
 - Files that belong to no framework standard (README, CI configuration,
-  Dockerfile and so on) are scored with the common standard and go into the
+  Dockerfile and so on) are scored with the global standard and go into the
   report of the same project: starting from the file's directory and walking
   up, the nearest directory containing files of a framework standard decides
   the report. When this cannot be decided (for example the README at the
   root), the file is listed in every report.
 - When the PR has no files of any framework standard, only one report is
-  produced with the common standard, so every PR gets at least one report.
+  produced with the global standard, so every PR gets at least one report.
+- The section Global rules (全域規則) of the global standard applies to
+  every file of every report, framework files included (for example the
+  third-party exemption). Where a framework standard says otherwise, the
+  framework standard wins.
 - Each report lists only the CR comments on its own files; comment numbers
   keep the plugin's original numbering for easy cross-reference.
 - The confirmations (事先確認事項) of each standard are listed among the
   severity facts in `spec-context.md` and asked in step 1 together with the
-  missing documents.
+  missing documents. The global standard's confirmations about its check
+  items are asked only when the report has global files; those with the code
+  `-` (about the whole standard, such as whether a static analysis report
+  exists) are asked for every report.
 - Step 1 saves a snapshot of each parsed standard
   (`step1/standards/<standard>.resolve`) and records the standard names,
   versions and sha256 in `request.md`. Steps 3 to 5 then score with that
@@ -177,7 +184,7 @@ tmp/
   step2-<plugin>-<state>    status of each CR plugin in step 2
   stepN-<standard>-<state>  status of each scoring standard in steps 3 to 5
   step1/ … step5/      outputs of each step; questions.md (questions of the step), answers.md (the user's replies), errors.log (failures)
-  step1/standards/     the scoring plan: plan.tsv (which files go to which report), <standard>.diff (the report's diff), <standard>.resolve (snapshot of the standard), confirm.tsv (confirmations)
+  step1/standards/     the scoring plan: plan.tsv (which files go to which report, and the excluded files), <standard>.diff (the report's diff), <standard>.resolve (snapshot of the standard), confirm.tsv (confirmations)
   step2/<plugin>/      files.txt and diff.patch (the scope to review), raw/ (the plugin's own output), cr.txt (the normalized CR result)
   step3/<standard>/ … step5/<standard>/  outputs of steps 3 to 5 per scoring standard
   step3/<standard>/findings.draft.txt    draft deductions saved by step 3 before asking; work resumes from here after the reply
@@ -299,6 +306,8 @@ skills/
     references/scan-format.md             # scan rule file format and regex restrictions
     references/review-checklist.md        # checklist for reviewing scan rules and the review.md format
     assets/generator-prompt.md            # prompt of the subagent that generates scan rules
+  code-review-scoring-rule-authoring/     # for adding or changing rules of the rules project (not part of the scoring workflow)
+    SKILL.md                              # shows the changes in every language folder, writes them after confirmation, then runs lint
 scripts/
   link-skills.{sh,zsh,ps1}                # syncs the skill directories each tool reads from skills/ and configs/plugins.ini
 configs/                                  # configuration (only *.example.ini is under version control)
@@ -320,8 +329,8 @@ templates/                                # one folder per language; see "Report
 tests/
   standards/                              # test cases of standard lint; compare.sh compares the output of the three shells with expected.txt
   score/                                  # test cases of score (the check items of legacy.md equal the old rules.tsv, so scores stay the same)
-  prepare/                                # test cases of prepare-diff (legacy.tsv holds the rules of the old scan-rules.tsv, plus scan rules of the common standard)
-  plan/                                   # test cases of standard plan (two framework standards and the common standard, common files at several levels)
+  prepare/                                # test cases of prepare-diff (legacy.tsv holds the rules of the old scan-rules.tsv, plus scan rules of the global standard)
+  plan/                                   # test cases of standard plan (two framework standards and the global standard, global files at several levels)
   workflow/                               # end-to-end test of the full workflow (temporary git repository, two reports, one with its own severity scale and grades, routing of CR comments, refusal when a standard changes)
 tmp/                                      # temporary files of a scoring run (default review root of all scripts, not under version control)
 reports/                                  # final score reports (reports/ next to tmp/, not under version control)
@@ -391,7 +400,7 @@ scoring workflow read the same document:
   ```text
   <rules project>/
     rules.ini        registers the rules: one section per rule, path = its folder, enable = whether it is used
-    defaults.ini     default points, deduction merging, severity scale and grades
+    defaults.ini     default points, deduction merging, severity scale and grades, and the files never scored
     <rule folder>/
       rule.ini       the rule: document, scan rules, files it applies to, and the points, scale and grades it overrides
       <document>.md
@@ -405,8 +414,8 @@ scoring workflow read the same document:
 - Write `rule.ini` from `templates/<language>/rule-template.ini`: `[rule]`
   sets the document (`standard`), the scan rule file (`scan`, optional), the
   files it applies to (`applies`, required for framework rules) or
-  `role="common"` (the common rule: at most one enabled, check codes start
-  with `CM-`; its points and grades always come from `defaults.ini`). The
+  `role="global"` (the global rule: at most one enabled, check codes start
+  with `GL-`; its points and grades always come from `defaults.ini`). The
   other sections (`[points]`, `[scoring]`, `[severity:*]`,
   `[grade:*]`) come from `defaults.ini` when left out; see
   [Adjusting points and severities](#adjusting-points-and-severities).
@@ -434,17 +443,9 @@ scoring workflow read the same document:
 ### Using the existing scoring standards
 
 [code-review-scoring-rules](https://github.com/samuikaze/code-review-scoring-rules)
-is a rules project. It currently provides the following rules, each in two
-rule folders, English (`en/`) and Traditional Chinese (`zh-tw/`), with their
-own `rule.ini`, standard document (`.md`) and scan rule file (`.tsv`), all
-written in the language of the folder. Its `rules.ini` registers the
-Traditional Chinese folders; to use English, change `zh-tw` to `en` in their
-`path`. A standard does not have to match the report language:
-
-| Rule | Type | Applies to | Rule folder |
-| --- | --- | --- | --- |
-| `springboot-3` | Framework rule | Java / Spring Boot 3 projects | `springboot3-rule/<language>/` |
-| `common` | Common rule | Other files, e.g. README, CI, Dockerfile | `common-rule/<language>/` |
+is a rules project with framework rules and a global rule; its README lists
+the rules it provides and the language folders of each. A standard does not
+have to match the report language.
 
 1. Clone the rules project anywhere on your machine:
 
@@ -465,7 +466,34 @@ Traditional Chinese folders; to use English, change `zh-tw` to `en` in their
 
 When the rules are updated, run `git pull` in the rules project; this project
 needs no change. Do not update during a scoring run, for the reason above. To
-add or change a rule, see the README of the rules project.
+add or change a rule, see [Changing the rules](#changing-the-rules).
+
+### Changing the rules
+
+Ask for rule changes with an agent from this project, not from the rules
+project: the `code-review-scoring-rule-authoring` skill knows the formats of
+the templates and the scripts that check them. It triggers only when you ask
+to add or change a rule (for example 「新增評分規則」 "add a scoring rule",
+「新增檢查項」 "add a check item", 「調整嚴重度」 "change a severity" or
+「修改全域規則」 "change the global rules"); the scoring workflow never loads
+it:
+
+1. It warns you when a scoring run is in progress, because the run refuses
+   to continue once the rules change.
+2. It writes the new version of every file to `tmp/rule-authoring/`,
+   including the same change in the other language folders of the rule, and
+   raises the version of the changed documents.
+3. It shows you the changes and the references to changed check codes, and
+   writes them to the rules project only after you confirm.
+4. It updates the scan rules with the generate or review mode of
+   `code-review-scoring-standard`, runs `standard lint` and reports the
+   result.
+5. It never commits: review and commit the changes in the rules project
+   yourself.
+
+The skill writes outside this project (to the folder of `[rules] root`), so
+your tool may ask for permission for each write. To avoid that, allow the
+rules project folder in your tool's settings yourself.
 
 ### Maintaining scoring standards
 
@@ -496,8 +524,10 @@ scan rules"); the scoring workflow never loads it:
 
 On platforms without subagents (or with `subagent=false`), the main agent
 does the generation and the review in turn, with the same steps and files but
-less independence. You always change the standard documents, `rules.ini`,
-`defaults.ini` and `rule.ini` yourself; the AI only reports problems.
+less independence. This skill never changes the standard documents,
+`rules.ini`, `defaults.ini` or `rule.ini`; it only reports problems. Change
+them yourself or with `code-review-scoring-rule-authoring` (see
+[Changing the rules](#changing-the-rules)).
 
 ## Adjusting points and severities
 
@@ -511,28 +541,28 @@ longer has scoring settings:
   whole, not merged key by key: any `[severity:*]` section replaces the whole
   default scale, any `[grade:*]` section replaces all default grades, and
   `[points]` and `[scoring]` each replace the whole section.
-- The common rule (`role="common"`) can override only `[scoring]` and the
+- The global rule (`role="global"`) can override only `[scoring]` and the
   severity scale. Its points and grades always come from `defaults.ini`, also
   when it scores files on its own; `[points]`, `[grade:*]` and `cap` in its
   `rule.ini` are ignored with a lint warning.
 
-`templates/<language>/rule-template.ini` explains every section; its defaults
-are:
+`templates/<language>/rule-template.ini` explains every section. The default
+values live in `defaults.ini` of the rules project, not in this project.
 
-| Dimension | Default max | | Severity | Default deduction | Caps the grade at | | Grade | Default minimum total |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A Correctness | 25 | | Critical | 10 | B | | A | 95 |
-| B Security | 15 | | Major | 5 | | | B | 85 |
-| C Test quality | 15 | | Minor | 2 | | | C | 70 |
-| D Architecture and design | 15 | | Nit | 1 | | | D | 60 |
-| E Performance and resources | 10 | | | | | | F | 0 |
-| F Readability | 10 | | | | | | | |
-| G Maintainability | 10 | | | | | | | |
+`[points]` has seven keys that must total 100:
 
-In the default scale, problems that must be fixed use the classic SonarQube
-severities Critical, Major and Minor, and small style issues use Nit from the
-Google code review guide. A frontend rule could, for example, use a scale of
-its own with display names:
+| Key | Takes the deductions of |
+| --- | --- |
+| A | Correctness check items |
+| B | Security check items |
+| C | Test quality check items |
+| D | Architecture and design check items |
+| E | Performance and resource use check items |
+| F | Readability and maintainability check items |
+| G | Problems without a check item, and upstream factors |
+
+A frontend rule could, for example, use a severity scale of its own with
+display names:
 
 ```ini
 [severity:Critical]
@@ -571,11 +601,11 @@ meaning="A detail that does not affect the quality."
   grade must be 0, and `name` is the name shown in the report (optional). The
   grade is the first one whose minimum the total reaches; with several caps,
   the lowest applies.
-- The seven dimensions must total 100, and all values are integers; otherwise
+- A to G must total 100, and all values are integers; otherwise
   `standard lint` lists the errors and scoring stops.
-- Problems that match no A to G check item (check code `-`) and upstream
-  factors are deducted from the total by severity, not from any dimension;
-  dimension scores and the total are at least 0.
+- Problems that match no A to F check item (check code `-`) and upstream
+  factors share `G` and are deducted from it by severity. Every score is at
+  least 0, and the total is the sum of A to G.
 - Whether deductions are merged is decided by `merge` in `[scoring]`:
   - `merge="false"` (default): not merged; every occurrence is its own
     deduction, so a check code at three locations deducts three times.
@@ -583,13 +613,39 @@ meaning="A detail that does not affect the quality."
     locations and deducts once.
   - Step 3 learns the current mode from the `- deductions:` line of the
     `prepared.txt` summary.
-- When the common rule has a scale of its own, its check items (`CM-…`) are
+- When the global rule has a scale of its own, its check items (`GL-…`) are
   judged on that scale first and deducted with the closest severity of the
-  framework rule's scale. Recording the severity on the common scale in
+  framework rule's scale. Recording the severity on the global scale in
   `from:` of findings.txt is recommended (optional); when present, it is
-  checked against the common document.
+  checked against the global document.
 - The rules are locked during a scoring run; after a change, start over
   (`init --reset`), or the change applies from the next run.
+
+### Files that are not scored
+
+Build output, lock files, binary files and generated code are set by
+`[exclude]` in `defaults.ini` of the rules project, shared by all rules; it
+cannot be set in `rule.ini`:
+
+```ini
+[exclude]
+build="(^|/)(target|build|out|dist|\.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/"
+lock="(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$|\.lock$"
+binary="\.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$"
+generated="@(javax|jakarta)\.annotation\.(processing\.)?Generated|DO NOT EDIT|[Aa]uto-generated"
+```
+
+- `build`, `lock` and `binary` match the path of a file in the repository;
+  `generated` matches the first 15 added lines of a file.
+- The values are regular expressions in the subset of the scan rules (see
+  `skills/code-review-scoring-standard/references/scan-format.md`) and are
+  case-sensitive. Every key is optional; a key left out excludes nothing.
+- The plan of step 1, the file list that step 2 gives the plugins and
+  `prepared.txt` of step 3 use the same setting. An excluded file goes to no
+  report: it is listed as `excluded` in `step1/standards/plan.tsv`, and a
+  framework rule whose only changed files are excluded makes no report. When
+  every file of the PR is excluded, step 1 stops with an error.
+- Without `[exclude]` no file is excluded, and `standard lint` warns about it.
 
 ## Adjusting the report
 
@@ -705,7 +761,7 @@ mode="advisory"
 | `mode` | No | `mapped` (default): step 3 confirms the CR comments; every confirmed comment deducts points, and a rejected one needs a reason. `advisory`: the CR comments only appear in the report and do not affect the score |
 
 With a CR plugin in `mapped` mode, comments that match no check item of the
-scoring standard go to "other" and are deducted from the total by the
+scoring standard go to "other" and are deducted from `G` by the
 severity they were mapped to on the standard's scale. When no scoring standard covers the technology a plugin
 reviews, or you do not want the plugin to affect the score, use `advisory`.
 Each report lists only the comments on its standard's files.
@@ -749,7 +805,7 @@ Each report lists only the comments on its standard's files.
 ### How plugins run in the workflow (step 2)
 
 1. After step 1 succeeds, `review-state cr-plan` matches the files the PR
-   actually changed (excluding build output, generated files and lock files)
+   actually changed (excluding the files `[exclude]` of `defaults.ini` excludes)
    against each plugin's `applies` to decide which plugins run. The files each
    plugin reviews are written to `tmp/step2/<plugin>/files.txt`, with a
    `diff.patch` containing only those files. When no plugin applies, step 2
@@ -789,10 +845,10 @@ Each report lists only the comments on its standard's files.
 - Every comment of a `mapped` plugin is checked against the code during the
   analysis, with one of two outcomes:
   - **Confirmed**: always deducts points, with `source: <comment id>` naming
-    the comment. A comment matching an A to G check item deducts under that
+    the comment. A comment matching an A to F check item deducts under that
     item with the scoring rules' default severity and adjustment conditions;
-    one matching no check item uses check code `-` and is deducted from the
-    total by its mapped severity; one whose root cause seems to be upstream
+    one matching no check item uses check code `-` and is deducted from `G`
+    by its mapped severity; one whose root cause seems to be upstream
     is recorded as an upstream factor and deducted.
   - **Rejected** (the plugin was wrong, it is outside this change, or it
     cannot be confirmed in the code): written as `X|<comment id>|reason`, and
@@ -844,9 +900,9 @@ The final report has two parts:
 - **Part 2, scoring results**: the score per dimension, the problem details,
   suggestions, upstream factors, highlights, scoring notes and the structured
   result.
-  - After the seven dimensions, the score table has two more rows for the
-    deductions of 「其他（未對應檢查項）」 (other, no matching check item) and
-    「上游因素」 (upstream factors).
+  - The last row of the score table is `G`, 「其他與上游因素」 (other and
+    upstream factors). Upstream factors are still listed in a section of their
+    own for human confirmation.
   - The problem details include deductions of the lowest severity;
     deductions confirmed from CR comments show the comment id they came from.
     Severities and grades are shown by their `name` (or code when unset).
@@ -875,18 +931,18 @@ comments. Layout and wording can be adjusted in
   cuts the main agent's round trips and tokens.
 - `init-workspace` / `check-context`: fix where the handover files live, and
   block the later steps until all inputs and open questions are handled.
-- `prepare-diff`: excludes generated files and lock files, numbers the lines
+- `prepare-diff`: excludes the files `[exclude]` of `defaults.ini` names, numbers the lines
   of new files, and lists heuristic candidates with the scan rule files of the
   scoring standards, saving the tokens the AI would spend counting lines and
   scanning again. Files not covered by the `applies` of a framework standard
-  are marked `[common]` and scanned with the common standard's rules; file
+  are marked `[global]` and scanned with the global standard's rules; file
   categories (`@scope`) and PR-level hints (`@pr`, for example main code
   changed without any test file) are also defined in the scan rule files, so
   the script contains no framework-specific logic.
 - `standard`: checks the format when writing a scoring standard (`lint`),
   parses the standard document into data the scripts can read (`parse`),
   lists the differences between two versions (`diff`), selects the standard
-  to score with and the common standard and outputs the check items, points,
+  to score with and the global standard and outputs the check items, points,
   severity scale, grades, applicable files and scan rule files for `score` and
   `prepare-diff` (`resolve`), decides in step 1 which reports to produce from
   the changed files and cuts the diff of each report (`plan`), and writes a

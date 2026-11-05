@@ -4,7 +4,7 @@ language	Traditional Chinese with Taiwan usage
 none	無
 title.missing	（未提供）
 capped_note	（有 {severity} 扣分項，等級上限為 {grade}）
-standard.common	；通用檔案使用 {common}
+standard.global	；全域標準 {global}
 sep.list	、
 sep.bracket	｜
 sep.colon	：
@@ -13,8 +13,8 @@ dim.B	安全性
 dim.C	測試品質
 dim.D	架構與設計
 dim.E	效能與資源使用
-dim.F	可讀性
-dim.G	可維護性
+dim.F	可讀性與可維護性
+dim.G	其他與上游因素
 field.problem	問題
 field.suggestion	建議
 field.assumption	假設
@@ -24,8 +24,6 @@ field.code	相關程式碼
 field.ticket	廠商問題單號
 check.none	其他
 loc.pr_wide	整個 PR
-row.other	其他（未對應檢查項）
-row.upstream	上游因素
 upstream.spec-gap	疑似規格缺漏
 upstream.third-party	疑似第三方問題
 upstream.ownership-change	疑似主責單位變更

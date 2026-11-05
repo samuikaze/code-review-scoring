@@ -63,8 +63,8 @@ function comment_hdr(id,    p, n) {
 
 function where(locs) { return locs == "-" ? L("loc.pr_wide") : codes(locs) }
 
-# Dimension of a check id: its first letter, or the letter after CM- for the common standard (CM-B1 is B).
-function dimof(id) { return (id ~ /^CM-/) ? substr(id, 4, 1) : substr(id, 1, 1) }
+# Dimension of a check id: its first letter, or the letter after GL- for the global standard (GL-B1 is B).
+function dimof(id) { return (id ~ /^GL-/) ? substr(id, 4, 1) : substr(id, 1, 1) }
 
 # The severity scale and grades of the standard (score.tsv): position (1 = the most severe) and display names.
 function sevrank(s) { return (s in srank) ? srank[s] : nsv + 1 }
@@ -244,7 +244,7 @@ BEGIN {
         else if (a[1] == "finding") { nf++; sid[nf] = a[2]; ssev[nf] = a[3]; spts[nf] = a[4]; sloc[nf] = a[5]; sseq[nf] = a[6] }
         else if (a[1] == "upstream") { nus++; upts[a[2]] = a[4] }
         else if (a[1] == "standard") stdlabel = a[2] " " a[3]
-        else if (a[1] == "common") cmlabel = a[2] " " a[3]
+        else if (a[1] == "global") gllabel = a[2] " " a[3]
     }
     close(scoretsv)
     if (nd != 7 || grade == "" || !nsv) fail("score.tsv is missing or incomplete; run the scoring skill first")
@@ -267,15 +267,13 @@ BEGIN {
     for (k = 1; k <= nd; k++) {
         items = ""
         for (i = 1; i <= nf; i++) if (dimof(sid[i]) == dcode[k]) items = items (items == "" ? "" : L("sep.list")) sid[i] " " sevname(ssev[i]) " -" spts[i]
+        # Dimension G: the records without a check id and the upstream factors.
+        if (dcode[k] == "G") {
+            for (i = 1; i <= nf; i++) if (sid[i] == "-") items = items (items == "" ? "" : L("sep.list")) L("check.none") " " sevname(ssev[i]) " -" spts[i]
+            for (i = 1; i <= nus; i++) items = items (items == "" ? "" : L("sep.list")) L("cr.upstream") " " sevname(usev[i]) " -" upts[i]
+        }
         blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " dcode[k] " " L("dim." dcode[k]) " | " dsc[k] "/" dmx[k] " | " (items == "" ? L("none") : items) " |\n"
     }
-    # Records without a check id and upstream factors are deducted from the total.
-    items = ""; sum = 0
-    for (i = 1; i <= nf; i++) if (sid[i] == "-") { items = items (items == "" ? "" : L("sep.list")) sevname(ssev[i]) " -" spts[i]; sum += spts[i] }
-    blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " L("row.other") " | " (sum ? "-" sum : 0) " | " (items == "" ? L("none") : items) " |\n"
-    items = ""; sum = 0
-    for (i = 1; i <= nu; i++) { items = items (items == "" ? "" : L("sep.list")) sevname(usev[i]) " -" upts[i]; sum += upts[i] }
-    blk["SCORE_ROWS"] = blk["SCORE_ROWS"] "| " L("row.upstream") " | " (sum ? "-" sum : 0) " | " (items == "" ? L("none") : items) " |\n"
     b = L("sep.bracket"); c = L("sep.colon"); out = ""
     for (i = 1; i <= nf; i++) {
         key = "F:" sseq[i]
@@ -307,7 +305,7 @@ BEGIN {
 
     inl["PR_TITLE"] = title; inl["REVIEW_DATE"] = today; inl["GRADE"] = gradename(grade); inl["TOTAL"] = total
     inl["CAPPED_NOTE"] = (capped == 1) ? replace_all(replace_all(L("capped_note"), "{severity}", sevname(capsev)), "{grade}", gradename(capgrade)) : ""
-    inl["STANDARD"] = (stdlabel == "" ? L("none") : stdlabel) (cmlabel == "" ? "" : replace_all(L("standard.common"), "{common}", cmlabel))
+    inl["STANDARD"] = (stdlabel == "" ? L("none") : stdlabel) (gllabel == "" ? "" : replace_all(L("standard.global"), "{global}", gllabel))
 }
 
 {

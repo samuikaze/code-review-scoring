@@ -1,0 +1,13 @@
+# Check items of the global standard (GL-) are deducted from the dimension after GL-
+F|GL-A1|Major|config/application.yml:3
+problem: x
+suggestion: y
+F|GL-B1|Critical|config/application.yml:8|機密已推到遠端
+problem: x
+suggestion: y
+F|GL-F1|Minor|README.md:10
+problem: x
+suggestion: y
+F|A1|Major|src/main/java/com/ex/order/OrderService.java:88
+problem: x
+suggestion: y

@@ -11,7 +11,7 @@ It covers, in the project root:
 - `configs/plugins.ini`: the code review plugins (it may list none);
 - `configs/settings.ini`, `[workflow]` section: `subagent=true` (each step runs in its own subagent) or `subagent=false` (you run every step yourself);
 - `configs/settings.ini`, `[<platform>]` section: the subagent model and reasoning, needed only when `subagent=true` and `--platform` is given;
-- `configs/settings.ini`, `[rules]` section: `root`, the folder of the rules project (`rules.ini`, `defaults.ini` and a folder per rule with its `rule.ini`, document and scan rules); step 1 plans the review with its enabled rules (one report per framework rule whose `applies` matches a changed file, the common rule for the other files), so the workflow cannot run without it.
+- `configs/settings.ini`, `[rules]` section: `root`, the folder of the rules project (`rules.ini`, `defaults.ini` and a folder per rule with its `rule.ini`, document and scan rules); step 1 plans the review with its enabled rules (one report per framework rule whose `applies` matches a changed file, the global rule for the other files), so the workflow cannot run without it.
 
 When exit 7 comes with `legacy:` lines, the old `configs.ini` / `plugins.ini` is still in the project root (these files moved into `configs/`). Show the user the `legacy:` and `note:` lines and the move commands that `check` printed, ask them to move the files themselves, and run `check` again afterwards. Never move, merge or delete them yourself.
 

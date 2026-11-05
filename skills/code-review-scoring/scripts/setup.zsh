@@ -65,6 +65,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown option $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+plugins_file="${plugins_file//\\//}" config="${config//\\//}" pdir="${pdir//\\//}"
 [[ -z "$platform" || "$platform" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "error: --platform may only contain letters, digits, - and _" >&2; exit 2; }
 link_cmd="zsh \"$project_root/scripts/link-skills.zsh\" (PowerShell: scripts\\link-skills.ps1)"
 

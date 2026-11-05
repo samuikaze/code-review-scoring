@@ -6,15 +6,15 @@ F|A1|Major|a.kt:2
 problem: x
 suggestion: y
 from: Major
-F|CM-A1|Major|a.yml:1
+F|GL-A1|Major|a.yml:1
 problem: x
 suggestion: y
 from: Critical
-F|CM-B1|Blocker|a.yml:3
+F|GL-B1|Blocker|a.yml:3
 problem: x
 suggestion: y
 from: Critical
-F|CM-F1|Minor|a.yml:4
+F|GL-F1|Minor|a.yml:4
 problem: x
 suggestion: y
 from: Blocker

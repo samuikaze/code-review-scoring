@@ -1,0 +1,16 @@
+# Values that differ only in case are refused the same way by every shell: paths, severities, upstream types,
+# subtypes and impacts
+F|A1|Major|A.java:2
+problem: x
+suggestion: y
+F|A1|major|a.java:2
+problem: x
+suggestion: y
+U|Spec-Gap|missing|high|Major|SD v1.0 §2
+content: x
+U|spec-gap|Missing|high|Major|SD v1.0 §2
+content: x
+U|spec-gap|missing|High|Major|SD v1.0 §2
+content: x
+U|Third-Party|bug|-|Minor|廠商問題單 T-1
+content: x

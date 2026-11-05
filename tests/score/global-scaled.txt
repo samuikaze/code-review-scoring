@@ -1,14 +1,14 @@
-# The common standard has another severity scale than scaled: from: gives the severity on the common scale, column 3
-# the closest one of scaled. from: is optional: without it (CM-A1) column 3 may be any severity of scaled.
+# The global standard has another severity scale than scaled: from: gives the severity on the global scale, column 3
+# the closest one of scaled. from: is optional: without it (GL-A1) column 3 may be any severity of scaled.
 # merge=true: one record per check id with all its locations.
-F|CM-A1|Critical|config/application.yml:3
+F|GL-A1|Critical|config/application.yml:3
 problem: x
 suggestion: y
-F|CM-B1|Blocker|config/application.yml:8,config/application.yml:12|機密已推到遠端
+F|GL-B1|Blocker|config/application.yml:8,config/application.yml:12|機密已推到遠端
 problem: x
 suggestion: y
 from: Critical
-F|CM-F1|Trivial|README.md:10
+F|GL-F1|Trivial|README.md:10
 problem: x
 suggestion: y
 from: Nit

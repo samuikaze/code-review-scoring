@@ -9,7 +9,7 @@ scripts="../../skills/code-review-scoring/scripts"
 
 cases=(
   "lint --file bad.md --settings settings.ini"
-  "lint --file bad-common.md --common --settings settings.ini"
+  "lint --file bad-global.md --global --settings settings.ini"
   "lint --file good-v1.md --scan bad-scan.tsv --settings settings.ini"
   "lint --file good-v2.md --scan good-scan.tsv --settings settings.ini"
   "lint --file good-v2.md --settings settings-missing.ini"
@@ -20,6 +20,7 @@ cases=(
   "lint --settings settings.ini springboot-3 angular nope"
   "lint --settings settings-missing.ini"
   "lint --settings settings-noroot.ini"
+  "lint --settings ../plan/settings-noglobal.ini"
   "lint --settings none.ini"
   "lint --standards good-standards.ini"
   "lint --file ../../templates/zh-tw/scoring-rule-template.md --settings settings.ini"
@@ -31,32 +32,39 @@ cases=(
   "parse --file nofile.md"
   "diff good-v1.md good-v2.md"
   "diff good-v1.md good-v1.md"
+  "diff --global good-global.md good-global.md"
   "diff good-v1.md bad.md"
   "diff good-v1.md"
   "resolve --settings settings.ini"
-  "resolve --settings settings.ini common"
+  "resolve --settings settings.ini global"
   "resolve --settings settings.ini angular"
   "resolve --settings settings.ini nope"
   "resolve --settings settings-bad.ini"
   "resolve --settings settings-missing.ini"
   "stamp --file good-v2.md --scan good-scan.tsv --out stamped.tmp.tsv"
   "lint --file good-v2.md --scan stamped.tmp.tsv --settings settings.ini"
+  "lint --file crlf.tmp.md --scan stamped.tmp.tsv --settings settings.ini"
   "stamp --file bad.md --scan good-scan.tsv --out stamped.tmp.tsv"
   "stamp --file good-v2.md --out stamped.tmp.tsv"
+  "LINT --settings settings.ini"
+  "lint --Settings settings.ini"
 )
 
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"; root="$(cd ../.. && pwd)"; root_w="$(cd ../.. && { pwd -W 2>/dev/null || pwd; })"
-norm() { tr -d '\r' | tr '\134' '/' | sed -e "s#$here_w/##g" -e "s#$here/##g" -e "s#$root_w/#ROOT/#g" -e "s#$root/#ROOT/#g"; }
+# PowerShell points to Get-Help where bash and zsh point to --help.
+norm() { tr -d '\r' | tr '\134' '/' | sed -e "s#$here_w/##g" -e "s#$here/##g" -e "s#$root_w/#ROOT/#g" -e "s#$root/#ROOT/#g" -e 's/(see Get-Help)/(see --help)/'; }
 
 run_all() {  # $@ = command that runs the script; prints every case with its exit code
   local c
+  # good-v2.md with CRLF, as a core.autocrlf checkout on Windows has it: the stamp still matches.
+  awk '{ printf "%s\r\n", $0 }' good-v2.md > crlf.tmp.md
   for c in "${cases[@]}"; do
     echo "### $c"
     # shellcheck disable=SC2086
     "$@" $c 2>&1 | norm
     echo "exit=${PIPESTATUS[0]}"
   done
-  rm -f stamped.tmp.tsv
+  rm -f stamped.tmp.tsv crlf.tmp.md
 }
 
 declare -a shells=("bash:bash $scripts/standard.sh")

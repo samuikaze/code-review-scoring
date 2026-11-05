@@ -1,0 +1,13 @@
+diff --git a/backend/src/main/java/Gen.java b/backend/src/main/java/Gen.java
+new file mode 100644
+--- /dev/null
++++ b/backend/src/main/java/Gen.java
+@@ -0,0 +1,2 @@
++// DO NOT EDIT
++class Gen {}
+diff --git a/frontend/package-lock.json b/frontend/package-lock.json
+--- a/frontend/package-lock.json
++++ b/frontend/package-lock.json
+@@ -1 +1 @@
+-{}
++{ "lockfileVersion": 3 }

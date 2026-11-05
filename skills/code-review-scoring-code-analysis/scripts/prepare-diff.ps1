@@ -11,8 +11,9 @@ With the review plan ROOT/step1/standards/plan.tsv, -Root reads the diff of the 
 one; ROOT/step1/standards/NAME.diff), lists only its code review comments and writes ROOT/step3/NAME/prepared.txt.
 The scan rules, severity scale and merge come from -Standard (an enabled rule of the rules project that [rules] root
 of -Config names; -Config defaults to configs/settings.ini in the project root; default standard: the only enabled
-framework rule, or the common rule when no framework rule is enabled); files its applies does not cover are scanned
-with the rules of the common rule. -Scan FILE uses one scan rule file for every file instead (no severity scale).
+framework rule, or the global rule when no framework rule is enabled); files its applies does not cover are scanned
+with the rules of the global rule. -Scan FILE uses one scan rule file for every file instead (no severity scale, and no
+[exclude] of defaults.ini: no file is excluded).
 Works on Windows PowerShell 5.1 and PowerShell 7+. Saved as UTF-8 with BOM; keep that encoding.
 Exit codes: 0 ok, 2 bad arguments or input, or a missing or invalid standard or scan rule file (run standard lint).
 
@@ -27,7 +28,7 @@ param(
     [Alias('i', 'Input')][string]$InputPath,
     [Alias('g')][string]$Git,
     [Alias('r')][string]$Repo = '.',
-    [Alias('m')][ValidateSet('all', 'summary', 'scan', 'view')][string]$Mode = 'all',
+    [Alias('m')][string]$Mode = 'all',
     [int]$Max = 15,
     [Alias('o')][string]$Out,
     [string]$Config,
@@ -40,6 +41,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/common.ps1')
 Initialize-Utf8
 
+if ($Mode -cnotin 'all', 'summary', 'scan', 'view') { Exit-WithError '--mode must be all, summary, scan or view' }
 $sources = @($Root, $InputPath, $Git | Where-Object { $_ }).Count
 if ($sources -gt 1) { Exit-WithError 'use only one of -Root, -InputPath, -Git' }
 $projectRoot = Get-ProjectRoot (Split-Path -Parent $PSScriptRoot)
@@ -60,7 +62,7 @@ if ($Root) {
 $diffText = Get-DiffText -InputPath $InputPath -Git $Git -Repo $Repo
 
 # Scan rules, file scopes, severity scale and merge of the standard (code-review-scoring/scripts/standard.ps1 resolve, run with the same
-# PowerShell; it prints its own errors). Owner 's' = the standard, 'c' = the common standard.
+# PowerShell; it prints its own errors). Owner 's' = the standard, 'c' = the global standard.
 if ($Scan) {
     if ($Standard) { Exit-WithError 'use only one of -Standard, -Scan' }
     if (-not (Test-UserFile $Scan)) { Exit-WithError "scan rule file not found: $Scan" }
@@ -83,17 +85,19 @@ $rules = New-Object System.Collections.Generic.List[object]
 $idOrder = New-Object System.Collections.Generic.List[string]
 $scopes = @{ s = (New-Object System.Collections.Generic.List[object]); c = (New-Object System.Collections.Generic.List[object]) }
 $hints = New-Object System.Collections.Generic.List[object]
-$stdName = ''; $stdVer = ''; $commonName = ''; $commonVer = ''; $applies = $null; $owner = 's'; $merge = 'false'
+$stdName = ''; $stdVer = ''; $globalName = ''; $globalVer = ''; $applies = $null; $owner = 's'; $merge = 'false'
 $sevs = New-Object System.Collections.Generic.List[object]; $csevs = New-Object System.Collections.Generic.List[object]
+$exclude = @{}
 foreach ($rl in $resolved) {
     $a = ([string]$rl).Split("`t")
     switch -CaseSensitive ($a[0]) {
         'merge' { $merge = $a[1] }
         'severity' { $sevs.Add([pscustomobject]@{ Code = $a[1]; Points = $a[2]; Cap = $a[3]; Name = $a[4]; Meaning = $a[5] }) }
-        'cseverity' { $csevs.Add([pscustomobject]@{ Code = $a[1]; Name = $a[2]; Meaning = $a[3] }) }
+        'gseverity' { $csevs.Add([pscustomobject]@{ Code = $a[1]; Name = $a[2]; Meaning = $a[3] }) }
         'standard' { $owner = 's'; $stdName = $a[1]; $stdVer = $a[2] }
-        'common' { $owner = 'c'; $commonName = $a[1]; $commonVer = $a[2] }
+        'global' { $owner = 'c'; $globalName = $a[1]; $globalVer = $a[2] }
         'applies' { $applies = [regex]::new($a[1]) }
+        'exclude' { $exclude[$a[1]] = [regex]::new($a[2]) }
         'scan' {
             $file = $a[1]; $ln = 0
             if (-not (Test-UserFile $file)) { Exit-WithError "cannot read scan rules $file" }
@@ -148,7 +152,7 @@ function Get-Snippet([string]$s) {
 
 $files = New-Object System.Collections.Generic.List[object]
 $cands = New-Object System.Collections.Generic.List[object]
-$seen = @{}
+$seen = [hashtable]::new([StringComparer]::Ordinal)
 $cur = $null; $inHunk = $false; $oLeft = 0; $nLeft = 0; $nNo = 0; $prev = ''
 
 function New-FileEntry([string]$p) {
@@ -162,7 +166,7 @@ function New-FileEntry([string]$p) {
 function Set-FilePath($f, [string]$p) {
     $f.Path = $p
     # Files of the standard: those its applies covers (every file when there is no applies); the others go to the
-    # common standard.
+    # global standard.
     $f.Owner = if ($null -eq $script:applies -or $script:applies.IsMatch($p)) { 's' } else { 'c' }
     $f.Scopes = @{}
     foreach ($o in 's', 'c') {
@@ -175,10 +179,11 @@ function Set-FilePath($f, [string]$p) {
             if ($m) { $f.Scopes["$o`t$($sc.Name)"] = $true }
         }
     }
+    # Files not scored: [exclude] of defaults.ini in the rules project (exclude records of resolve).
     $f.Excl = ''
-    if ($p -match '(^|/)(target|build|out|dist|\.gradle|node_modules)/' -or $p -match '(^|/)generated(-sources|-test-sources)?/') { $f.Excl = 'build output / generated' }
-    elseif ($p -match '(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$' -or $p -match '\.lock$') { $f.Excl = 'lock file' }
-    elseif ($p -match '\.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$') { $f.Excl = 'binary file' }
+    if ($exclude['build'] -and $exclude['build'].IsMatch($p)) { $f.Excl = 'build output / generated' }
+    elseif ($exclude['lock'] -and $exclude['lock'].IsMatch($p)) { $f.Excl = 'lock file' }
+    elseif ($exclude['binary'] -and $exclude['binary'].IsMatch($p)) { $f.Excl = 'binary file' }
 }
 
 function Invoke-Scan($f, [int]$ln, [string]$text) {
@@ -205,7 +210,7 @@ foreach ($raw in ($diffText -split "`n")) {
         if ($tag -eq '+') {
             $cur.Adds++; $nLeft--
             [void]$cur.View.AppendFormat("+{0,5}  {1}`n", $nNo, $body)
-            if ($cur.Adds -le 15 -and $body -cmatch '@(javax|jakarta)\.annotation\.(processing\.)?Generated|DO NOT EDIT|[Aa]uto-generated') { $cur.Excl = 'marked as generated' }
+            if ($cur.Adds -le 15 -and $exclude['generated'] -and $exclude['generated'].IsMatch($body)) { $cur.Excl = 'marked as generated' }
             Invoke-Scan $cur $nNo $body
             if ($body -notmatch '^\s*$') { $prev = $body }
             $nNo++; continue
@@ -249,7 +254,7 @@ foreach ($raw in ($diffText -split "`n")) {
 
 if ($files.Count -eq 0) { Exit-WithError 'no parsable diff in input' }
 
-$nk = 0; $nx = 0; $nTest = 0; $nMain = 0; $nMig = 0; $nCommon = 0
+$nk = 0; $nx = 0; $nTest = 0; $nMain = 0; $nMig = 0; $nGlobal = 0
 foreach ($f in $files) {
     if (-not $f.Excl -and $f.Status -eq 'deleted') { $f.Excl = 'deleted file' }
     if (-not $f.Excl -and $f.Status -eq 'binary') { $f.Excl = 'binary file' }
@@ -258,7 +263,7 @@ foreach ($f in $files) {
     if ($f.Scopes.ContainsKey("s`ttest")) { $nTest++ }
     if ($f.Scopes.ContainsKey("s`tmain") -and $f.Adds -gt 0) { $nMain++ }
     if ($f.Scopes.ContainsKey("s`tmigration")) { $nMig++ }
-    if ($f.Owner -ceq 'c') { $nCommon++ }
+    if ($f.Owner -ceq 'c') { $nGlobal++ }
 }
 
 # Whether every condition of a PR hint holds; returns $null or the files of its modified: conditions.
@@ -284,14 +289,14 @@ function Get-CountPart([string]$scope, [string]$label, [int]$n) {
 }
 
 $sb = New-Object System.Text.StringBuilder
-if ($Mode -in 'all', 'summary') {
+if ($Mode -cin 'all', 'summary') {
     [void]$sb.Append("## Summary`n")
     if ($stdName) {
-        $cover = if ($null -eq $applies) { '' } elseif ($commonName) { "; the files it does not cover ([common]) use the common standard $commonName $commonVer" } else { '; the files it does not cover are marked [no standard] and are not scored' }
+        $cover = if ($null -eq $applies) { '' } elseif ($globalName) { "; the files it does not cover ([global]) use the global standard $globalName $globalVer" } else { '; the files it does not cover are marked [no standard] and are not scored' }
         [void]$sb.Append("- standard: $stdName $stdVer$cover`n")
     }
     [void]$sb.Append("- deductions: $(if ($merge -eq 'true') { 'merged (merge=true): one F line per check id with all its locations; deducted once' } else { 'not merged (merge=false): one F line per location; every occurrence is deducted' })`n")
-    # The severity scale of the standard, and that of the common standard when it differs (codes not in the same order).
+    # The severity scale of the standard, and that of the global standard when it differs (codes not in the same order).
     if ($sevs.Count -gt 0) {
         $label = { param($x) $x.Code + $(if ($x.Name -and $x.Name -cne $x.Code) { " ($($x.Name))" } else { '' }) }
         # The meaning of a severity: "-" is none; the lines of a multi-line meaning (separated by |) go on indented lines.
@@ -299,16 +304,16 @@ if ($Mode -in 'all', 'summary') {
         [void]$sb.Append("- severity scale (from the most severe; deducted per finding; the lowest, $($sevs[$sevs.Count - 1].Code), is always allowed and is used when a problem cannot be confirmed):`n")
         foreach ($x in $sevs) { [void]$sb.Append("  - $(& $label $x): $(if ([int]$x.Points) { "-$($x.Points)" } else { '0' })$(if ($x.Cap -cne '-') { ", caps the grade at $($x.Cap)" }). $(& $text $x.Meaning)`n") }
         if ($csevs.Count -gt 0 -and (@($csevs | ForEach-Object { $_.Code }) -join ',') -cne (@($sevs | ForEach-Object { $_.Code }) -join ',')) {
-            [void]$sb.Append("- severity scale of the common standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):`n")
+            [void]$sb.Append("- severity scale of the global standard (judge its check items on this scale, give the closest severity of the standard in column 3, and preferably write the severity on this scale in from:):`n")
             foreach ($x in $csevs) { [void]$sb.Append("  - $(& $label $x). $(& $text $x.Meaning)`n") }
         }
     }
     $parts = (Get-CountPart 'main' 'main code changed' $nMain) + (Get-CountPart 'test' 'test files' $nTest) + (Get-CountPart 'migration' 'migrations' $nMig)
-    if ($nCommon -gt 0) { $parts += ", $(if ($commonName) { 'common standard files' } else { 'files without a standard' }): $nCommon" }
+    if ($nGlobal -gt 0) { $parts += ", $(if ($globalName) { 'global standard files' } else { 'files without a standard' }): $nGlobal" }
     [void]$sb.Append("- reviewable files: $nk, excluded: $nx$(if ($parts) { '; ' + $parts.Substring(2) })`n")
     foreach ($f in $files) {
         $tagv = if ($f.Scopes.ContainsKey("s`ttest")) { ' [test]' } elseif ($f.Scopes.ContainsKey("s`tmigration")) { ' [migration]' } else { '' }
-        if ($f.Owner -ceq 'c') { $tagv += $(if ($commonName) { ' [common]' } else { ' [no standard]' }) }
+        if ($f.Owner -ceq 'c') { $tagv += $(if ($globalName) { ' [global]' } else { ' [no standard]' }) }
         if ($f.Excl) { [void]$sb.Append("  - (excluded: $($f.Excl)) $($f.Path)`n") }
         else { [void]$sb.Append("  - $($f.Path) [$($f.Status) +$($f.Adds) -$($f.Dels)]$tagv`n") }
     }
@@ -322,21 +327,21 @@ if ($Mode -in 'all', 'summary') {
             if (-not (Test-UserFile $crFile)) { continue }
             foreach ($x in (Read-Utf8Lines $crFile)) {
                 $x = $x.TrimEnd("`r")
-                if ($x -match '^\s*C\s*\|') {
+                if ($x -cmatch '^\s*C\s*\|') {
                     $n++; $t = @($x -split '\|' | ForEach-Object { $_.Trim() }); while ($t.Count -lt 4) { $t += '' }
                     $show = Test-CommentOwner $cplan $cstd $t[2]
                     if (-not $show) { continue }
                     $listed++; $rule = if ($t[3]) { $t[3] } else { '-' }
                     [void]$sb.Append("- $($p[0])#$n [$($p[2])] $($t[1]) $rule | $($t[2])`n")
                 }
-                elseif ($n -gt 0 -and $show -and $x -match '^\s*problem:') { [void]$sb.Append("  $($x.Trim())`n") }
+                elseif ($n -gt 0 -and $show -and $x -cmatch '^\s*problem:') { [void]$sb.Append("  $($x.Trim())`n") }
             }
         }
         if ($listed -eq 0) { [void]$sb.Append("- none`n") }
         [void]$sb.Append("`n")
     }
 }
-if ($Mode -in 'all', 'scan') {
+if ($Mode -cin 'all', 'scan') {
     [void]$sb.Append("## Heuristic candidates (clues only: confirm in code before deducting; unlisted checks still need manual review)`n")
     if ($rules.Count -eq 0 -and $hints.Count -eq 0) { [void]$sb.Append("- none: the standard has no scan rules (scan= in the rule.ini of the standard)`n") }
     foreach ($h in $hints) {
@@ -352,7 +357,7 @@ if ($Mode -in 'all', 'scan') {
     }
     [void]$sb.Append("`n")
 }
-if ($Mode -in 'all', 'view') {
+if ($Mode -cin 'all', 'view') {
     [void]$sb.Append("## Compact diff (+ = added line; numbers are new-file line numbers, cite these in findings)`n")
     foreach ($f in $files) {
         if ($f.Excl) { continue }

@@ -53,8 +53,7 @@ be adapted to this standard's technology.
 | C | Test quality | Are the tests sufficient and meaningful |
 | D | Architecture and design | Layering, separation of responsibilities, framework conventions |
 | E | Performance and resource use | Query efficiency, resource management, external calls |
-| F | Readability | Is it easy for others to understand |
-| G | Maintainability | Is it easy to change and extend later |
+| F | Readability and maintainability | Is it easy for others to understand; Is it easy to change and extend later |
 
 ## Check items
 
@@ -68,9 +67,9 @@ full-width `｜` (U+FF5C):
 Field rules:
 
 - Code: the dimension letter plus a sequence number, for example `A1`, unique
-  within the document. The common standard (`role="common"`) prefixes its
-  codes with `CM-`, for example `CM-A1`; codes of framework standards cannot
-  start with `CM`.
+  within the document. The global standard (`role="global"`) prefixes its
+  codes with `GL-`, for example `GL-A1`; codes of framework standards cannot
+  start with `GL`.
 - Severity: only the severity codes of this rule (case-sensitive), that is the
   `[severity:CODE]` sections of `rule.ini`, or the scale of `defaults.ini`
   when `rule.ini` does not set one. The examples below use the default
@@ -110,13 +109,9 @@ the heading and write "None". -->
 
 - E1｜A query has no paging and loads a whole table at once｜Minor
 
-### F. Readability
+### F. Readability and maintainability
 
 - F1｜A method has more than 50 lines, or nesting deeper than 3 levels｜Minor
-
-### G. Maintainability
-
-None
 
 ## Confirmations
 
@@ -134,7 +129,7 @@ half-width commas.
 or when it does not deduct. -->
 
 - Code written to work around a third-party system problem does not deduct
-  under the check items of dimensions F and G when a comment explains the
+  under the check items of dimension F when a comment explains the
   reason and gives the vendor's ticket number.
 
 ## Judging hints

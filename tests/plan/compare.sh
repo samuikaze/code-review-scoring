@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Runs "standard plan" on the fixtures with every installed shell (bash, zsh, PowerShell) and compares the output and
 # the written files with expected.txt. The rules project rules/ has two framework rules (springboot-3: *.java, angular:
-# *.ts, with its own severity scale), the common rule and a disabled rule (docs: *.md); multi.diff changes both
-# frameworks and common files at several levels.
+# *.ts, with its own severity scale), the global rule and a disabled rule (docs: *.md); multi.diff changes both
+# frameworks and global files at several levels; excluded.diff and all-excluded.diff hold files that [exclude] of
+# defaults.ini excludes, which go to no report.
 #   bash tests/plan/compare.sh            compare
 #   bash tests/plan/compare.sh --update   rewrite expected.txt from the bash output
 set -uo pipefail
@@ -11,10 +12,12 @@ scripts="../../skills/code-review-scoring/scripts"
 
 cases=(
   "--diff multi.diff --settings settings.ini"
-  "--diff common-only.diff --settings settings.ini"
+  "--diff global-only.diff --settings settings.ini"
   "--diff java-only.diff --settings settings.ini"
   "--diff empty.diff --settings settings.ini"
-  "--diff common-only.diff --settings settings-nocommon.ini"
+  "--diff excluded.diff --settings settings.ini"
+  "--diff all-excluded.diff --settings settings.ini"
+  "--diff global-only.diff --settings settings-noglobal.ini"
   "--diff java-only.diff --settings none.ini"
 )
 

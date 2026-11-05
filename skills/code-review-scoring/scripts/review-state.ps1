@@ -63,7 +63,7 @@ $states = @('pending', 'working', 'success', 'failed')
 $skillsDir = Split-Path -Parent $skillDir
 
 $argv = @($args)
-if ($argv.Count -eq 0 -or $argv[0] -in '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
+if ($argv.Count -eq 0 -or $argv[0] -cin '-h', '--help') { Get-Help $PSCommandPath -Detailed; exit 2 }
 $cmd = [string]$argv[0]
 $opt = @{ root = (Join-Path $projectRoot 'tmp'); step = ''; plugin = ''; standard = ''; state = ''; message = ''; git = ''; repo = '.'; title = ''; reset = $false
     config = (Join-Path $projectRoot 'configs/settings.ini'); subagent = ''; platform = ''; model = ''; reasoning = ''
@@ -71,15 +71,15 @@ $opt = @{ root = (Join-Path $projectRoot 'tmp'); step = ''; plugin = ''; standar
 $i = 1
 while ($i -lt $argv.Count) {
     $a = [string]$argv[$i]
-    if ($a -eq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--config)' }
-    if ($a -in '--root', '--step', '--plugin', '--standard', '--state', '--message', '--git', '--repo', '--title', '--config', '--plugins', '--platform', '--model', '--reasoning', '--subagent') {
+    if ($a -ceq '--standards') { Exit-WithError '--standards was removed: the rules come from [rules] root of the settings (--config)' }
+    if ($a -cin '--root', '--step', '--plugin', '--standard', '--state', '--message', '--git', '--repo', '--title', '--config', '--plugins', '--platform', '--model', '--reasoning', '--subagent') {
         if ($i + 1 -ge $argv.Count) { Exit-WithError "$a needs a value" }
         $opt[$a.Substring(2)] = [string]$argv[$i + 1]
         $i += 2
     }
-    elseif ($a -eq '--reset') { $opt.reset = $true; $i++ }
-    elseif ($a -eq '--inline') { $opt.inline = $true; $i++ }
-    elseif ($a -eq '--retry') { $opt.retry = $true; $i++ }
+    elseif ($a -ceq '--reset') { $opt.reset = $true; $i++ }
+    elseif ($a -ceq '--inline') { $opt.inline = $true; $i++ }
+    elseif ($a -ceq '--retry') { $opt.retry = $true; $i++ }
     else { Exit-WithError "unknown argument $a (see Get-Help)" }
 }
 $root = $opt.root
@@ -106,7 +106,7 @@ function Get-IniValue([string]$File, [string]$Section, [string]$Key) {
     $inSec = $false; $val = ''
     foreach ($l in (Read-Utf8Lines $File)) {
         if ($l -match '^\s*\[(.*)\]\s*$') { $inSec = ($Matches[1] -ceq $Section); continue }
-        if ($inSec -and $l -match '^\s*([A-Za-z_]+)\s*=\s*"?(.*?)"?\s*$' -and $Matches[1] -eq $Key) { $val = $Matches[2] }
+        if ($inSec -and $l -cmatch '^\s*([A-Za-z_]+)\s*=\s*"?(.*?)"?\s*$' -and $Matches[1] -ceq $Key) { $val = $Matches[2] }
     }
     return $val
 }
@@ -157,7 +157,7 @@ function Get-PlanNames {
     return @(Read-Utf8Lines (P "step$CR/plan.tsv") | Where-Object { $_ } | ForEach-Object { ($_ -split "`t")[0] })
 }
 function Get-PlanField([string]$Name, [int]$Index) {
-    $l = Read-Utf8Lines (P "step$CR/plan.tsv") | Where-Object { ($_ -split "`t")[0] -eq $Name } | Select-Object -First 1
+    $l = Read-Utf8Lines (P "step$CR/plan.tsv") | Where-Object { ($_ -split "`t")[0] -ceq $Name } | Select-Object -First 1
     if ($l) { return ($l -split "`t")[$Index] } return ''
 }
 # The scoring standards of the review plan (one report each), in plan order.
@@ -184,9 +184,9 @@ function Get-StepState([int]$N) {
     if ($N -eq $CR) { if (-not (Test-Exists "step$CR/plan.tsv")) { return 'not-started' } }
     elseif (@(Get-StdNames).Count -eq 0) { return 'not-started' }
     $all = @(Get-SubNames $N | ForEach-Object { Get-UnitState "$N-$_" })
-    if ($all -contains 'failed') { return 'failed' }
-    if ($all -contains 'pending') { return 'pending' }
-    if ($all -contains 'working') { return 'working' }
+    if ($all -ccontains 'failed') { return 'failed' }
+    if ($all -ccontains 'pending') { return 'pending' }
+    if ($all -ccontains 'working') { return 'working' }
     if (@($all | Where-Object { $_ -ne 'success' }).Count -eq 0) { return 'success' }
     return 'not-started'
 }
@@ -195,7 +195,7 @@ function Test-Step {
     $n = [int]$opt.step
     if ($n -eq $CR) {
         if (-not $opt.plugin) { Exit-WithError "step $CR needs --plugin NAME (see cr-plan)" }
-        if ((Get-PlanNames) -notcontains $opt.plugin) { Stop-Refused "plugin $($opt.plugin) is not in step $CR's plan; run cr-plan first" }
+        if ((Get-PlanNames) -cnotcontains $opt.plugin) { Stop-Refused "plugin $($opt.plugin) is not in step $CR's plan; run cr-plan first" }
     }
     elseif ($opt.plugin) { Exit-WithError "--plugin is only used with --step $CR" }
     if ($n -gt $CR) {
@@ -216,16 +216,37 @@ function Assert-Previous([int]$N, [string]$Std) {
     }
     elseif ($N -gt 1 -and (Get-StepState ($N - 1)) -ne 'success') { Stop-Refused "step $($N - 1) has not succeeded; steps cannot be skipped" }
 }
-# Files added or changed by the PR, without build output, generated code or lock files
+# Files added or changed by the PR, from step 1's diff, without the files [exclude] of defaults.ini excludes (the
+# exclude records of the plan's resolve output; the same rules as prepare-diff of code-analysis).
 function Get-DiffFiles {
-    $exclude = '(^|/)(target|build|out|dist|\.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/|(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$|\.lock$'
-    return @(Read-Utf8Lines (P 'step1/pr.diff') | Where-Object { $_.StartsWith('+++ ') } | ForEach-Object {
-            ($_.Substring(4) -split "`t")[0].Trim('"')
-        } | Where-Object { $_ -ne '/dev/null' } | ForEach-Object { $_ -replace '^b/', '' } | Where-Object { $_ -notmatch $exclude })
+    $ex = @{}
+    $first = @(Get-StdNames) | Select-Object -First 1
+    if ($first) {
+        $res = P "step1/standards/$first.resolve"
+        if ([IO.File]::Exists($res)) { foreach ($l in (Read-Utf8Lines $res)) { $a = $l.Split("`t"); if ($a[0] -ceq 'exclude') { $ex[$a[1]] = [regex]::new($a[2]) } } }
+    }
+    $files = New-Object System.Collections.Generic.List[string]
+    $p = ''; $gen = $false; $adds = 0; $hdr = $false
+    $flush = { if ($p -ne '' -and -not $gen) { $files.Add($p) } }
+    foreach ($l in (Read-Utf8Lines (P 'step1/pr.diff'))) {
+        if ($l.StartsWith('diff --git ', [StringComparison]::Ordinal)) { . $flush; $p = ''; $gen = $false; $adds = 0; $hdr = $true; continue }
+        if ($hdr -and $l.StartsWith('+++ ', [StringComparison]::Ordinal)) {
+            $p = ($l.Substring(4) -split "`t")[0].Trim('"'); if ($p.StartsWith('b/', [StringComparison]::Ordinal)) { $p = $p.Substring(2) }
+            if ($p -ceq '/dev/null' -or ($ex['build'] -and $ex['build'].IsMatch($p)) -or ($ex['lock'] -and $ex['lock'].IsMatch($p)) -or ($ex['binary'] -and $ex['binary'].IsMatch($p))) { $p = '' }
+            continue
+        }
+        if ($l.StartsWith('@@', [StringComparison]::Ordinal)) { $hdr = $false; continue }
+        if (-not $hdr -and $l.StartsWith('+', [StringComparison]::Ordinal)) {
+            $adds++
+            if ($adds -le 15 -and $ex['generated'] -and $ex['generated'].IsMatch($l.Substring(1))) { $gen = $true }
+        }
+    }
+    . $flush
+    return , $files.ToArray()
 }
 # The parts of step 1's diff that touch the given files (each plugin reads only its own files)
 function Get-PluginDiff([string[]]$Files) {
-    $want = @{}; foreach ($f in $Files) { $want[$f] = $true }
+    $want = [hashtable]::new([StringComparer]::Ordinal); foreach ($f in $Files) { $want[$f] = $true }
     $sb = New-Object System.Text.StringBuilder
     $keep = $false
     foreach ($line in ((Read-Utf8Text (P 'step1/pr.diff')) -split "`n")) {
@@ -287,7 +308,7 @@ function Invoke-Tool([string]$Skill, [string]$Script, [string[]]$ArgList) {
 function Get-ResKey([string]$Text) {
     $lines = foreach ($l in ($Text.Replace("`r", '') -split "`n")) {
         $f = $l.Split("`t")
-        if (($f[0] -ceq 'standard' -or $f[0] -ceq 'common') -and $f.Count -gt 4) { $f[4] = '' }
+        if (($f[0] -ceq 'standard' -or $f[0] -ceq 'global') -and $f.Count -gt 4) { $f[4] = '' }
         elseif (($f[0] -ceq 'scan' -or $f[0] -ceq 'ruleini' -or $f[0] -ceq 'defaults') -and $f.Count -gt 1) { $f[1] = '' }
         $f -join "`t"
     }
@@ -319,14 +340,14 @@ function Write-RequestStandards {
         foreach ($l in (Read-Utf8Lines (P "step1/standards/$n.resolve"))) {
             $f = $l.Split("`t")
             if ($f[0] -ceq 'standard') { $out.Add("- ${n}: $($f[1]) $($f[2]) $($f[3]) $($f[4])"); $o = '' }
-            elseif ($f[0] -ceq 'common') { $out.Add("  - common standard: $($f[1]) $($f[2]) $($f[3]) $($f[4])"); $o = 'common ' }
+            elseif ($f[0] -ceq 'global') { $out.Add("  - global standard: $($f[1]) $($f[2]) $($f[3]) $($f[4])"); $o = 'global ' }
             elseif ($f[0] -ceq 'ruleini') { $out.Add("  - ${o}rule.ini: $($f[2]) $($f[1])") }
             elseif ($f[0] -ceq 'defaults') { $out.Add("  - defaults.ini: $($f[2]) $($f[1])") }
         }
     }
     Write-Utf8File (P 'request.md') (($out -join "`n") + "`n")
 }
-# The document path of the standard record ("standard") or the common record ("common") of a planned standard.
+# The document path of the standard record ("standard") or the global record ("global") of a planned standard.
 function Get-StdDoc([string]$Name, [string]$Kind) {
     foreach ($l in (Read-Utf8Lines (P "step1/standards/$Name.resolve"))) { $f = $l.Split("`t"); if ($f[0] -ceq $Kind) { return $f[4] } }
     return ''
@@ -352,12 +373,12 @@ function Get-ReportLanguage {
 # Prompt of step $N (plugin $Plugin): the step template plus the shared status protocol. Lines marked "[sub] " are only
 # for subagents, lines marked "[inline] " only for the main agent.
 function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
-    $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"; $sDoc = ''; $cDoc = 'none'; $lang = ''
+    $pPath = ''; $pMode = ''; $unitArgs = "--step $N"; $dir = P "step$N"; $sDoc = ''; $gDoc = 'none'; $lang = ''
     if ($N -ge $CR) { $lang = Get-ReportLanguage }
     $cOpt = Get-FileOpt '--config' $opt.config (Join-Path $projectRoot 'configs/settings.ini')
     if ($N -eq $CR) { $pPath = Get-PlanField $Plugin 1; $pMode = Get-PlanField $Plugin 2; $unitArgs += " --plugin $Plugin"; $dir = P "step$CR/$Plugin" }
     elseif ($N -gt $CR) {
-        $sDoc = Get-StdDoc $Std 'standard'; $cDoc = Get-StdDoc $Std 'common'; if (-not $cDoc) { $cDoc = 'none' }
+        $sDoc = Get-StdDoc $Std 'standard'; $gDoc = Get-StdDoc $Std 'global'; if (-not $gDoc) { $gDoc = 'none' }
         $unitArgs += " --standard $Std"; $dir = P "step$N/$Std"
     }
     $tpl = (Read-Utf8Text (Join-Path $skillDir "assets/prompts/step$N.md")) + (Read-Utf8Text (Join-Path $skillDir 'assets/prompts/protocol.md'))
@@ -367,7 +388,7 @@ function Get-Prompt([int]$N, [string]$Plugin, [string]$Std, [bool]$Inline) {
         $l
     }
     $text = ($lines -join "`n")
-    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"$cOpt").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{COMMON_DOC}}', $cDoc).Replace('{{REPORT_LANGUAGE}}', $lang).Replace('{{CONFIG_OPT}}', $cOpt)
+    return $text.Replace('{{ROOT}}', $rootAbs).Replace('{{STATE_CMD}}', "$selfCmd set --root `"$rootAbs`"$cOpt").Replace('{{REPO}}', (Get-RequestField 'Repository')).Replace('{{RANGE}}', (Get-RequestField 'Diff range')).Replace('{{TITLE}}', (Get-RequestField 'Title')).Replace('{{SKILLS_DIR}}', $skillsDir).Replace('{{PLUGIN_PATH}}', $pPath).Replace('{{PLUGIN}}', $Plugin).Replace('{{MODE}}', $pMode).Replace('{{UNIT}}', $unitArgs).Replace('{{DIR}}', $dir).Replace('{{STEP}}', "$N").Replace('{{STANDARD_DOC}}', $sDoc).Replace('{{STANDARD}}', $Std).Replace('{{GLOBAL_DOC}}', $gDoc).Replace('{{REPORT_LANGUAGE}}', $lang).Replace('{{CONFIG_OPT}}', $cOpt)
 }
 # Writes the action "next" prints for a unit ("1", "2-<plugin>" or "3-<standard>") in state $S; returns $false when it
 # needs nothing.
@@ -415,7 +436,7 @@ function Write-NextAction([string]$U, [string]$Label, [string]$S, [bool]$Inline,
     return $true
 }
 
-switch ($cmd) {
+switch -CaseSensitive ($cmd) {
     'init' {
         if (-not $opt.git) { Exit-WithError 'init needs --git RANGE' }
         if (-not [IO.File]::Exists((Resolve-UserPath $opt.plugins))) { [Console]::Error.WriteLine("setup incomplete: $(Resolve-UserPath $opt.plugins) does not exist; run setup check first"); exit 7 }
@@ -514,7 +535,7 @@ switch ($cmd) {
             $g = ''; $t = ''; $c = ''; $dims = ''
             foreach ($l in (Read-Utf8Lines (P "step4/$n/score.tsv"))) {
                 $f = $l -split "`t"
-                switch ($f[0]) {
+                switch -CaseSensitive ($f[0]) {
                     'grade' { $g = $f[1] }
                     'total' { $t = $f[1] }
                     'cap' { $c = " (capped at $($f[2]) because of a $($f[1]) finding)" }
@@ -580,10 +601,10 @@ switch ($cmd) {
         $pluginsFile = Resolve-UserPath $opt.plugins
         if ([IO.File]::Exists($pluginsFile)) {
             $cfgDir = Split-Path -Parent $pluginsFile
-            $sections = [ordered]@{}; $sec = ''
+            $sections = New-Object System.Collections.Specialized.OrderedDictionary ([StringComparer]::Ordinal); $sec = ''
             foreach ($l in (Read-Utf8Lines $pluginsFile)) {
                 if ($l -match '^\s*[;#]' -or $l -match '^\s*$') { continue }
-                if ($l -match '^\s*\[(.*)\]\s*$') { $sec = $Matches[1]; $sections[$sec] = @{ path = ''; applies = ''; mode = '' }; continue }
+                if ($l -match '^\s*\[(.*)\]\s*$') { $sec = $Matches[1]; $sections[$sec] = [hashtable]::new([StringComparer]::Ordinal); foreach ($k in 'path', 'applies', 'mode') { $sections[$sec][$k] = '' }; continue }
                 if ($sec -and $l -match '^\s*([^=]+?)\s*=\s*"?(.*?)"?\s*$') { $sections[$sec][$Matches[1]] = $Matches[2] }
             }
             foreach ($name in $sections.Keys) {
@@ -594,9 +615,9 @@ switch ($cmd) {
                 $dir = [IO.Path]::GetFullPath($dir).TrimEnd('\', '/')
                 if (-not [IO.File]::Exists((Join-Path $dir 'SKILL.md'))) { Exit-WithError "plugin ${name}: $dir/SKILL.md not found; run scripts/link-skills first" }
                 $mode = if ($s.mode) { $s.mode } else { 'mapped' }
-                if ($mode -notin 'mapped', 'advisory') { Exit-WithError "plugin ${name}: mode must be mapped or advisory, not $mode" }
+                if ($mode -cnotin 'mapped', 'advisory') { Exit-WithError "plugin ${name}: mode must be mapped or advisory, not $mode" }
                 $pats = @($s.applies -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-                $matched = @($files | Where-Object { $f = $_; $pats.Count -eq 0 -or @($pats | Where-Object { $f -like $_ }).Count -gt 0 })
+                $matched = @($files | Where-Object { $f = $_; $pats.Count -eq 0 -or @($pats | Where-Object { $f -clike $_ }).Count -gt 0 })
                 if ($matched.Count -gt 0) {
                     [void][IO.Directory]::CreateDirectory((P "step$CR/$name"))
                     Write-Utf8File (P "step$CR/$name/files.txt") (($matched -join "`n") + "`n")
@@ -634,11 +655,11 @@ switch ($cmd) {
         if ($n -eq $CR) { $unit = "$CR-$($opt.plugin)"; $label = "step $CR plugin $($opt.plugin)" }
         if ($n -gt $CR) {
             $unit = "$n-$std"; $label = "step $n ($std)"
-            if ($state -in 'working', 'success') { Assert-StdGate $std }
+            if ($state -cin 'working', 'success') { Assert-StdGate $std }
         }
         $cur = Get-UnitState $unit
         $d = Get-UnitDir $unit
-        switch ($state) {
+        switch -CaseSensitive ($state) {
             'working' {
                 Assert-Previous $n $std
                 # Later steps start over: every unit of them, or only the same standard's after steps 3 and 4.
@@ -715,12 +736,12 @@ switch ($cmd) {
         elseif (-not $platform) {
             if ($opt.model -or $opt.reasoning) { Exit-WithError '--model and --reasoning need --platform NAME' }
             $v = (Get-IniValue $cfg 'workflow' 'subagent').ToLowerInvariant()
-            if ($v -notin 'true', 'false') { [Console]::Error.WriteLine("not configured: subagent=true|false is missing in [workflow] of $cfg; ask the user whether to run the steps in subagents"); exit 6 }
+            if ($v -cnotin 'true', 'false') { [Console]::Error.WriteLine("not configured: subagent=true|false is missing in [workflow] of $cfg; ask the user whether to run the steps in subagents"); exit 6 }
             [Console]::Out.Write("subagent=$v`n")
         }
         else {
             if ($platform -notmatch '^[A-Za-z0-9_-]+$') { Exit-WithError '--platform may only contain letters, digits, - and _' }
-            if (@('workflow', 'language', 'rules') -contains $platform) { Exit-WithError "$platform is reserved and cannot be a platform name" }
+            if (@('workflow', 'language', 'rules') -ccontains $platform) { Exit-WithError "$platform is reserved and cannot be a platform name" }
             if (-not $opt.model -and -not $opt.reasoning) {
                 $m = Get-IniValue $cfg $platform 'model'
                 $r = Get-IniValue $cfg $platform 'reasoning'

@@ -21,6 +21,31 @@ English | [繁體中文](../zh-tw/notices.md)
   `configs/settings.ini` were replaced by the rules project in 3.0.0. The setup
   check reports them as `legacy:` and stops until they are moved into
   `rules.ini`, `defaults.ini` or the `rule.ini` of a rule and removed.
+- **The common rule is now the global rule**: since 4.0.0, `role="common"`
+  is `role="global"`, check codes start with `GL-` instead of `CM-`, the
+  option `--common` is `--global`, and `score.tsv` and `score.json` record
+  the rule as `global`. Lint reports the old names as errors with the new
+  name. The section Global rules (`## 全域規則`) of the global standard
+  applies to every report; lint warns when it is missing.
+- **Check the old G points**: since 4.0.0, `G` of `[points]` holds problems
+  without a check item and upstream factors, and the old G check items
+  belong to `F`. Lint does not catch a custom `[points]` that still gives `G`
+  the points of the old dimension, because its keys still total 100; check
+  every `[points]` of `defaults.ini` and the `rule.ini` files yourself.
+- **The files that are not scored are set in the rules project**: since
+  4.0.0, build output, lock files, binary files and generated code are set by
+  `[exclude]` in `defaults.ini` of the rules project (see
+  [the README](../../README.md#files-that-are-not-scored)); the scripts no
+  longer have them built in. Without `[exclude]` in `defaults.ini` no file is
+  excluded, and lint warns about it; add the example of the README to
+  `defaults.ini`. Excluded files go to no report, from the plan of step 1 on.
+  Matching is always case-sensitive, so PowerShell gives the same result as
+  bash and zsh.
+- **Standards decide whether to ask for static analysis and vulnerability
+  scans**: since 4.0.0, step 1 no longer always asks for these two documents;
+  the Confirmations of the scoring standards decide. A confirmation with the
+  code `-` is about the whole standard (for example, information the global
+  rules need) and appears in every report.
 - **Do not change a standard during a scoring run**: step 1 saves a snapshot
   of each standard's content and sha256, and steps 3 to 5 score with that
   snapshot. If a standard document, a scan rule file, the `rule.ini` of the
@@ -37,7 +62,7 @@ English | [繁體中文](../zh-tw/notices.md)
   standard changes, lint warns that the rules are out of date; generate or
   review the scan rules again.
 - **One PR can produce several reports**: one for each framework standard
-  that matches the changed files. Common files whose owner cannot be
+  that matches the changed files. Global files whose owner cannot be
   determined (for example the README at the repository root) are listed in
   every report, and the CR comments on those files appear in every report as
   well.

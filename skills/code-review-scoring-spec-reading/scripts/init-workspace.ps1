@@ -79,7 +79,7 @@ elseif ($diffStatus -eq 'provided') {
     finally { $ErrorActionPreference = $prev }
     if ($LASTEXITCODE -ne 0) { exit 2 }  # plan has printed the error
     $sb = New-Object System.Text.StringBuilder
-    foreach ($l in (Read-Utf8Lines (Join-Path $planDir 'confirm.tsv') | Where-Object { $_ })) { $c = $l.Split("`t"); [void]$sb.Append("- $($c[1]) ($($c[0])) $($c[2]):`n") }
+    foreach ($l in (Read-Utf8Lines (Join-Path $planDir 'confirm.tsv') | Where-Object { $_ })) { $c = $l.Split("`t"); [void]$sb.Append("- $(if ($c[1] -cne '-') { "$($c[1]) " })($($c[0])) $($c[2]):`n") }
     $confirm = if ($sb.Length -gt 0) { $sb.ToString() } else { '- (the scoring standards list nothing to confirm)' + "`n" }
 }
 else { $confirm = '- (no scoring standard is planned: the diff is empty)' + "`n" }

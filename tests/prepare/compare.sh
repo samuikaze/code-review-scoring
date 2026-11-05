@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs prepare-diff on the fixtures with every installed shell (bash, zsh, PowerShell) and compares the output with
-# expected.txt. pr.diff is a Spring Boot PR with common files (README, CI, shell, Dockerfile); legacy.tsv has the scan
-# rules used before the standards existed, common.tsv those of the common standard of tests/score.
+# expected.txt. pr.diff is a Spring Boot PR with global files (README, CI, shell, Dockerfile); legacy.tsv has the scan
+# rules used before the standards existed, global.tsv those of the global standard of tests/score.
 #   bash tests/prepare/compare.sh            compare
 #   bash tests/prepare/compare.sh --update   rewrite expected.txt from the bash output
 set -uo pipefail
@@ -11,14 +11,16 @@ scripts="../../skills/code-review-scoring-code-analysis/scripts"
 cases=(
   "--input pr.diff --config settings.ini"
   "--input no-test.diff --mode scan --config settings.ini"
-  "--input pr.diff --mode scan --config settings.ini --standard common"
+  "--input pr.diff --mode scan --config settings.ini --standard global"
   "--input pr.diff --mode summary --config settings-noscan.ini"
+  "--input case.diff --mode summary --config settings.ini"
   "--input pr.diff --mode scan --config settings-noscan.ini"
   "--input pr.diff --mode summary --config ../score/settings.ini --standard scaled"
   "--input pr.diff --mode scan --config none.ini --scan legacy.tsv"
   "--input pr.diff --mode scan --config none.ini --scan bad.tsv"
   "--input pr.diff --config none.ini"
   "--input pr.diff --config settings.ini --standard nope"
+  "--input pr.diff --mode Scan --config settings.ini"
 )
 
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"

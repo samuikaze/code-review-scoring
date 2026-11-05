@@ -24,7 +24,7 @@ Usage: score.zsh [--root DIR] [options]
                        project root). The points, severity scale, grades and merge come from the rule.ini of the
                        standard or defaults.ini of the rules project
       --standard NAME  the scoring standard (an enabled rule of rules.ini); default: the only enabled framework rule, or
-                       the common rule when no framework rule is enabled. Its check items and those of the common
+                       the global rule when no framework rule is enabled. Its check items and those of the global
                        rule are used
   -h, --help           show this help
 
@@ -55,6 +55,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+root="${root//\\//}" findings="${findings//\\//}" diff="${diff//\\//}" repo="${repo//\\//}" out_dir="${out_dir//\\//}" config="${config//\\//}"
 [[ -z "$root" && -z "$findings" ]] && root="$project_root/tmp"
 if [[ -n "$root" ]]; then
   [[ -d "$root" ]] || { echo "error: review root not found: $root" >&2; exit 2; }

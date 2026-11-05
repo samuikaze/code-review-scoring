@@ -27,18 +27,18 @@ $section = ''; $seen = @{}
 $bad = @(); $stop = @(); $wait = @(); $declined = @()
 foreach ($line in (Read-Utf8Lines $ctx)) {
     if ($line.StartsWith('## ')) { $section = $line.Substring(3).Trim(); continue }
-    if ($section -eq 'Inputs' -and $line -cmatch '^- ([a-z-]+):\s*(\S*)') {
+    if ($section -ceq 'Inputs' -and $line -cmatch '^- ([a-z-]+):\s*(\S*)') {
         $key = $Matches[1]; $st = $Matches[2]; $seen[$key] = $true
         if ($st -cnotin 'unknown', 'pending', 'provided', 'declined') { $bad += "  - ${key}: invalid status `"$st`" (use unknown, pending, provided or declined)"; continue }
-        if ($key -in 'diff', 'pr-description' -and $st -eq 'declined') { $stop += "  - $key (required) was declined" }
-        elseif ($st -eq 'unknown') { $wait += "  - ${key}: not checked yet; ask the user whether it can be provided" }
-        elseif ($st -eq 'pending') { $wait += "  - ${key}: asked, waiting for the user's reply" }
-        elseif ($st -eq 'declined') { $declined += "  - $key" }
+        if ($key -cin 'diff', 'pr-description' -and $st -ceq 'declined') { $stop += "  - $key (required) was declined" }
+        elseif ($st -ceq 'unknown') { $wait += "  - ${key}: not checked yet; ask the user whether it can be provided" }
+        elseif ($st -ceq 'pending') { $wait += "  - ${key}: asked, waiting for the user's reply" }
+        elseif ($st -ceq 'declined') { $declined += "  - $key" }
         continue
     }
-    if ($section -eq 'Open questions' -and $line.StartsWith('- [ ] ')) { $wait += "  - open question: $($line.Substring(6))" }
-    # A confirmation of a scoring standard (- <check ids> (<standard>) <what to confirm>:) without an answer.
-    if ($section -eq 'Severity facts' -and $line -cmatch '^- (.+ \([a-z0-9-]+\) .+):\s*$') { $wait += "  - confirmation not answered: $($Matches[1])" }
+    if ($section -ceq 'Open questions' -and $line.StartsWith('- [ ] ')) { $wait += "  - open question: $($line.Substring(6))" }
+    # A confirmation of a scoring standard (- [<check ids> ](<standard>) <what to confirm>:) without an answer.
+    if ($section -ceq 'Severity facts' -and $line -cmatch '^- ((.+ )?\([a-z0-9-]+\) .+):\s*$') { $wait += "  - confirmation not answered: $($Matches[1])" }
 }
 if (-not $seen.ContainsKey('diff') -or -not $seen.ContainsKey('pr-description')) { $bad += '  - the Inputs section must list diff and pr-description' }
 

@@ -12,7 +12,7 @@ Prepare everything the code analysis needs. Do not review code or assign severit
 
 **Output:** `tmp/step1/pr.diff`, the review plan `tmp/step1/standards/` and a completed `tmp/step1/spec-context.md` (`tmp` is the review root: the `tmp/` folder in the project root of these skills, two levels above this skill's physical folder; the scripts use it by default and take `--root` for another one).
 
-`init-workspace` plans the review with `standard plan` of `code-review-scoring`: every enabled framework rule of the rules project (`[rules] root` of `configs/settings.ini`) whose `applies` matches a changed file gets its own report, and the other files are scored with the common standard. It writes the plan to `tmp/step1/standards/` and puts the confirmations (事先確認事項) of those standards into **Severity facts** as `- <check ids> (<standard>) <what to confirm>:` lines. When it exits 2 with a standards error, report it (workflow mode: set failed with that error); the user fixes the standards with `standard lint`, never you. Without `configs/standards.ini` (standalone use) it skips the plan with a warning.
+`init-workspace` plans the review with `standard plan` of `code-review-scoring`: the files that `[exclude]` of `defaults.ini` excludes go to no report, and every enabled framework rule of the rules project (`[rules] root` of `configs/settings.ini`) whose `applies` matches a changed file gets its own report, and the other files are scored with the global standard. It writes the plan to `tmp/step1/standards/` and puts the confirmations (事先確認事項) of those standards into **Severity facts** as `- <check ids> (<standard>) <what to confirm>:` lines (`- (<standard>) <what to confirm>:` for a confirmation about the whole standard, such as one its global rules depend on). When it exits 2 with a standards error, report it (workflow mode: set failed with that error); the user fixes the standards with `standard lint`, never you. Without `[rules] root` in the settings (standalone use) it skips the plan with a warning.
 
 ## Modes
 
@@ -51,8 +51,8 @@ PowerShell parameters are `-Git`, `-Repo`, `-InputPath`, `-Root`, `-Title`, `-Fo
 | `sd-spec` | no | checks that compare the implementation with the spec, suspected spec gaps |
 | `third-party-spec` | no | suspected third-party issues |
 | `change-log` | no | suspected ownership changes |
-| `static-analysis` | no | do not deduct issues the tools already report |
-| `vulnerability-scan` | no | checks of known vulnerable dependencies (usually evaluated only when this exists; see the standard's 特例規則 or Special rules) |
+
+Other documents, such as a static analysis report or a vulnerability scan, are asked for only when a confirmation of the scoring standards needs them (**Severity facts**); the standards decide what they are used for. Record such a document in the answer of that confirmation.
 
 Example questions (written for the user, in their language):
 
@@ -60,8 +60,8 @@ Example questions (written for the user, in their language):
 開始評分前，想確認以下資料是否可以提供：
 
 1. SD 規格書（相關章節與版本）：用來判斷實作和規格是否一致，以及是否有規格缺漏。
-2. 靜態分析報告：用來避免和工具重複扣分。
-3. 相依套件的弱點掃描結果：用來判斷新增套件是否有已知弱點。
+2. 異動的查詢預期處理多少筆資料：評分標準的確認事項，用來判斷是否需要分頁。
+3. 是否有靜態分析報告：評分標準的確認事項，提供時會依標準的規定使用。
 
 如果某一項無法提供，請直接告訴我，我會依缺少資料的規則評分，並在結果中註明。
 ```
@@ -73,8 +73,8 @@ Every later step reads `spec-context.md`, so keep it short: one line per item, a
 - **Requirements:** one line per requirement with its source (document, version, section). When the document is a file, also write its full path and line numbers (`path:line` or `path:start-end`); code review comments cite them as spec locations. Checks that compare the implementation with the spec use these.
 - **Spec observations:** places where the spec is missing something, wrong or ambiguous, with the exact section. Do not judge them here.
 - **Third-party notes:** vendor spec versions, known vendor issues and ticket numbers.
-- **Change log:** spec, interface or process changes with date, before/after version, and whether they were written or verbal only. Compliance is judged against the version **in effect when development started**.
-- **Severity facts:** the confirmation lines of the scoring standards, and the issues the static analysis already reports. Fill each confirmation that the diff or the documents settle; ask about the others in the same round as the missing inputs, only when the diff touches what the confirmation is about (for example, a question about row counts only when the diff changes queries). A fact that does not apply to this PR is answered `not applicable` with a short reason.
+- **Change log:** spec, interface or process changes with date, before/after version, and whether they were written or verbal only.
+- **Severity facts:** the confirmation lines of the scoring standards. Fill each confirmation that the diff or the documents settle; ask about the others in the same round as the missing inputs, only when the diff touches what the confirmation is about (for example, a question about row counts only when the diff changes queries). A fact that does not apply to this PR is answered `not applicable` with a short reason.
 
 ## Gotchas
 

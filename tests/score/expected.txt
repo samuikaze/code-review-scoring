@@ -1,34 +1,34 @@
 ### --findings findings.txt --config settings.ini --standard legacy
 note: no diff given, location checks skipped
 grade F, total 41/100
-A 5/25  B 14/15  C 3/15  D 10/15  E 5/10  F 6/10  G 5/10  
+A 5/25  B 14/15  C 3/15  D 10/15  E 5/10  F 1/10  G 3/10  
 deductions: 12 (without a check id: 1), upstream: 1, rejected comments: 1, skipped checks: 1
-standard: legacy v1.0, common: common v0.1
+standard: legacy v1.0, global: global v0.1
 wrote OUT/score.tsv and OUT/score.json
 exit=0
 --- score.tsv
 total	41
 grade	F
 capped	0
-standard	legacy	v1.0	sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800
-common	common	v0.1	sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+standard	legacy	v1.0	sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a215cb11f7af27
+global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0
-ruleini	common	sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	5	25
 dim	B	14	15
 dim	C	3	15
 dim	D	10	15
 dim	E	5	10
-dim	F	6	10
-dim	G	5	10
+dim	F	1	10
+dim	G	3	10
 finding	A2	Critical	10	src/main/java/com/ex/order/OrderService.java:90	2
 finding	C1	Critical	10	src/main/java/com/ex/order/OrderService.java:30	5
 finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	1
 finding	A7	Major	5	src/main/java/com/ex/order/OrderService.java:12	3
 finding	D2	Major	5	src/main/java/com/ex/order/OrderService.java:40	7
 finding	E2	Major	5	src/main/java/com/ex/order/OrderService.java:26	8
-finding	G6	Major	5	src/main/java/com/ex/order/OrderService.java:50	11
+finding	F11	Major	5	src/main/java/com/ex/order/OrderService.java:50	11
 finding	C4	Minor	2	src/test/java/com/ex/order/OrderServiceTest.java:10	6
 finding	F3	Minor	2	src/main/java/com/ex/order/OrderService.java:42	9
 finding	F3	Minor	2	src/main/java/com/ex/refund/RefundService.java:17	10
@@ -49,9 +49,9 @@ gradedef	F	F	0
   "total": 41,
   "grade": "F",
   "cap": null,
-  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800", "ruleIniHash": "sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0" },
-  "common": { "name": "common", "version": "v0.1", "hash": "sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df", "ruleIniHash": "sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a215cb11f7af27", "ruleIniHash": "sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0" },
+  "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Critical", "name": "Critical", "points": 10, "cap": "B" },
     { "code": "Major", "name": "Major", "points": 5, "cap": null },
@@ -65,7 +65,7 @@ gradedef	F	F	0
     { "code": "D", "name": "D", "min": 60 },
     { "code": "F", "name": "F", "min": 0 }
   ],
-  "dimensions": { "A": 5, "B": 14, "C": 3, "D": 10, "E": 5, "F": 6, "G": 5 },
+  "dimensions": { "A": 5, "B": 14, "C": 3, "D": 10, "E": 5, "F": 1, "G": 3 },
   "otherDeduction": 2,
   "upstreamDeduction": 5,
   "findings": [
@@ -75,7 +75,7 @@ gradedef	F	F	0
     { "id": "A7", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:12"] },
     { "id": "D2", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:40"] },
     { "id": "E2", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:26"] },
-    { "id": "G6", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:50"] },
+    { "id": "F11", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:50"] },
     { "id": "C4", "severity": "Minor", "from": null, "deduction": 2, "locations": ["src/test/java/com/ex/order/OrderServiceTest.java:10"] },
     { "id": "F3", "severity": "Minor", "from": null, "deduction": 2, "locations": ["src/main/java/com/ex/order/OrderService.java:42"] },
     { "id": "F3", "severity": "Minor", "from": null, "deduction": 2, "locations": ["src/main/java/com/ex/refund/RefundService.java:17"] },
@@ -95,35 +95,35 @@ gradedef	F	F	0
 }
 ### --findings findings.txt --config settings.ini --standard points
 note: no diff given, location checks skipped
-grade F, total 41/100
-A 5/25  B 14/15  C 8/20  D 10/15  E 5/10  F 1/5  G 5/10  
+grade F, total 45/100
+A 5/25  B 14/15  C 8/20  D 10/15  E 5/10  F 0/5  G 3/10  
 deductions: 12 (without a check id: 1), upstream: 1, rejected comments: 1, skipped checks: 1
-standard: points v1.0, common: common v0.1
+standard: points v1.0, global: global v0.1
 wrote OUT/score.tsv and OUT/score.json
 exit=0
 --- score.tsv
-total	41
+total	45
 grade	F
 capped	0
-standard	points	v1.0	sha256:135023107da7b7028ffbe4f40495be871a33ab76241e94587fd8c9b5671a6eea
-common	common	v0.1	sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+standard	points	v1.0	sha256:263c6ee8aa44221c12be5872bdb5b2e07d381d7cdd059f7011e332292b660fe2
+global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:78e5b34a585350d23f00ad8c05ea7dd7efced3c99a0a2bc0d4f1431398a5e5c6
-ruleini	common	sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	5	25
 dim	B	14	15
 dim	C	8	20
 dim	D	10	15
 dim	E	5	10
-dim	F	1	5
-dim	G	5	10
+dim	F	0	5
+dim	G	3	10
 finding	A2	Critical	10	src/main/java/com/ex/order/OrderService.java:90	2
 finding	C1	Critical	10	src/main/java/com/ex/order/OrderService.java:30	5
 finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	1
 finding	A7	Major	5	src/main/java/com/ex/order/OrderService.java:12	3
 finding	D2	Major	5	src/main/java/com/ex/order/OrderService.java:40	7
 finding	E2	Major	5	src/main/java/com/ex/order/OrderService.java:26	8
-finding	G6	Major	5	src/main/java/com/ex/order/OrderService.java:50	11
+finding	F11	Major	5	src/main/java/com/ex/order/OrderService.java:50	11
 finding	C4	Minor	2	src/test/java/com/ex/order/OrderServiceTest.java:10	6
 finding	F3	Minor	2	src/main/java/com/ex/order/OrderService.java:42	9
 finding	F3	Minor	2	src/main/java/com/ex/refund/RefundService.java:17	10
@@ -141,12 +141,12 @@ gradedef	D	D	60
 gradedef	F	F	0
 --- score.json
 {
-  "total": 41,
+  "total": 45,
   "grade": "F",
   "cap": null,
-  "standard": { "name": "points", "version": "v1.0", "hash": "sha256:135023107da7b7028ffbe4f40495be871a33ab76241e94587fd8c9b5671a6eea", "ruleIniHash": "sha256:78e5b34a585350d23f00ad8c05ea7dd7efced3c99a0a2bc0d4f1431398a5e5c6" },
-  "common": { "name": "common", "version": "v0.1", "hash": "sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df", "ruleIniHash": "sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "standard": { "name": "points", "version": "v1.0", "hash": "sha256:263c6ee8aa44221c12be5872bdb5b2e07d381d7cdd059f7011e332292b660fe2", "ruleIniHash": "sha256:78e5b34a585350d23f00ad8c05ea7dd7efced3c99a0a2bc0d4f1431398a5e5c6" },
+  "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Critical", "name": "Critical", "points": 10, "cap": "B" },
     { "code": "Major", "name": "Major", "points": 5, "cap": null },
@@ -160,7 +160,7 @@ gradedef	F	F	0
     { "code": "D", "name": "D", "min": 60 },
     { "code": "F", "name": "F", "min": 0 }
   ],
-  "dimensions": { "A": 5, "B": 14, "C": 8, "D": 10, "E": 5, "F": 1, "G": 5 },
+  "dimensions": { "A": 5, "B": 14, "C": 8, "D": 10, "E": 5, "F": 0, "G": 3 },
   "otherDeduction": 2,
   "upstreamDeduction": 5,
   "findings": [
@@ -170,7 +170,7 @@ gradedef	F	F	0
     { "id": "A7", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:12"] },
     { "id": "D2", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:40"] },
     { "id": "E2", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:26"] },
-    { "id": "G6", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:50"] },
+    { "id": "F11", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:50"] },
     { "id": "C4", "severity": "Minor", "from": null, "deduction": 2, "locations": ["src/test/java/com/ex/order/OrderServiceTest.java:10"] },
     { "id": "F3", "severity": "Minor", "from": null, "deduction": 2, "locations": ["src/main/java/com/ex/order/OrderService.java:42"] },
     { "id": "F3", "severity": "Minor", "from": null, "deduction": 2, "locations": ["src/main/java/com/ex/refund/RefundService.java:17"] },
@@ -195,23 +195,23 @@ validation failed with 3 error(s). Fix findings.txt and run again:
   - line 4: A1: severity must be the default Major or Nit, not Critical
   - line 7: A7: non-default severity Major needs the matching adjustment condition in column 5
 exit=1
-### --findings common.txt --config settings.ini --standard legacy
+### --findings global.txt --config settings.ini --standard legacy
 note: no diff given, location checks skipped
 grade C, total 78/100
 A 15/25  B 5/15  C 15/15  D 15/15  E 10/10  F 8/10  G 10/10  
 deductions: 4 (without a check id: 0), upstream: 0, rejected comments: 0, skipped checks: 0
-standard: legacy v1.0, common: common v0.1
+standard: legacy v1.0, global: global v0.1
 wrote OUT/score.tsv and OUT/score.json
 exit=0
 --- score.tsv
 total	78
 grade	C
 capped	0
-standard	legacy	v1.0	sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800
-common	common	v0.1	sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+standard	legacy	v1.0	sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a215cb11f7af27
+global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0
-ruleini	common	sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	15	25
 dim	B	5	15
 dim	C	15	15
@@ -219,10 +219,10 @@ dim	D	15	15
 dim	E	10	10
 dim	F	8	10
 dim	G	10	10
-finding	CM-B1	Critical	10	config/application.yml:8	2
+finding	GL-B1	Critical	10	config/application.yml:8	2
 finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	4
-finding	CM-A1	Major	5	config/application.yml:3	1
-finding	CM-F1	Minor	2	README.md:10	3
+finding	GL-A1	Major	5	config/application.yml:3	1
+finding	GL-F1	Minor	2	README.md:10	3
 severity	Critical	Critical	10	B
 severity	Major	Major	5	-
 severity	Minor	Minor	2	-
@@ -237,9 +237,9 @@ gradedef	F	F	0
   "total": 78,
   "grade": "C",
   "cap": null,
-  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:1851271fd45e7d1bcd739ba65f32e6f542fcb831651c91c306c087a1fa179800", "ruleIniHash": "sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0" },
-  "common": { "name": "common", "version": "v0.1", "hash": "sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df", "ruleIniHash": "sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a215cb11f7af27", "ruleIniHash": "sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0" },
+  "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Critical", "name": "Critical", "points": 10, "cap": "B" },
     { "code": "Major", "name": "Major", "points": 5, "cap": null },
@@ -257,33 +257,33 @@ gradedef	F	F	0
   "otherDeduction": 0,
   "upstreamDeduction": 0,
   "findings": [
-    { "id": "CM-B1", "severity": "Critical", "from": null, "deduction": 10, "locations": ["config/application.yml:8"] },
+    { "id": "GL-B1", "severity": "Critical", "from": null, "deduction": 10, "locations": ["config/application.yml:8"] },
     { "id": "A1", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:88"] },
-    { "id": "CM-A1", "severity": "Major", "from": null, "deduction": 5, "locations": ["config/application.yml:3"] },
-    { "id": "CM-F1", "severity": "Minor", "from": null, "deduction": 2, "locations": ["README.md:10"] }
+    { "id": "GL-A1", "severity": "Major", "from": null, "deduction": 5, "locations": ["config/application.yml:3"] },
+    { "id": "GL-F1", "severity": "Minor", "from": null, "deduction": 2, "locations": ["README.md:10"] }
   ],
   "upstream": [],
   "mappedComments": [],
   "rejectedComments": [],
   "skippedChecks": []
 }
-### --findings common.txt --config settings.ini --standard scaled
+### --findings global.txt --config settings.ini --standard scaled
 note: no diff given, location checks skipped
 grade A, total 78/100
 A 15/25  B 5/15  C 15/15  D 15/15  E 10/10  F 8/10  G 10/10  
 deductions: 4 (without a check id: 0), upstream: 0, rejected comments: 0, skipped checks: 0
-standard: scaled v1.0, common: common v0.1
+standard: scaled v1.0, global: global v0.1
 wrote OUT/score.tsv and OUT/score.json
 exit=0
 --- score.tsv
 total	78
 grade	A
 capped	0
-standard	scaled	v1.0	sha256:fbdd226c09cbf8ab3a4d858312aef9e2a2924397724badb62e5d0f7cf1f1b95c
-common	common	v0.1	sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+standard	scaled	v1.0	sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad239c1b93b9b6
+global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1
-ruleini	common	sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	15	25
 dim	B	5	15
 dim	C	15	15
@@ -291,10 +291,10 @@ dim	D	15	15
 dim	E	10	10
 dim	F	8	10
 dim	G	10	10
-finding	CM-B1	Critical	10	config/application.yml:8	2
+finding	GL-B1	Critical	10	config/application.yml:8	2
 finding	A1	Major	5	src/main/java/com/ex/order/OrderService.java:88	4
-finding	CM-A1	Major	5	config/application.yml:3	1
-finding	CM-F1	Minor	2	README.md:10	3
+finding	GL-A1	Major	5	config/application.yml:3	1
+finding	GL-F1	Minor	2	README.md:10	3
 severity	Blocker	阻斷	15	C
 severity	Critical	嚴重	10	-
 severity	Major	主要	5	-
@@ -309,9 +309,9 @@ gradedef	F	待加強	0
   "total": 78,
   "grade": "A",
   "cap": null,
-  "standard": { "name": "scaled", "version": "v1.0", "hash": "sha256:fbdd226c09cbf8ab3a4d858312aef9e2a2924397724badb62e5d0f7cf1f1b95c", "ruleIniHash": "sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1" },
-  "common": { "name": "common", "version": "v0.1", "hash": "sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df", "ruleIniHash": "sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "standard": { "name": "scaled", "version": "v1.0", "hash": "sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad239c1b93b9b6", "ruleIniHash": "sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1" },
+  "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Blocker", "name": "阻斷", "points": 15, "cap": "C" },
     { "code": "Critical", "name": "嚴重", "points": 10, "cap": null },
@@ -329,46 +329,46 @@ gradedef	F	待加強	0
   "otherDeduction": 0,
   "upstreamDeduction": 0,
   "findings": [
-    { "id": "CM-B1", "severity": "Critical", "from": null, "deduction": 10, "locations": ["config/application.yml:8"] },
+    { "id": "GL-B1", "severity": "Critical", "from": null, "deduction": 10, "locations": ["config/application.yml:8"] },
     { "id": "A1", "severity": "Major", "from": null, "deduction": 5, "locations": ["src/main/java/com/ex/order/OrderService.java:88"] },
-    { "id": "CM-A1", "severity": "Major", "from": null, "deduction": 5, "locations": ["config/application.yml:3"] },
-    { "id": "CM-F1", "severity": "Minor", "from": null, "deduction": 2, "locations": ["README.md:10"] }
+    { "id": "GL-A1", "severity": "Major", "from": null, "deduction": 5, "locations": ["config/application.yml:3"] },
+    { "id": "GL-F1", "severity": "Minor", "from": null, "deduction": 2, "locations": ["README.md:10"] }
   ],
   "upstream": [],
   "mappedComments": [],
   "rejectedComments": [],
   "skippedChecks": []
 }
-### --findings common-scaled.txt --config settings.ini --standard scaled
+### --findings global-scaled.txt --config settings.ini --standard scaled
 note: no diff given, location checks skipped
 grade F, total 58/100
-A 0/25  B 0/15  C 15/15  D 15/15  E 10/10  F 10/10  G 10/10  
+A 0/25  B 0/15  C 15/15  D 15/15  E 10/10  F 10/10  G 8/10  
 deductions: 6 (without a check id: 1), upstream: 1, rejected comments: 0, skipped checks: 0
-standard: scaled v1.0, common: common v0.1
+standard: scaled v1.0, global: global v0.1
 wrote OUT/score.tsv and OUT/score.json
 exit=0
 --- score.tsv
 total	58
 grade	F
 capped	0
-standard	scaled	v1.0	sha256:fbdd226c09cbf8ab3a4d858312aef9e2a2924397724badb62e5d0f7cf1f1b95c
-common	common	v0.1	sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+standard	scaled	v1.0	sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad239c1b93b9b6
+global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1
-ruleini	common	sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	0	25
 dim	B	0	15
 dim	C	15	15
 dim	D	15	15
 dim	E	10	10
 dim	F	10	10
-dim	G	10	10
+dim	G	8	10
 finding	A2	Blocker	15	src/main/kotlin/Order.kt:3	4
-finding	CM-B1	Blocker	15	config/application.yml:8,config/application.yml:12	2
-finding	CM-A1	Critical	10	config/application.yml:3	1
+finding	GL-B1	Blocker	15	config/application.yml:8,config/application.yml:12	2
+finding	GL-A1	Critical	10	config/application.yml:3	1
 finding	-	Minor	2	-	6
 finding	A7	Trivial	0	src/main/kotlin/Order.kt:5,src/main/kotlin/Order.kt:9	5
-finding	CM-F1	Trivial	0	README.md:10	3
+finding	GL-F1	Trivial	0	README.md:10	3
 upstream	1	Trivial	0
 severity	Blocker	阻斷	15	C
 severity	Critical	嚴重	10	-
@@ -384,9 +384,9 @@ gradedef	F	待加強	0
   "total": 58,
   "grade": "F",
   "cap": null,
-  "standard": { "name": "scaled", "version": "v1.0", "hash": "sha256:fbdd226c09cbf8ab3a4d858312aef9e2a2924397724badb62e5d0f7cf1f1b95c", "ruleIniHash": "sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1" },
-  "common": { "name": "common", "version": "v0.1", "hash": "sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df", "ruleIniHash": "sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "standard": { "name": "scaled", "version": "v1.0", "hash": "sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad239c1b93b9b6", "ruleIniHash": "sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1" },
+  "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Blocker", "name": "阻斷", "points": 15, "cap": "C" },
     { "code": "Critical", "name": "嚴重", "points": 10, "cap": null },
@@ -400,16 +400,16 @@ gradedef	F	待加強	0
     { "code": "C", "name": "可", "min": 60 },
     { "code": "F", "name": "待加強", "min": 0 }
   ],
-  "dimensions": { "A": 0, "B": 0, "C": 15, "D": 15, "E": 10, "F": 10, "G": 10 },
+  "dimensions": { "A": 0, "B": 0, "C": 15, "D": 15, "E": 10, "F": 10, "G": 8 },
   "otherDeduction": 2,
   "upstreamDeduction": 0,
   "findings": [
     { "id": "A2", "severity": "Blocker", "from": null, "deduction": 15, "locations": ["src/main/kotlin/Order.kt:3"] },
-    { "id": "CM-B1", "severity": "Blocker", "from": "Critical", "deduction": 15, "locations": ["config/application.yml:8", "config/application.yml:12"] },
-    { "id": "CM-A1", "severity": "Critical", "from": null, "deduction": 10, "locations": ["config/application.yml:3"] },
+    { "id": "GL-B1", "severity": "Blocker", "from": "Critical", "deduction": 15, "locations": ["config/application.yml:8", "config/application.yml:12"] },
+    { "id": "GL-A1", "severity": "Critical", "from": null, "deduction": 10, "locations": ["config/application.yml:3"] },
     { "id": null, "severity": "Minor", "from": null, "deduction": 2, "locations": [] },
     { "id": "A7", "severity": "Trivial", "from": null, "deduction": 0, "locations": ["src/main/kotlin/Order.kt:5", "src/main/kotlin/Order.kt:9"] },
-    { "id": "CM-F1", "severity": "Trivial", "from": "Nit", "deduction": 0, "locations": ["README.md:10"] }
+    { "id": "GL-F1", "severity": "Trivial", "from": "Nit", "deduction": 0, "locations": ["README.md:10"] }
   ],
   "upstream": [
     { "type": "third-party", "subtype": "bug", "impact": null, "severity": "Trivial", "deduction": 0, "reference": "廠商回報 CS-1" }
@@ -425,10 +425,10 @@ gradedef	F	待加強	0
 note: no diff given, location checks skipped
 validation failed with 9 error(s). Fix findings.txt and run again:
   - line 2: A1: severity must be the default Major or Trivial, not Critical
-  - line 5: A1: from: is only used for check items of the common standard when its severity scale differs from that of the standard
-  - line 9: CM-A1: from: must be the default Major or Nit, not Critical
-  - line 13: CM-B1: from: Critical is not the default severity and needs the matching adjustment condition in column 5
-  - line 17: CM-F1: from: Blocker is not a severity of the common standard (Critical, Major, Minor, Nit)
+  - line 5: A1: from: is only used for check items of the global standard when its severity scale differs from that of the standard
+  - line 9: GL-A1: from: must be the default Major or Nit, not Critical
+  - line 13: GL-B1: from: Critical is not the default severity and needs the matching adjustment condition in column 5
+  - line 17: GL-F1: from: Blocker is not a severity of the global standard (Critical, Major, Minor, Nit)
   - line 21: upstream severity "Nit" is not one of the scale of the standard (Blocker, Critical, Major, Minor, Trivial)
   - line 24: comment backend-code-review#1 is mapped twice
   - line 26: format is M|<plugin>#<n>|severity
@@ -439,7 +439,7 @@ note: no diff given, location checks skipped
 grade C, total 85/100 (capped at C because of a Blocker finding)
 A 10/25  B 15/15  C 15/15  D 15/15  E 10/10  F 10/10  G 10/10  
 deductions: 1 (without a check id: 0), upstream: 0, rejected comments: 0, skipped checks: 0
-standard: scaled v1.0, common: common v0.1
+standard: scaled v1.0, global: global v0.1
 wrote OUT/score.tsv and OUT/score.json
 exit=0
 --- score.tsv
@@ -447,11 +447,11 @@ total	85
 grade	C
 capped	1
 cap	Blocker	C
-standard	scaled	v1.0	sha256:fbdd226c09cbf8ab3a4d858312aef9e2a2924397724badb62e5d0f7cf1f1b95c
-common	common	v0.1	sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df
+standard	scaled	v1.0	sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad239c1b93b9b6
+global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
 ruleini	standard	sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1
-ruleini	common	sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633
-defaults	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 dim	A	10	25
 dim	B	15	15
 dim	C	15	15
@@ -474,9 +474,9 @@ gradedef	F	待加強	0
   "total": 85,
   "grade": "C",
   "cap": { "severity": "Blocker", "grade": "C" },
-  "standard": { "name": "scaled", "version": "v1.0", "hash": "sha256:fbdd226c09cbf8ab3a4d858312aef9e2a2924397724badb62e5d0f7cf1f1b95c", "ruleIniHash": "sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1" },
-  "common": { "name": "common", "version": "v0.1", "hash": "sha256:99eb693b7b3bd19ba0864a14738a82585227d71804bb167749d52a035609b4df", "ruleIniHash": "sha256:9aef06e7ef8a4487d02b9dcca231d0164d615124b51e538926191be757eb3633" },
-  "defaultsHash": "sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64",
+  "standard": { "name": "scaled", "version": "v1.0", "hash": "sha256:900d95a6f68be2d7df058c6456f1884b98d2270c8e4a2c918bad239c1b93b9b6", "ruleIniHash": "sha256:e9b7ccee8d7ddb63e6a245c4c9b4f4777000359fbe460ece6bbfa4ef67c63bb1" },
+  "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
   "severities": [
     { "code": "Blocker", "name": "阻斷", "points": 15, "cap": "C" },
     { "code": "Critical", "name": "嚴重", "points": 10, "cap": null },
@@ -501,6 +501,77 @@ gradedef	F	待加強	0
   "rejectedComments": [],
   "skippedChecks": []
 }
+### --findings overflow.txt --config settings.ini --standard legacy
+note: no diff given, location checks skipped
+grade B, total 90/100
+A 25/25  B 15/15  C 15/15  D 15/15  E 10/10  F 10/10  G 0/10  
+deductions: 2 (without a check id: 2), upstream: 1, rejected comments: 0, skipped checks: 0
+standard: legacy v1.0, global: global v0.1
+wrote OUT/score.tsv and OUT/score.json
+exit=0
+--- score.tsv
+total	90
+grade	B
+capped	0
+standard	legacy	v1.0	sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a215cb11f7af27
+global	global	v0.1	sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5
+ruleini	standard	sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0
+ruleini	global	sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9
+defaults	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
+dim	A	25	25
+dim	B	15	15
+dim	C	15	15
+dim	D	15	15
+dim	E	10	10
+dim	F	10	10
+dim	G	0	10
+finding	-	Critical	10	-	1
+finding	-	Major	5	-	2
+upstream	1	Major	5
+severity	Critical	Critical	10	B
+severity	Major	Major	5	-
+severity	Minor	Minor	2	-
+severity	Nit	Nit	1	-
+gradedef	A	A	95
+gradedef	B	B	85
+gradedef	C	C	70
+gradedef	D	D	60
+gradedef	F	F	0
+--- score.json
+{
+  "total": 90,
+  "grade": "B",
+  "cap": null,
+  "standard": { "name": "legacy", "version": "v1.0", "hash": "sha256:39e461eeb91711b4f79e09511199cba9e4d8bcc15b37c17a97a215cb11f7af27", "ruleIniHash": "sha256:28dde93af7dd6efeeed2b0db53eb98a759de6989040418b9bce6ebe8656b90c0" },
+  "global": { "name": "global", "version": "v0.1", "hash": "sha256:bb5b627c77d3297954832cf0141d4188d48f8c668acb59ed2f98f8487730b4d5", "ruleIniHash": "sha256:390d70e177d08a26b5f0f72248da7d34819761319dbfcd36117decd32e930cc9" },
+  "defaultsHash": "sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d",
+  "severities": [
+    { "code": "Critical", "name": "Critical", "points": 10, "cap": "B" },
+    { "code": "Major", "name": "Major", "points": 5, "cap": null },
+    { "code": "Minor", "name": "Minor", "points": 2, "cap": null },
+    { "code": "Nit", "name": "Nit", "points": 1, "cap": null }
+  ],
+  "grades": [
+    { "code": "A", "name": "A", "min": 95 },
+    { "code": "B", "name": "B", "min": 85 },
+    { "code": "C", "name": "C", "min": 70 },
+    { "code": "D", "name": "D", "min": 60 },
+    { "code": "F", "name": "F", "min": 0 }
+  ],
+  "dimensions": { "A": 25, "B": 15, "C": 15, "D": 15, "E": 10, "F": 10, "G": 0 },
+  "otherDeduction": 15,
+  "upstreamDeduction": 5,
+  "findings": [
+    { "id": null, "severity": "Critical", "from": null, "deduction": 10, "locations": [] },
+    { "id": null, "severity": "Major", "from": null, "deduction": 5, "locations": [] }
+  ],
+  "upstream": [
+    { "type": "spec-gap", "subtype": "missing", "impact": "high", "severity": "Major", "deduction": 5, "reference": "規格書 v1" }
+  ],
+  "mappedComments": [],
+  "rejectedComments": [],
+  "skippedChecks": []
+}
 ### --findings findings.txt --config settings.ini
 error: rules/rules.ini: several rules are enabled (legacy, points, scaled); pick one by name
 exit=2
@@ -517,4 +588,13 @@ exit=2
 validation failed with 2 error(s). Fix findings.txt and run again:
   - line 5: A1: a.java:9 is outside the diff hunks
   - line 8: A3: file "b.java" is not in the diff (use the full path from the diff, no ...)
+exit=1
+### --findings case.txt --diff pr.diff --config settings.ini --standard legacy
+validation failed with 6 error(s). Fix findings.txt and run again:
+  - line 3: A1: file "A.java" is not in the diff (use the full path from the diff, no ...)
+  - line 6: A1: severity "major" is not one of the scale of the standard (Critical, Major, Minor, Nit)
+  - line 9: upstream type must be spec-gap, third-party or ownership-change
+  - line 11: upstream subtype for spec-gap must be one of: missing,wrong,ambiguous
+  - line 13: spec-gap needs impact high, medium or low
+  - line 15: upstream type must be spec-gap, third-party or ownership-change
 exit=1

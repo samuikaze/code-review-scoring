@@ -25,7 +25,7 @@ The setup check prints it (`execution:` line):
 ## 3. Procedure
 
 - [ ] 1. Run the setup check: `setup.sh check` (`.zsh`, `.ps1`), adding `--platform <Claude|Copilot|Codex|Gemini|…>` only when the platform has a subagent tool. Exit 7: read [references/setup.md](references/setup.md) and follow it, then check again.
-- [ ] 2. Collect in one message: the diff range (`<base>...<head>`), the PR title, and the documents the user can provide (PR description, SD spec, third-party core-system spec, change log, static analysis report, vulnerability scan).
+- [ ] 2. Collect in one message: the diff range (`<base>...<head>`), the PR title, and the documents the user can provide (PR description, SD spec, third-party core-system spec, change log; step 1 asks for any other document the confirmations of the scoring standards need).
 - [ ] 3. Run `init --git <base>...<head> --title "<title>" [--repo <dir>]`. Exit 4 means an earlier review exists: run `show`, ask whether to resume it or start over, and rerun with `--reset` only to start over.
 - [ ] 4. Save documents the user pasted as text to `tmp/inputs/<name>.md`, then list every document (path or link) in `tmp/request.md`.
 - [ ] 5. Run `next` and act on its `action:` line (table below); repeat until `action: done`.

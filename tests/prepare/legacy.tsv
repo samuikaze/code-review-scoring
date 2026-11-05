@@ -25,11 +25,11 @@
 
 # PR-level hints
 @pr	C1	has:main,no:test	main code changed but the PR touches no test file (meets the C1 Critical condition if the change is business logic)
-@pr	G6	modified:migration	existing migration file modified
+@pr	F11	modified:migration	existing migration file modified
 
 # Line rules
-API	main	-	@(Get|Post|Put|Delete|Patch|Request)Mapping	-	-	Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, G4 OpenAPI annotations
-SPRINGDOC	any	i	springdoc|io\.swagger\.v3|@Operation\(	-	-	springdoc visible in diff, so G4 applies
+API	main	-	@(Get|Post|Put|Delete|Patch|Request)Mapping	-	-	Added/changed API endpoint: check B3 auth/ownership, B4 @Valid, F9 OpenAPI annotations
+SPRINGDOC	any	i	springdoc|io\.swagger\.v3|@Operation\(	-	-	springdoc visible in diff, so F9 applies
 A1	java	-	\)\.get\(\)|Optional<.*>.*\.get\(\)	-	-	possible Optional.get() without check
 A2	java	i	(^|[^a-z0-9_])(double|float)[ \t]+[a-z0-9_]*(amount|price|total|fee|balance|cost|money|tax|interest)	-	-	money-like variable uses double/float
 A3	main	-	^[ \t]*private[ \t][^=;]*\(	@Transactional	-	@Transactional on a private method
@@ -66,6 +66,6 @@ E6	java	-	FetchType\.EAGER	-	-	FetchType.EAGER; check necessity
 F3	main	-	(==|!=|<=|>=|<|>|\*|/|%)[ \t]*-?[0-9][0-9]+|[^A-Za-z0-9_."][0-9][0-9]+[ \t]*(==|!=|<=|>=|<|>|\*|/|%)	-	static final|^[ \t]*@|//	possible magic number
 F3	main	-	\.equals\([ \t]*"|"[^"]+"\.equals\(	-	static final	possible meaningful string literal
 F5	java	c	System\.(out|err)\.print|^[ \t]*//.*(;|\{|\})[ \t]*$	-	-	System.out or commented-out code
-G2	main	-	@Value\(|"https?://[^"]+"	-	-	@Value or hard-coded URL; check @ConfigurationProperties
-G3	java	-	(log|logger|LOG|LOGGER)\.(trace|debug|info|warn|error)\([ \t]*"[^"]*"[ \t]*\+|(log|logger|LOG|LOGGER)\.(trace|debug|info|warn|error)\([ \t]*String\.format\(	-	-	log message built by concatenation
-G5	any	ci	(todo|fixme)	-	#[0-9]+|[a-z][a-z0-9]+-[0-9]+	TODO without issue number
+F7	main	-	@Value\(|"https?://[^"]+"	-	-	@Value or hard-coded URL; check @ConfigurationProperties
+F8	java	-	(log|logger|LOG|LOGGER)\.(trace|debug|info|warn|error)\([ \t]*"[^"]*"[ \t]*\+|(log|logger|LOG|LOGGER)\.(trace|debug|info|warn|error)\([ \t]*String\.format\(	-	-	log message built by concatenation
+F10	any	ci	(todo|fixme)	-	#[0-9]+|[a-z][a-z0-9]+-[0-9]+	TODO without issue number
