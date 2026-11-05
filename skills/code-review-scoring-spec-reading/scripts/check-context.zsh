@@ -26,6 +26,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+root="${root//\\//}"
 ctx="$root/step1/spec-context.md"
 [[ -f "$ctx" ]] || { echo "error: $ctx not found; run init-workspace first" >&2; exit 2; }
 LC_ALL=C awk -v qfile="$root/step1/questions.md" -f "$script_dir/lib/check.awk" "$ctx"

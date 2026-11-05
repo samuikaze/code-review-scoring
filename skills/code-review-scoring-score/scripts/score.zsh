@@ -55,6 +55,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+root="${root//\\//}" findings="${findings//\\//}" diff="${diff//\\//}" repo="${repo//\\//}" out_dir="${out_dir//\\//}" config="${config//\\//}"
 [[ -z "$root" && -z "$findings" ]] && root="$project_root/tmp"
 if [[ -n "$root" ]]; then
   [[ -d "$root" ]] || { echo "error: review root not found: $root" >&2; exit 2; }

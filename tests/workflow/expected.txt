@@ -196,6 +196,10 @@ exit=2
 ### render-report (lowercase placeholder)
 # Demo PR / {{pr_title}}
 exit=0
+### render-report --no-publish
+wrote WORK/review/step5/angular/report.md
+exit=0
+not published
 ### show
 step 1  success     TIME  
 step 2  success     1 plugin(s) planned

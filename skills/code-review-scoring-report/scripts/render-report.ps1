@@ -31,7 +31,7 @@ param(
     [string]$Title,
     [Alias('o')][string]$Out,
     [string]$Reports,
-    [switch]$NoPublish,
+    [Alias('no-publish')][switch]$NoPublish,
     [string]$Standard,
     [string]$Config
 )

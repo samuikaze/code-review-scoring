@@ -54,6 +54,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+root="${root//\\//}" input="${input//\\//}" repo="${repo//\\//}" out="${out//\\//}" config="${config//\\//}" scan="${scan//\\//}"
 case "$mode" in all|summary|scan|view) ;; *) echo "error: --mode must be all, summary, scan or view" >&2; exit 2 ;; esac
 sources=0
 [[ -n "$root" ]] && sources=$((sources + 1))

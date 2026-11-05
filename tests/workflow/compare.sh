@@ -127,6 +127,14 @@ run_all() {  # $sh = bash, zsh or powershell
     zsh) zsh "$skills/code-review-scoring-report/scripts/render-report.zsh" --root "$R" --standard angular --config "$C" --template "$w/case-template.md" --labels "$root_w/templates/en/labels.tsv" --out - ;;
     *) "$ps" -NoProfile -ExecutionPolicy Bypass -File "$skills/code-review-scoring-report/scripts/render-report.ps1" -Root "$R" -Standard angular -Config "$C" -Template "$w/case-template.md" -Labels "$root_w/templates/en/labels.tsv" -Out:- ;;
   esac 2>&1 | norm; echo "exit=${PIPESTATUS[0]}"
+  # --no-publish writes only the working copy; PowerShell takes the same options as bash and zsh.
+  echo "### render-report --no-publish"
+  case "$sh" in
+    bash) bash "$skills/code-review-scoring-report/scripts/render-report.sh" --root "$R" --standard angular --config "$C" --reports "$w/reports-np" --no-publish ;;
+    zsh) zsh "$skills/code-review-scoring-report/scripts/render-report.zsh" --root "$R" --standard angular --config "$C" --reports "$w/reports-np" --no-publish ;;
+    *) "$ps" -NoProfile -ExecutionPolicy Bypass -File "$skills/code-review-scoring-report/scripts/render-report.ps1" --root "$R" --standard angular --config "$C" --reports "$w/reports-np" --no-publish ;;
+  esac 2>&1 | norm; echo "exit=${PIPESTATUS[0]}"
+  if [[ -e "$work/reports-np" ]]; then echo "published"; else echo "not published"; fi
   step show
   step next --inline | grep -vE '^(Load|- |[0-9]. |Tasks|Status|## |# |Follow|$)'
   # A standard that changes after step 1 stops the review.

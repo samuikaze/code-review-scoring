@@ -44,6 +44,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+repo="${repo//\\//}" input="${input//\\//}" root="${root//\\//}" config="${config//\\//}"
 [[ -n "$git_range" && -n "$input" ]] && { echo "error: use only one of --git, --input" >&2; exit 2; }
 [[ -z "$git_range" && -z "$input" ]] && { echo "error: --git or --input is required (see --help)" >&2; exit 2; }
 mkdir -p "$root/step1"

@@ -94,7 +94,12 @@ function Get-Field([string[]]$Lines, [string]$Key) {
     foreach ($l in $Lines) { $a = $l.Split("`t"); if ($a[0] -ceq $Key) { return $a[1] } }
     return ''
 }
-function Get-Sha([string]$Path) { return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant() }
+# sha256 without CR, so a CRLF checkout (core.autocrlf on Windows) hashes the same as LF.
+function Get-Sha([string]$Path) {
+    $bytes = [byte[]]([IO.File]::ReadAllBytes($Path) -ne 13)
+    $alg = [Security.Cryptography.SHA256]::Create()
+    try { return (-join ($alg.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') })) } finally { $alg.Dispose() }
+}
 function Add-Problem([string]$Kind, [string]$Text) {
     if ($Kind -eq 'error') { $script:nerr++ } else { $script:nwarn++ }
     Write-Line "${Kind}: $Text"

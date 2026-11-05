@@ -27,7 +27,7 @@ param(
     [Alias('d')][string]$Diff,
     [Alias('g')][string]$Git,
     [Alias('r')][string]$Repo = '.',
-    [Alias('o')][string]$OutDir,
+    [Alias('o', 'out-dir')][string]$OutDir,
     [string]$Config,
     [string]$Standard,
     [string]$Standards,

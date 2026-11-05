@@ -43,6 +43,7 @@ cases=(
   "resolve --settings settings-missing.ini"
   "stamp --file good-v2.md --scan good-scan.tsv --out stamped.tmp.tsv"
   "lint --file good-v2.md --scan stamped.tmp.tsv --settings settings.ini"
+  "lint --file crlf.tmp.md --scan stamped.tmp.tsv --settings settings.ini"
   "stamp --file bad.md --scan good-scan.tsv --out stamped.tmp.tsv"
   "stamp --file good-v2.md --out stamped.tmp.tsv"
   "LINT --settings settings.ini"
@@ -55,13 +56,15 @@ norm() { tr -d '\r' | tr '\134' '/' | sed -e "s#$here_w/##g" -e "s#$here/##g" -e
 
 run_all() {  # $@ = command that runs the script; prints every case with its exit code
   local c
+  # good-v2.md with CRLF, as a core.autocrlf checkout on Windows has it: the stamp still matches.
+  awk '{ printf "%s\r\n", $0 }' good-v2.md > crlf.tmp.md
   for c in "${cases[@]}"; do
     echo "### $c"
     # shellcheck disable=SC2086
     "$@" $c 2>&1 | norm
     echo "exit=${PIPESTATUS[0]}"
   done
-  rm -f stamped.tmp.tsv
+  rm -f stamped.tmp.tsv crlf.tmp.md
 }
 
 declare -a shells=("bash:bash $scripts/standard.sh")

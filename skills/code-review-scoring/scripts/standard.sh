@@ -86,13 +86,16 @@ while [[ $# -gt 0 ]]; do
     *) names+=("$1"); shift ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+settings="${settings//\\//}" file="${file//\\//}" scan="${scan//\\//}" pdiff="${pdiff//\\//}" pout="${pout//\\//}"
 
 tmpd="$(mktemp -d)"
 trap 'rm -rf "$tmpd"' EXIT
 nerr=0 nwarn=0
 run_awk() { LC_ALL=C awk -f "$lib" "$@"; }
 field() { awk -F'\t' -v k="$1" '$1 == k { print $2; exit }' "$2"; }
-sha() { { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi; } | awk '{ print $1 }'; }
+# sha256 without CR, so a CRLF checkout (core.autocrlf on Windows) hashes the same as LF.
+sha() { tr -d '\r' < "$1" | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | awk '{ print $1 }'; }
 # The first error of an awk run ($1 = file shown when the record names none, $2 = the output) as "FILE:LINE: message".
 first_error() { awk -F'\t' -v f="$1" '$1 == "!error" { print ($4 != "" ? $4 : f) ($2 != "" ? ":" $2 : "") ": " $3; exit }' "$2"; }
 

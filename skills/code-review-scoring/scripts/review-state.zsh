@@ -105,6 +105,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+root="${root//\\//}" repo="${repo//\\//}" config="${config//\\//}" plugins_file="${plugins_file//\\//}"
 
 refuse() { echo "refused: $1" >&2; exit 5; }
 now() { date +%Y-%m-%dT%H:%M:%S%z; }
