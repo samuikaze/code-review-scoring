@@ -24,19 +24,20 @@ cases=(
   "--findings findings.txt --config settings.ini --standard nope"
   "--findings findings.txt --config none.ini --standard legacy"
   "--findings diff-check.txt --diff pr.diff --config settings.ini --standard legacy"
+  "--findings case.txt --diff pr.diff --config settings.ini --standard legacy"
 )
 
 out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"; out_w="$( (cd "$out" && pwd -W 2>/dev/null) || echo "$out")"
 norm() { tr -d '\r' | tr '\134' '/' | sed -e "s#$out_w#OUT#g" -e "s#$out#OUT#g" -e "s#$here_w/##g" -e "s#$here/##g"; }
-# PowerShell takes -Findings, -Config, ... instead of the GNU-style options.
+# PowerShell takes -Findings, -Config, ... instead of the GNU-style options; --out-dir is kept, so its alias is tested.
 psargs() {
   local a
   for a in "$@"; do
     case "$a" in
       --findings) echo -Findings ;; --config) echo -Config ;; --standard) echo -Standard ;;
-      --diff) echo -Diff ;; --out-dir) echo -OutDir ;; *) echo "$a" ;;
+      --diff) echo -Diff ;; *) echo "$a" ;;
     esac
   done
 }

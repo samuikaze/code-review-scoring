@@ -14,6 +14,8 @@
 - **舊的評分設定不再讀取**：3.0.0 起，`configs/standards.ini` 與 `configs/settings.ini` 的 `[points]`、`[deductions]`、`[grades]` 區段由規則專案取代。setup check 會以 `legacy:` 列出這些設定並停止，請搬到 `rules.ini`、`defaults.ini` 或各規則的 `rule.ini` 後刪除。
 - **通用規則改名為全域規則**：4.0.0 起，`role="common"` 改為 `role="global"`，檢查代碼由 `CM-` 改為 `GL-` 開頭，選項 `--common` 改為 `--global`，`score.tsv` 與 `score.json` 也改記為 `global`。lint 會把舊名稱列為錯誤，並提示新的名稱。全域標準的「全域規則」章節（`## 全域規則`）套用到每一份報告，沒有這個章節時 lint 會警告。
 - **確認舊的 G 配分**：4.0.0 起，`[points]` 的 `G` 改為其他與上游因素，舊的 G 檢查項併入 `F`。自訂的 `[points]` 如果仍把 `G` 當成舊面向配分，因為合計仍是 100，lint 不會擋下，請自行檢查 `defaults.ini` 與各 `rule.ini` 的 `[points]`。
+- **不評分的檔案改由規則專案設定**：4.0.0 起，建置產物、lock 檔、二進位檔與自動產生的程式碼改由規則專案 `defaults.ini` 的 `[exclude]` 設定（見 [README](README.md#不評分的檔案)），腳本不再內建。`defaults.ini` 沒有 `[exclude]` 時不排除任何檔案，lint 會警告；請把 README 的範例加到 `defaults.ini`。排除的檔案從步驟 1 的評分規劃就不歸屬任何報告。比對一律區分大小寫，PowerShell 與 bash、zsh 的結果相同。
+- **靜態分析報告與弱點掃描改由標準決定是否詢問**：4.0.0 起，步驟 1 不再固定詢問這兩份文件，改由評分標準的「事先確認事項」決定。確認事項的代碼寫 `-` 時，表示與整份標準有關（例如全域規則需要的資料），這類確認事項會出現在每一份報告中。
 - **評分途中不要修改標準**：步驟 1 會把標準的內容與 sha256 存成快照，步驟 3～5 都以快照評分。標準文件、掃描規則檔、該規則的 `rule.ini` 或 `defaults.ini` 在評分途中被修改時，狀態腳本會拒絕繼續；請還原修改，或以 `review-state init --reset` 重新開始。
 - **修改標準後先執行 lint**：評分流程不執行 lint，格式有誤時評分腳本只會停止並提示。修改後執行 `standard lint`，並以 `standard diff <舊版> <新版>` 確認實際改變的檢查項；lint 只能檢查格式，規則內容是否正確仍需人工審查。
 - **掃描規則檔可能過期**：掃描規則檔檔頭記錄產生時依據的標準版本與雜湊值，標準修改後 lint 會警告過期，請重新產生或審核掃描規則。

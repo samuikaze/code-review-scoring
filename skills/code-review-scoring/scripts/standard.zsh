@@ -18,7 +18,8 @@ Usage: standard.zsh lint [--settings FILE] [NAME ...]
 
 The rules project: [rules] root of the settings names its folder (relative to the folder of the settings file). It
 holds rules.ini (one [name] section per rule: path = the folder of its rule.ini, enable = true|false), defaults.ini
-(the points, severities and grades of the rules that do not set their own) and a folder per rule with rule.ini
+(the points, severities and grades of the rules that do not set their own, and the [exclude] files that are never
+scored) and a folder per rule with rule.ini
 ([rule] standard = the Markdown document, scan = the scan rule file, applies, role = global), the document and the
 scan rules.
 
@@ -36,15 +37,17 @@ Commands:
            (path, sha256 of the scan rules), "points" (dimension, points), "merge", "severity" (code, points, cap,
            display name, meaning with its lines separated by |; from the most severe), "grade" (code, min, display
            name; from the highest), "gseverity" (code, display name, meaning of the global rule's scale), the "check"
-           records of each document
+           records of each document, "exclude" (key, regex of [exclude] in defaults.ini)
            and "defaults" (path, sha256 of defaults.ini).
            Stops when the rules project or a document has a format error (exit 3)
   plan     for the review workflow: the enabled rules that score the PR. Each file goes to the framework rule whose
            applies covers it; the other files are global files, scored with the global rule in the report of their
            project (the framework of the nearest folder above them; every report when that is unclear), or on their
            own when no framework file changed. Writes DIR/plan.tsv ("report" name and file count, "file" path,
-           report and kind framework|global|none), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
-           each report, and DIR/confirm.tsv (standard, check codes, what to confirm before scoring)
+           report and kind framework|global|none; "excluded" path and reason for the files that [exclude] of
+           defaults.ini excludes, which go to no report), DIR/<name>.diff and DIR/<name>.resolve (the resolve output) for
+           each report, and DIR/confirm.tsv (standard, check codes or - for the whole standard, what to confirm
+           before scoring)
   stamp    write a reviewed scan rule file (--scan, e.g. a draft) to --out with the source line
            "# source: <document file> <version> sha256:<hash>" of the document (--file), so lint can tell when the
            document changes later; an existing source line is replaced
@@ -84,13 +87,16 @@ while [[ $# -gt 0 ]]; do
     *) names+=("$1"); shift ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+settings="${settings//\\//}" file="${file//\\//}" scan="${scan//\\//}" pdiff="${pdiff//\\//}" pout="${pout//\\//}"
 
 tmpd="$(mktemp -d)"
 trap 'rm -rf "$tmpd"' EXIT
 nerr=0 nwarn=0
 run_awk() { LC_ALL=C awk -f "$lib" "$@"; }
 field() { awk -F'\t' -v k="$1" '$1 == k { print $2; exit }' "$2"; }
-sha() { { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi; } | awk '{ print $1 }'; }
+# sha256 without CR, so a CRLF checkout (core.autocrlf on Windows) hashes the same as LF.
+sha() { tr -d '\r' < "$1" | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | awk '{ print $1 }'; }
 # The first error of an awk run ($1 = file shown when the record names none, $2 = the output) as "FILE:LINE: message".
 first_error() { awk -F'\t' -v f="$1" '$1 == "!error" { print ($4 != "" ? $4 : f) ($2 != "" ? ":" $2 : "") ": " $3; exit }' "$2"; }
 
@@ -200,6 +206,8 @@ case "$cmd" in
         echo "== $rroot/rules.ini"
         awk -F'\t' '$1 == "std" { n++; l = l (n > 1 ? ", " : "") $2 ($7 == "true" ? "" : " (disabled)") } END { print "rules: " (n + 0) " registered" (n ? " (" l ")" : "") }' "$tmpd/ini"
         report "$rroot/rules.ini" "$tmpd/ini"
+        grep '^!re' "$tmpd/ini" > "$tmpd/re" || true
+        test_re "$rroot/defaults.ini" "$tmpd/re"
         for n in "${names[@]}"; do
           awk -F'\t' -v n="$n" '$1 == "std" && $2 == n { f = 1 } END { exit !f }' "$tmpd/ini" || problem error "$rroot/rules.ini: [$n] is not registered"
         done
@@ -299,6 +307,7 @@ case "$cmd" in
       fi
       awk -F'\t' '$1 == "check"' "$tmpd/doc"
     done 3< <(awk -F'\t' -v n="$want" '$1 == "std" && $2 == n { print } $1 == "std" && $6 == "global" && $7 == "true" && $2 != n { c = $0 } END { if (c != "") print c }' "$tmpd/ini")
+    awk -F'\t' '$1 == "exclude"' "$tmpd/ini"
     d="$(awk -F'\t' '$1 == "defaults" { print $2 }' "$tmpd/ini")"
     printf 'defaults\t%s\tsha256:%s\n' "$(path_of "$d")" "$(sha "$d")"
     ;;
@@ -316,19 +325,21 @@ case "$cmd" in
     : > "$pout/confirm.tsv"
     while IFS=$'\t' read -r -u 3 k1 name n; do
       zsh "$script_dir/standard.zsh" resolve --settings "$settings" "$name" > "$pout/$name.resolve" || exit $?
-      # The confirmations of the standard, and those of the global standard when the report has global files.
+      # The confirmations of the standard, and those of the global standard: all of them when the report has global
+      # files, otherwise only those about the whole standard (-), since its global rules apply to every report.
       while IFS=$'\t' read -r -u 4 kind sname k2 k3 dpath; do
-        [[ "$kind" == "standard" ]] || awk -F'\t' -v n="$name" '$1 == "file" && $3 == n && $4 == "global" { f = 1 } END { exit !f }' "$tmpd/plan" || continue
-        grep -q "^$sname"$'\t' "$pout/confirm.tsv" && continue
+        all=1
+        [[ "$kind" == "standard" ]] || awk -F'\t' -v n="$name" '$1 == "file" && $3 == n && $4 == "global" { f = 1 } END { exit !f }' "$tmpd/plan" || all=0
         role="$(awk -F'\t' -v n="$sname" '$1 == "std" && $2 == n && $6 == "global" { print "global" }' "$tmpd/ini")"
-        run_awk -v mode=doc -v role="$role" "$dpath" | awk -F'\t' -v n="$sname" '$1 == "confirm" { print n "\t" $2 "\t" $3 }' >> "$pout/confirm.tsv"
+        run_awk -v mode=doc -v role="$role" "$dpath" | awk -F'\t' -v n="$sname" -v all="$all" '$1 == "confirm" && (all || $2 == "-") { print n "\t" $2 "\t" $3 }' |
+          while IFS= read -r l; do grep -qxF "$l" "$pout/confirm.tsv" || printf '%s\n' "$l" >> "$pout/confirm.tsv"; done
       done 4< <(awk -F'\t' '$1 == "standard" || $1 == "global"' "$pout/$name.resolve")
     done 3< <(awk -F'\t' '$1 == "report"' "$tmpd/plan")
     cp "$tmpd/plan" "$pout/plan.tsv"
     # Summary: one line per report with its files, then the files no standard scores.
     awk -F'\t' 'FNR == NR { if ($1 == "standard" || $1 == "global") ver[$2] = $3; next }
       $1 == "report" { r[++n] = $2; tot[$2] = $3 }
-      $1 == "file" && $4 == "global" { c[$3]++ } $1 == "file" && $4 == "none" { x[$3]++ }
+      $1 == "file" && $4 == "global" { c[$3]++ } $1 == "file" && $4 == "none" { x[$3]++ } $1 == "excluded" { nx++ }
       END {
         print n " report(s):"
         for (i = 1; i <= n; i++) {
@@ -337,6 +348,7 @@ case "$cmd" in
           if (x[s]) printf " (%d not covered by any standard)", x[s]
           print ""
         }
+        if (nx) print "  (" nx " file(s) not scored: excluded by [exclude] of defaults.ini)"
       }' <(cat /dev/null "$pout"/*.resolve(N)) "$pout/plan.tsv"
     echo "wrote $(full "$pout")/plan.tsv"
     ;;

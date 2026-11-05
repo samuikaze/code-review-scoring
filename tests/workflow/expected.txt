@@ -7,13 +7,15 @@ step 1: working
 exit=0
 ### init-workspace
 2 report(s):
-  - springboot-3 v0.2: 2 file(s) (1 scored with the global standard)
+  - springboot-3 v0.2: 3 file(s) (2 scored with the global standard)
   - angular v0.2: 2 file(s) (1 scored with the global standard)
+  (2 file(s) not scored: excluded by [exclude] of defaults.ini)
 wrote WORK/review/step1/standards/plan.tsv
-pr.diff: 22 lines
+pr.diff: 44 lines
 WORK/review/step1
 --- confirmations
 - A2 (springboot-3) 資料量多大:
+- (global) 是否有靜態分析報告:
 - A1 (angular) 是否支援舊版瀏覽器:
 ### set --step 1 --state pending --message 1 question
 step 1: pending
@@ -32,14 +34,14 @@ exit=0
 ## Scoring standards
 - springboot-3: springboot-3 v0.2 sha256:7a33b9f46d0553c46fb81af8296ac99ec9aa15faf082612969834b07b73f14f6 WORK/std/good-v2.md
   - rule.ini: sha256:f27c7c5f88da218b91ebcb49f3c20f8675ce90a4acc58e104f9c8122a17c5144 WORK/rules/springboot-3/rule.ini
-  - global standard: global v0.1 sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf WORK/std/good-global.md
+  - global standard: global v0.1 sha256:e6aa58df041c9871e4fed2f1c60f4819cf9d92a991e5013b3fa99d699a7e63bc WORK/std/good-global.md
   - global rule.ini: sha256:e7e610eeda34d3c5e61fdcb3280b27cdb170f1c7de8a0ce0d27f1974d3a3f9e3 WORK/rules/global/rule.ini
-  - defaults.ini: sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64 WORK/rules/defaults.ini
+  - defaults.ini: sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d WORK/rules/defaults.ini
 - angular: angular v0.2 sha256:5f4f9b9d82eabd280250d8e43ab175b0413c78d00432ed690b1a1f39139ba9b3 WORK/std/angular.md
   - rule.ini: sha256:668f557e4fbc4aefb8be288d347d17f56416944728218b6c7f2ddb814657d2fc WORK/rules/angular/rule.ini
-  - global standard: global v0.1 sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf WORK/std/good-global.md
+  - global standard: global v0.1 sha256:e6aa58df041c9871e4fed2f1c60f4819cf9d92a991e5013b3fa99d699a7e63bc WORK/std/good-global.md
   - global rule.ini: sha256:e7e610eeda34d3c5e61fdcb3280b27cdb170f1c7de8a0ce0d27f1974d3a3f9e3 WORK/rules/global/rule.ini
-  - defaults.ini: sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64 WORK/rules/defaults.ini
+  - defaults.ini: sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d WORK/rules/defaults.ini
 ### prompt --step 3
 error: step 3 needs --standard NAME: springboot-3, angular
 exit=2
@@ -98,6 +100,10 @@ Status command: `STATE_CMD set --root "WORK/review" --config "WORK/configs/setti
 7. If you cannot finish, append the details (command, exit code, full error output) to `WORK/review/step2/fake-review/errors.log`, then run `<status command> --state failed --message "<one-line reason>"`.
 8. Never leave the step in `working`. Ask the user only through `questions.md`, then run `next` again.
 exit=0
+--- files.txt
+README.md
+backend/src/main/java/A.java
+frontend/src/app.ts
 ### set --step 2 --plugin fake-review --state working
 step 2 plugin fake-review: working
 exit=0
@@ -131,7 +137,7 @@ exit=0
 step 3 (springboot-3): working
 exit=0
 ### prepare-diff springboot-3
-wrote WORK/review/step3/springboot-3/prepared.txt (32 lines)
+wrote WORK/review/step3/springboot-3/prepared.txt (37 lines)
 - standard: springboot-3 v0.2; the files it does not cover ([global]) use the global standard global v0.1
 - severity scale (from the most severe; deducted per finding; the lowest, Nit, is always allowed and is used when a problem cannot be confirmed):
 - fake-review#1 [mapped] Major - | backend/src/main/java/A.java:1
@@ -187,6 +193,13 @@ DATE_Demo-PR_springboot-3.md
 ### render-report (report="xx")
 error: no report template for the language "xx" ([language] report of WORK/configs/settings-xx.ini); available: en zh-tw
 exit=2
+### render-report (lowercase placeholder)
+# Demo PR / {{pr_title}}
+exit=0
+### render-report --no-publish
+wrote WORK/review/step5/angular/report.md
+exit=0
+not published
 ### show
 step 1  success     TIME  
 step 2  success     1 plugin(s) planned
@@ -218,3 +231,18 @@ exit=5
 ### finish
 refused: the scoring standard angular changed after step 1 planned the review (its document, rule.ini, scan rules or defaults.ini); restore it, or start the review again (init --reset)
 exit=5
+### NEXT
+error: unknown command NEXT (see --help)
+exit=2
+### set --step 3 --standard angular --State working
+error: unknown argument --State (see --help)
+exit=2
+### set --step 3 --standard angular --state Working
+error: --state must be working, pending, success or failed
+exit=2
+### cr-plan --plugins WORK/configs/plugins-case.ini
+error: plugin fake-review has no path in WORK/configs/plugins-case.ini
+exit=2
+### cr-plan --plugins WORK/configs/plugins-case.ini
+error: plugin fake-review: mode must be mapped or advisory, not Mapped
+exit=2

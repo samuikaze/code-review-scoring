@@ -22,7 +22,8 @@ Usage: prepare-diff.zsh [--root DIR | --input FILE | --git RANGE] [options]
       --standard NAME  the scoring standard (an enabled rule of rules.ini) whose scan rules, severity scale and merge
                        are used; default: the only enabled framework rule, or the global rule when no framework rule is
                        enabled. Files its applies does not cover are scanned with the rules of the global rule
-      --scan FILE      use this scan rule file for every file instead of the rules project (no severity scale)
+      --scan FILE      use this scan rule file for every file instead of the rules project (no severity scale,
+                       and no [exclude] of defaults.ini: no file is excluded)
   -h, --help           show this help
 
 Output: summary, code review comments of ROOT/step2 with their ids (root mode only), heuristic candidates
@@ -53,6 +54,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+root="${root//\\//}" input="${input//\\//}" repo="${repo//\\//}" out="${out//\\//}" config="${config//\\//}" scan="${scan//\\//}"
 case "$mode" in all|summary|scan|view) ;; *) echo "error: --mode must be all, summary, scan or view" >&2; exit 2 ;; esac
 sources=0
 [[ -n "$root" ]] && sources=$((sources + 1))

@@ -1,5 +1,5 @@
 # Diff preprocessor shared by prepare-diff.sh and prepare-diff.zsh (POSIX awk).
-# Variables: std=output of "standard resolve" (standard, global, applies, scan, merge, severity and gseverity records; a
+# Variables: std=output of "standard resolve" (standard, global, applies, scan, merge, severity, gseverity and exclude records; a
 #            "scan" record before any standard record is a scan rule file given on its own; merge and the severity scale
 #            are shown in the summary for writing findings.txt)  mode=all|summary|scan|view  maxper=max locations listed per check
 #            crdir=ROOT/step2 with plan.tsv and <plugin>/cr.txt ("" = no code review comments section)
@@ -74,10 +74,11 @@ function classify(f,    p, o, k, w, m, oi) {
             if (m) insc[o, scname[o, k], f] = 1
         }
     }
+    # Files not scored: [exclude] of defaults.ini in the rules project (exclude records of resolve).
     excl[f] = ""
-    if (p ~ /(^|\/)(target|build|out|dist|\.gradle|node_modules)\// || p ~ /(^|\/)generated(-sources|-test-sources)?\//) excl[f] = "build output / generated"
-    else if (p ~ /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$/ || p ~ /\.lock$/) excl[f] = "lock file"
-    else if (p ~ /\.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$/) excl[f] = "binary file"
+    if (("build" in exre) && p ~ exre["build"]) excl[f] = "build output / generated"
+    else if (("lock" in exre) && p ~ exre["lock"]) excl[f] = "lock file"
+    else if (("binary" in exre) && p ~ exre["binary"]) excl[f] = "binary file"
 }
 
 # Whether a code review comment with these locations belongs to the standard cstd of the review plan cplan: one of its
@@ -159,6 +160,7 @@ BEGIN {
         else if (a[1] == "merge") merge = a[2]
         else if (a[1] == "severity") { nsv++; sv[nsv] = a[2]; svpts[nsv] = a[3]; svcap[nsv] = a[4]; svname[nsv] = a[5]; svmean[nsv] = a[6] }
         else if (a[1] == "gseverity") { ncs++; cs[ncs] = a[2]; csname[ncs] = a[3]; csmean[ncs] = a[4] }
+        else if (a[1] == "exclude") exre[a[2]] = a[3]
     }
     close(std)
     # The global rule uses the scale of the standard when its scale has the same codes in the same order.
@@ -179,7 +181,7 @@ inhunk && (oleft > 0 || nleft > 0) {
     if (tag == "+") {
         adds[nf]++; nleft--
         view[nf] = view[nf] sprintf("+%5d  %s\n", nno, body)
-        if (adds[nf] <= 15 && body ~ /@(javax|jakarta)\.annotation\.(processing\.)?Generated|DO NOT EDIT|[Aa]uto-generated/) excl[nf] = "marked as generated"
+        if (adds[nf] <= 15 && ("generated" in exre) && body ~ exre["generated"]) excl[nf] = "marked as generated"
         scan(nf, nno, body)
         if (body !~ /^[ \t]*$/) prev = body
         nno++; next

@@ -19,7 +19,8 @@ work_w="$( (cd "$work" && pwd -W 2>/dev/null) || echo "$work")"
 norm() {
   tr -d '\r' | tr '\134' '/' | sed -E -e "s#$work_w#WORK#g" -e "s#$work#WORK#g" -e "s#$root_w/#ROOT/#g" -e "s#$root/#ROOT/#g" \
     -e 's#(bash|zsh|powershell -NoProfile -ExecutionPolicy Bypass -File|pwsh -NoProfile -File) "ROOT/skills/code-review-scoring/scripts/review-state\.(sh|zsh|ps1)"#STATE_CMD#g' \
-    -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+[+-][0-9:]+/TIME/g' -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}/DATE/g'
+    -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+[+-][0-9:]+/TIME/g' -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}/DATE/g' \
+    -e 's/\(see Get-Help\)/(see --help)/'
 }
 
 # A PR that changes a Java backend, an Angular frontend and a root README, reviewed by a plugin that comments on all.
@@ -38,6 +39,11 @@ setup() {
     mkdir -p backend/src/main/java frontend/src
     printf 'class A {}\n' > backend/src/main/java/A.java
     printf 'export const a = 1;\n' > frontend/src/app.ts
+    # Excluded by [exclude] of defaults.ini: build output, and a file marked as generated.
+    mkdir -p frontend/dist && printf 'export const b = 2;\n' > frontend/dist/main.ts
+    printf '// DO NOT EDIT\nclass Gen {}\n' > backend/src/main/java/Gen.java
+    # Matched case-sensitively in every shell: *.java of the plugin's applies does not cover it.
+    printf 'class Legacy {}\n' > backend/src/main/java/Legacy.JAVA
     printf '# demo\n\nusage\n' > README.md
     git add . && git commit -qm change )
 }
@@ -66,7 +72,7 @@ run_all() {  # $sh = bash, zsh or powershell
     zsh) zsh "$skills/code-review-scoring-spec-reading/scripts/init-workspace.zsh" --git HEAD~1..HEAD --repo "$w/repo" --root "$R" --title "Demo PR" --config "$C" ;;
     *) "$ps" -NoProfile -ExecutionPolicy Bypass -File "$skills/code-review-scoring-spec-reading/scripts/init-workspace.ps1" -Git HEAD~1..HEAD -Repo "$w/repo" -Root "$R" -Title "Demo PR" -Config "$C" ;;
   esac 2>&1 | norm
-  echo "--- confirmations"; grep '^- A' "$work/review/step1/spec-context.md" | norm
+  echo "--- confirmations"; grep -E '^- (A|\()' "$work/review/step1/spec-context.md" | norm
   # A question round: next relays the questions until answers.md is newer, then runs step 1 again.
   printf '1. question\n' > "$work/review/step1/questions.md"
   step set --step 1 --state pending --message "1 question"
@@ -79,6 +85,7 @@ run_all() {  # $sh = bash, zsh or powershell
   echo "--- request.md"; sed -n '/^## Scoring standards/,$p' "$work/review/request.md" | norm
   step prompt --step 3
   step next --inline --plugins "$P"
+  echo "--- files.txt"; cat "$work/review/step2/fake-review/files.txt"
   step set --step 2 --plugin fake-review --state working
   printf 'C|Major|backend/src/main/java/A.java:1\nproblem: java\nC|Minor|frontend/src/app.ts:1\nproblem: ts\nC|Minor|README.md:3\nproblem: readme\nS|done\n' \
     > "$work/review/step2/fake-review/cr.txt"
@@ -112,12 +119,36 @@ run_all() {  # $sh = bash, zsh or powershell
   # The report language: [language] report picks one of the folders under templates/.
   echo "### render-report (report=\"en\")"; report "$w/configs/settings-en.ini" 2>&1 | norm | grep -E '^(# |- \*\*(Scoring standard|Grade)|## |\| (Dimension|A ))'
   echo "### render-report (report=\"xx\")"; report "$w/configs/settings-xx.ini" 2>&1 | norm; echo "exit=${PIPESTATUS[0]}"
+  # Template placeholders are uppercase: {{pr_title}} stays as it is in every shell.
+  printf '# {{PR_TITLE}} / {{pr_title}}\n' > "$work/case-template.md"
+  echo "### render-report (lowercase placeholder)"
+  case "$sh" in
+    bash) bash "$skills/code-review-scoring-report/scripts/render-report.sh" --root "$R" --standard angular --config "$C" --template "$w/case-template.md" --labels "$root_w/templates/en/labels.tsv" --out - ;;
+    zsh) zsh "$skills/code-review-scoring-report/scripts/render-report.zsh" --root "$R" --standard angular --config "$C" --template "$w/case-template.md" --labels "$root_w/templates/en/labels.tsv" --out - ;;
+    *) "$ps" -NoProfile -ExecutionPolicy Bypass -File "$skills/code-review-scoring-report/scripts/render-report.ps1" -Root "$R" -Standard angular -Config "$C" -Template "$w/case-template.md" -Labels "$root_w/templates/en/labels.tsv" -Out:- ;;
+  esac 2>&1 | norm; echo "exit=${PIPESTATUS[0]}"
+  # --no-publish writes only the working copy; PowerShell takes the same options as bash and zsh.
+  echo "### render-report --no-publish"
+  case "$sh" in
+    bash) bash "$skills/code-review-scoring-report/scripts/render-report.sh" --root "$R" --standard angular --config "$C" --reports "$w/reports-np" --no-publish ;;
+    zsh) zsh "$skills/code-review-scoring-report/scripts/render-report.zsh" --root "$R" --standard angular --config "$C" --reports "$w/reports-np" --no-publish ;;
+    *) "$ps" -NoProfile -ExecutionPolicy Bypass -File "$skills/code-review-scoring-report/scripts/render-report.ps1" --root "$R" --standard angular --config "$C" --reports "$w/reports-np" --no-publish ;;
+  esac 2>&1 | norm; echo "exit=${PIPESTATUS[0]}"
+  if [[ -e "$work/reports-np" ]]; then echo "published"; else echo "not published"; fi
   step show
   step next --inline | grep -vE '^(Load|- |[0-9]. |Tasks|Status|## |# |Follow|$)'
   # A standard that changes after step 1 stops the review.
   printf '\n<!-- edited -->\n' >> "$work/std/angular.md"
   step set --step 3 --standard angular --state working
   step finish
+  # Commands, options, states, plugin keys and modes that differ only in case are refused by every shell.
+  step NEXT
+  step set --step 3 --standard angular --State working
+  step set --step 3 --standard angular --state Working
+  printf '[fake-review]\nPath="../plugin"\n' > "$work/configs/plugins-case.ini"
+  step cr-plan --plugins "$w/configs/plugins-case.ini"
+  printf '[fake-review]\npath="../plugin"\nmode="Mapped"\n' > "$work/configs/plugins-case.ini"
+  step cr-plan --plugins "$w/configs/plugins-case.ini"
 }
 
 shells=(bash)

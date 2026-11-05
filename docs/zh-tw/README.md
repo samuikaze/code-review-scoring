@@ -33,7 +33,7 @@ PR 的 Code Review 與程式碼品質評分框架，以 Agent Skills 實作，�
 - PR 完全沒有框架標準的檔案時，只用全域標準產出一份報告，所以每個 PR 至少有一份報告。
 - 全域標準的「全域規則」章節套用到每一份報告的所有檔案，包含框架標準的檔案（例如第三方豁免）；框架標準的規定與全域規則不同時，以框架標準為準。
 - 每份報告只列出落在自己檔案上的 CR 意見；意見編號維持外掛原本的編號，方便對照。
-- 各標準的「事先確認事項」會列在 `spec-context.md` 的嚴重度事實中，於步驟 1 與缺少的文件一起詢問。
+- 各標準的「事先確認事項」會列在 `spec-context.md` 的嚴重度事實中，於步驟 1 與缺少的文件一起詢問。全域標準中針對檢查項的確認事項，只在報告有全域檔案時詢問；代碼寫 `-` 的確認事項與整份標準有關（例如是否有靜態分析報告），每一份報告都會詢問。
 - 步驟 1 會把每個標準解析後的內容存成快照（`step1/standards/<標準>.resolve`），並把標準名稱、版本與 sha256 記在 `request.md`。之後步驟 3～5 都以這份快照評分；若評分途中標準文件、掃描規則、該規則的 `rule.ini` 或規則專案的 `defaults.ini` 被修改，狀態腳本會拒絕繼續，請還原修改，或以 `init --reset` 重新開始評分。
 
 ### 執行方式
@@ -94,7 +94,7 @@ tmp/
   step2-<外掛>-<狀態>   步驟 2 中每個 CR 外掛各自的狀態檔
   stepN-<標準>-<狀態>   步驟 3～5 中每個評分標準各自的狀態檔
   step1/ … step5/      各步驟產出；questions.md（步驟提出的問題）、answers.md（使用者回覆）、errors.log（失敗紀錄）
-  step1/standards/     評分規劃：plan.tsv（報告與檔案的歸屬）、<標準>.diff（該報告的 diff）、<標準>.resolve（標準快照）、confirm.tsv（事先確認事項）
+  step1/standards/     評分規劃：plan.tsv（報告與檔案的歸屬，以及排除的檔案）、<標準>.diff（該報告的 diff）、<標準>.resolve（標準快照）、confirm.tsv（事先確認事項）
   step2/<外掛>/        files.txt 與 diff.patch（要審查的範圍）、raw/（外掛原始輸出）、cr.txt（整理後的 CR 結果）
   step3/<標準>/ … step5/<標準>/  步驟 3～5 依評分標準分開的產出
   step3/<標準>/findings.draft.txt  步驟 3 提問前先存下的扣分項草稿，回覆後從這裡接續
@@ -243,7 +243,7 @@ git add --renormalize .
   ```text
   <規則專案>/
     rules.ini        登錄規則：每套規則一個區段，path 為規則目錄，enable 決定是否啟用
-    defaults.ini     預設的面向配分、扣分合併方式、嚴重度分級與等級
+    defaults.ini     預設的面向配分、扣分合併方式、嚴重度分級與等級，以及不評分的檔案
     <規則目錄>/
       rule.ini       規則設定：標準文件、掃描規則、適用檔案，以及要覆寫的配分、分級與等級
       <標準文件>.md
@@ -374,6 +374,23 @@ meaning="不影響品質的小地方。"
 - 全域規則的分級和框架規則不同時，全域檢查項（`GL-…`）先依全域規則的分級判斷，再依語意對應到框架分級中最接近的一級扣分。建議（非必填）把全域分級的嚴重度記在 findings.txt 的 `from:`，有寫時會依全域標準文件檢查。
 - 規則設定在評分途中會被鎖定，修改後請重新開始評分（`init --reset`），或在下一次評分生效。
 
+### 不評分的檔案
+
+建置產物、lock 檔、二進位檔與自動產生的程式碼由規則專案 `defaults.ini` 的 `[exclude]` 決定，所有規則共用，不能寫在 `rule.ini`：
+
+```ini
+[exclude]
+build="(^|/)(target|build|out|dist|\.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/"
+lock="(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$|\.lock$"
+binary="\.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$"
+generated="@(javax|jakarta)\.annotation\.(processing\.)?Generated|DO NOT EDIT|[Aa]uto-generated"
+```
+
+- `build`、`lock`、`binary` 比對檔案在儲存庫中的相對路徑；`generated` 比對檔案前 15 行新增的內容。
+- 值是正規表示式，只能使用掃描規則的語法子集（見 `skills/code-review-scoring-standard/references/scan-format.md`），區分大小寫；四個鍵都可省略，省略的鍵不排除任何檔案。
+- 步驟 1 的評分規劃、步驟 2 交給外掛的檔案清單與步驟 3 的 `prepared.txt` 使用同一份設定。排除的檔案不歸屬任何報告，在 `step1/standards/plan.tsv` 中以 `excluded` 列出；框架規則的異動檔案若全部被排除，就不產生該框架的報告。PR 的所有檔案都被排除時，步驟 1 會停止並顯示錯誤。
+- 沒有 `[exclude]` 時不排除任何檔案，`standard lint` 會顯示警告。
+
 ## 調整報告
 
 - 版面與文字：編輯 `templates/<語言>/report-template.md`，可自由調整 CR 結果與評分結果兩部分的順序與標題。
@@ -474,7 +491,7 @@ CR 外掛設為 `mapped` 時，對應不到評分標準檢查項的意見會歸�
 
 ### 外掛在流程中的執行方式（步驟 2）
 
-1. 步驟 1 成功後，執行 `review-state cr-plan`：依 PR 實際異動的檔案（排除建置產物、自動產生檔與 lock 檔）比對每個外掛的 `applies`，決定要執行哪些外掛。各外掛要審查的檔案寫在 `tmp/step2/<外掛>/files.txt`，並切出只含這些檔案的 `diff.patch`。沒有任何外掛適用時，步驟 2 直接視為完成。
+1. 步驟 1 成功後，執行 `review-state cr-plan`：依 PR 實際異動的檔案（排除 `defaults.ini` 的 `[exclude]` 排除的檔案）比對每個外掛的 `applies`，決定要執行哪些外掛。各外掛要審查的檔案寫在 `tmp/step2/<外掛>/files.txt`，並切出只含這些檔案的 `diff.patch`。沒有任何外掛適用時，步驟 2 直接視為完成。
 2. 每個適用的外掛由一個 Sub-Agent 依序執行（不支援 Sub-Agent 的平台由主 Agent 自己執行），一樣遵守狀態協定，狀態檔為 `tmp/step2-<外掛>-<狀態>`。`review-state next` 在步驟 2 尚未規劃時會自動執行 `cr-plan`。
 3. 外掛只讀自己的 `diff.patch`，依自己的規範審查，原始輸出放在 `tmp/step2/<外掛>/raw/`，再整理成統一格式的 `cr.txt`：
 
@@ -540,7 +557,7 @@ CR 外掛設為 `mapped` 時，對應不到評分標準檢查項的意見會歸�
 - `setup`：每次執行完整流程前檢查 `configs/plugins.ini` 與 `configs/settings.ini`（含 `[rules] root` 指向的規則專案，並偵測已不再讀取的舊設定），並以逐步詢問或指令的方式建立，登記外掛時先驗證，避免設定錯誤到 CR 步驟才發現。
 - `review-state`：管理步驟狀態檔、規劃要執行的 CR 外掛、產生各步驟的指令，並強制依序執行；`next` 把查狀態、規劃外掛與產生指令合成一次呼叫，`finish` 直接執行步驟 4、5 的腳本，減少主 Agent 的往返次數與 token。
 - `init-workspace` / `check-context`：固定交接檔案的位置，並在所有輸入資料與待確認問題處理完之前擋住後續步驟。
-- `prepare-diff`：排除自動產生檔與 lock 檔、標上新檔行號、以評分標準的掃描規則檔列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。框架標準的 `applies` 沒有涵蓋的檔案標上 `[global]`，改用全域標準的掃描規則；檔案分類（`@scope`）與 PR 層級的提示（`@pr`，例如主程式有異動卻沒有測試檔）也寫在掃描規則檔中，腳本不含任何框架的判斷。
+- `prepare-diff`：排除 `defaults.ini` 的 `[exclude]` 指定的檔案、標上新檔行號、以評分標準的掃描規則檔列出啟發式候選，減少 AI 自行計算行號與重複掃描的 token。框架標準的 `applies` 沒有涵蓋的檔案標上 `[global]`，改用全域標準的掃描規則；檔案分類（`@scope`）與 PR 層級的提示（`@pr`，例如主程式有異動卻沒有測試檔）也寫在掃描規則檔中，腳本不含任何框架的判斷。
 - `standard`：撰寫評分標準時檢查格式（`lint`），並把標準文件解析成腳本可讀的資料（`parse`）、列出兩個版本的差異（`diff`），挑出要評分的規則與全域規則、輸出檢查項、配分、嚴重度分級、等級、適用檔案與掃描規則檔給 `score` 與 `prepare-diff`（`resolve`），在步驟 1 依異動檔案決定要產出哪幾份報告、切出各報告的 diff（`plan`），以及把審核通過的掃描規則草稿加上來源檔頭後寫入正式位置（`stamp`）。標準文件與 AI、腳本共用，格式寫錯時評分會讀錯規則，所以由腳本從嚴檢查：欄位數、嚴重度是否在該規則的分級中、代碼重複、面向是否齊全、`rules.ini`、`defaults.ini` 與 `rule.ini` 的未知區段與鍵、配分加總、等級門檻與 `applies` 是否重疊，以及掃描規則的正規表示式是否只用 awk 與 .NET 共通的語法、引用的代碼是否還存在、是否在標準文件修改後過期。`lint` 只在撰寫或維護標準時執行，評分流程只透過 `plan` 與 `review-state` 的檢查呼叫 `resolve`，格式正確時不會輸出格式相關的訊息，不耗用 Token；格式有誤時直接停止（結束碼 2 或 3），請先執行 `lint` 修正。
 - `score`：驗證評分結果（檢查代碼、嚴重度調整條件、位置是否在 diff 新增行、依 `merge` 設定檢查合併或逐筆扣分的寫法），並依規則的配分、嚴重度分級與等級計算分數與等級（含等級上限）；檢查代碼與可用的嚴重度讀自評分標準文件，避免 AI 計算錯誤。`--check` 只做驗證、不寫檔，供步驟 3 在完成前自我檢查。
 - `render-report`：依模板把 CR 結果與分數結果合併成一份報告並發佈到 `reports/`，數字與意見直接取自前面步驟的檔案，不經 AI 重打。

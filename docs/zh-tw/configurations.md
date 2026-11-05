@@ -87,7 +87,7 @@ report="zh-tw"
 | --- | --- |
 | `root` | 評分規則專案（例如 code-review-scoring-rules）的根目錄，完整路徑或相對於 `configs/` 的路徑。Windows 請使用斜線，例如 `C:/Users/me/Documents/code-review-scoring-rules`。 |
 
-規則專案根目錄有 `rules.ini`（登錄與啟用規則）、`defaults.ini`（預設的面向配分、嚴重度分級與等級），
+規則專案根目錄有 `rules.ini`（登錄與啟用規則）、`defaults.ini`（預設的面向配分、嚴重度分級與等級，以及不評分的檔案 `[exclude]`，見 [README](README.md#不評分的檔案)），
 以及每套規則一個目錄（`rule.ini`、評分規則文件與掃描規則）；
 `rule.ini` 的寫法見 [`templates/zh-tw/rule-template.ini`](../../templates/zh-tw/rule-template.ini)。
 

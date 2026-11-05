@@ -54,6 +54,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+root="${root//\\//}" template="${template//\\//}" labels="${labels//\\//}" config="${config//\\//}" out="${out//\\//}" reports="${reports//\\//}"
 # The folder of the report language: the only one under templates/, or the one [language] report names.
 template_dir() {
   local t="$project_root/templates" d want="" i

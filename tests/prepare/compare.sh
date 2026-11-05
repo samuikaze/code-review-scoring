@@ -13,12 +13,14 @@ cases=(
   "--input no-test.diff --mode scan --config settings.ini"
   "--input pr.diff --mode scan --config settings.ini --standard global"
   "--input pr.diff --mode summary --config settings-noscan.ini"
+  "--input case.diff --mode summary --config settings.ini"
   "--input pr.diff --mode scan --config settings-noscan.ini"
   "--input pr.diff --mode summary --config ../score/settings.ini --standard scaled"
   "--input pr.diff --mode scan --config none.ini --scan legacy.tsv"
   "--input pr.diff --mode scan --config none.ini --scan bad.tsv"
   "--input pr.diff --config none.ini"
   "--input pr.diff --config settings.ini --standard nope"
+  "--input pr.diff --mode Scan --config settings.ini"
 )
 
 here="$(pwd)"; here_w="$( (pwd -W 2>/dev/null) || pwd)"

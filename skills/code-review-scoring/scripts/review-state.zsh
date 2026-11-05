@@ -105,6 +105,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "error: unknown argument $1 (see --help)" >&2; exit 2 ;;
   esac
 done
+# Paths may be given with \ on Windows; awk -v would read it as an escape, so every path option uses /.
+root="${root//\\//}" repo="${repo//\\//}" config="${config//\\//}" plugins_file="${plugins_file//\\//}"
 
 refuse() { echo "refused: $1" >&2; exit 5; }
 now() { date +%Y-%m-%dT%H:%M:%S%z; }
@@ -257,9 +259,25 @@ has_previous() {
   done
   [[ -n "$(find "$root" -maxdepth 1 -type f -name "step$CR-*" 2>/dev/null | head -1)" ]]
 }
-diff_files() {  # files added or changed by the PR, from step 1's diff, without build output, generated code or lock files
-  sed -n 's/^+++ //p' "$root/step1/pr.diff" | sed -e 's/\t.*$//' -e 's/^"//' -e 's/"$//' | grep -v '^/dev/null$' | sed 's|^b/||' |
-    grep -Ev '(^|/)(target|build|out|dist|\.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/|(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|gradle\.lockfile)$|\.lock$' || true
+# Files added or changed by the PR, from step 1's diff, without the files [exclude] of defaults.ini excludes (the
+# exclude records of the plan's resolve output; the same rules as prepare-diff of code-analysis).
+diff_files() {
+  local res=""
+  [[ -f "$std_plan" ]] && res="$root/step1/standards/$(std_names | head -1).resolve"
+  LC_ALL=C awk -v res="$res" '
+    BEGIN { while (res != "" && (getline l < res) > 0) { sub(/\r$/, "", l); split(l, a, "\t"); if (a[1] == "exclude") ex[a[2]] = a[3] } }
+    function flush() { if (p != "" && !gen) print p; p = ""; gen = 0; adds = 0 }
+    { sub(/\r$/, "") }
+    /^diff --git / { flush(); hdr = 1; next }
+    hdr && /^\+\+\+ / {
+      p = substr($0, 5); sub(/\t.*$/, "", p); gsub(/^"|"$/, "", p); sub(/^b\//, "", p)
+      if (p == "/dev/null" || (("build" in ex) && p ~ ex["build"]) || (("lock" in ex) && p ~ ex["lock"]) || (("binary" in ex) && p ~ ex["binary"])) p = ""
+      next
+    }
+    /^@@/ { hdr = 0; next }
+    !hdr && /^\+/ && ++adds <= 15 && ("generated" in ex) && substr($0, 2) ~ ex["generated"] { gen = 1 }
+    END { flush() }
+  ' "$root/step1/pr.diff"
 }
 plugin_diff() {  # $1 = files.txt; prints the parts of step 1's diff that touch those files
   LC_ALL=C awk -v list="$1" '

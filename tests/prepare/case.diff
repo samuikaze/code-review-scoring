@@ -1,0 +1,25 @@
+diff --git a/Target/App.java b/Target/App.java
+new file mode 100644
+--- /dev/null
++++ b/Target/App.java
+@@ -0,0 +1 @@
++class App {}
+diff --git a/target/App.class b/target/App.class
+new file mode 100644
+--- /dev/null
++++ b/target/App.class
+@@ -0,0 +1 @@
++x
+diff --git a/docs/logo.PNG b/docs/logo.PNG
+new file mode 100644
+--- /dev/null
++++ b/docs/logo.PNG
+@@ -0,0 +1 @@
++x
+diff --git a/src/Gen.java b/src/Gen.java
+new file mode 100644
+--- /dev/null
++++ b/src/Gen.java
+@@ -0,0 +1,2 @@
++// do not edit
++class Gen {}

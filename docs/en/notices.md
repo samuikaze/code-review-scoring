@@ -32,6 +32,20 @@ English | [繁體中文](../zh-tw/notices.md)
   belong to `F`. Lint does not catch a custom `[points]` that still gives `G`
   the points of the old dimension, because its keys still total 100; check
   every `[points]` of `defaults.ini` and the `rule.ini` files yourself.
+- **The files that are not scored are set in the rules project**: since
+  4.0.0, build output, lock files, binary files and generated code are set by
+  `[exclude]` in `defaults.ini` of the rules project (see
+  [the README](../../README.md#files-that-are-not-scored)); the scripts no
+  longer have them built in. Without `[exclude]` in `defaults.ini` no file is
+  excluded, and lint warns about it; add the example of the README to
+  `defaults.ini`. Excluded files go to no report, from the plan of step 1 on.
+  Matching is always case-sensitive, so PowerShell gives the same result as
+  bash and zsh.
+- **Standards decide whether to ask for static analysis and vulnerability
+  scans**: since 4.0.0, step 1 no longer always asks for these two documents;
+  the Confirmations of the scoring standards decide. A confirmation with the
+  code `-` is about the whole standard (for example, information the global
+  rules need) and appears in every report.
 - **Do not change a standard during a scoring run**: step 1 saves a snapshot
   of each standard's content and sha256, and steps 3 to 5 score with that
   snapshot. If a standard document, a scan rule file, the `rule.ini` of the

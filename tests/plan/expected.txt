@@ -18,6 +18,7 @@ file	.github/workflows/ci.yml	angular	global
 file	frontend/src/app.html	angular	framework
 --- confirm.tsv
 springboot-3	A2	資料量多大
+global	-	是否有靜態分析報告
 angular	A1	是否支援舊版瀏覽器
 --- angular.diff
 diff --git a/frontend/src/app.ts b/frontend/src/app.ts
@@ -49,13 +50,17 @@ severity	Info	0	-	參考	不影響品質的小地方。
 grade	S	90	優
 grade	C	60	普通
 grade	F	0	待加強
-global	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	ROOT/tests/standards/good-global.md
+global	global	v0.1	sha256:e6aa58df041c9871e4fed2f1c60f4819cf9d92a991e5013b3fa99d699a7e63bc	ROOT/tests/standards/good-global.md
 ruleini	rules/global/rule.ini	sha256:9336da926e0e2a0641524d5767cc0d9c07a9eda51236fec00b80a64679b6607c
 gseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
 gseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
 gseverity	Minor	Minor	能運作，但有更好的寫法。
 gseverity	Nit	Nit	風格偏好。
-defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+exclude	build	(^|/)(target|build|out|dist|/.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/
+exclude	lock	(^|/)(package-lock/.json|yarn/.lock|pnpm-lock/.yaml|gradle/.lockfile)$|/.lock$
+exclude	binary	/.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$
+exclude	generated	@(javax|jakarta)/.annotation/.(processing/.)?Generated|DO NOT EDIT|[Aa]uto-generated
+defaults	rules/defaults.ini	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 --- springboot-3.resolve
 standard	springboot-3	v0.2	sha256:7a33b9f46d0553c46fb81af8296ac99ec9aa15faf082612969834b07b73f14f6	ROOT/tests/standards/good-v2.md
 ruleini	rules/springboot-3/rule.ini	sha256:368c72debcda7114aa365455a87a33989233691c27814d1b9cd34937e587c7d1
@@ -77,13 +82,17 @@ grade	B	85	B
 grade	C	70	C
 grade	D	60	D
 grade	F	0	F
-global	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	ROOT/tests/standards/good-global.md
+global	global	v0.1	sha256:e6aa58df041c9871e4fed2f1c60f4819cf9d92a991e5013b3fa99d699a7e63bc	ROOT/tests/standards/good-global.md
 ruleini	rules/global/rule.ini	sha256:9336da926e0e2a0641524d5767cc0d9c07a9eda51236fec00b80a64679b6607c
 gseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
 gseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
 gseverity	Minor	Minor	能運作，但有更好的寫法。
 gseverity	Nit	Nit	風格偏好。
-defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+exclude	build	(^|/)(target|build|out|dist|/.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/
+exclude	lock	(^|/)(package-lock/.json|yarn/.lock|pnpm-lock/.yaml|gradle/.lockfile)$|/.lock$
+exclude	binary	/.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$
+exclude	generated	@(javax|jakarta)/.annotation/.(processing/.)?Generated|DO NOT EDIT|[Aa]uto-generated
+defaults	rules/defaults.ini	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 ### --diff global-only.diff --settings settings.ini
 1 report(s):
   - global v0.1: 2 file(s)
@@ -94,11 +103,12 @@ report	global	2
 file	README.md	global	global
 file	.github/workflows/ci.yml	global	global
 --- confirm.tsv
+global	-	是否有靜態分析報告
 --- global.diff
 diff --git a/README.md b/README.md
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
 --- global.resolve
-standard	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	ROOT/tests/standards/good-global.md
+standard	global	v0.1	sha256:e6aa58df041c9871e4fed2f1c60f4819cf9d92a991e5013b3fa99d699a7e63bc	ROOT/tests/standards/good-global.md
 ruleini	rules/global/rule.ini	sha256:9336da926e0e2a0641524d5767cc0d9c07a9eda51236fec00b80a64679b6607c
 points	A	25
 points	B	15
@@ -117,7 +127,11 @@ grade	B	85	B
 grade	C	70	C
 grade	D	60	D
 grade	F	0	F
-defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+exclude	build	(^|/)(target|build|out|dist|/.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/
+exclude	lock	(^|/)(package-lock/.json|yarn/.lock|pnpm-lock/.yaml|gradle/.lockfile)$|/.lock$
+exclude	binary	/.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$
+exclude	generated	@(javax|jakarta)/.annotation/.(processing/.)?Generated|DO NOT EDIT|[Aa]uto-generated
+defaults	rules/defaults.ini	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 ### --diff java-only.diff --settings settings.ini
 1 report(s):
   - springboot-3 v0.2: 2 file(s) (1 scored with the global standard)
@@ -129,6 +143,7 @@ file	src/main/java/A.java	springboot-3	framework
 file	docs/guide.md	springboot-3	global
 --- confirm.tsv
 springboot-3	A2	資料量多大
+global	-	是否有靜態分析報告
 --- springboot-3.diff
 diff --git a/src/main/java/A.java b/src/main/java/A.java
 diff --git a/docs/guide.md b/docs/guide.md
@@ -153,15 +168,63 @@ grade	B	85	B
 grade	C	70	C
 grade	D	60	D
 grade	F	0	F
-global	global	v0.1	sha256:4623bf863898ff29b40ca4d6f9cffeac4e2155900deb4b233cb33146c5fb7faf	ROOT/tests/standards/good-global.md
+global	global	v0.1	sha256:e6aa58df041c9871e4fed2f1c60f4819cf9d92a991e5013b3fa99d699a7e63bc	ROOT/tests/standards/good-global.md
 ruleini	rules/global/rule.ini	sha256:9336da926e0e2a0641524d5767cc0d9c07a9eda51236fec00b80a64679b6607c
 gseverity	Critical	Critical	資料損毀、資安事件或服務中斷。
 gseverity	Major	Major	特定情境下會出錯，或明顯降低品質。
 gseverity	Minor	Minor	能運作，但有更好的寫法。
 gseverity	Nit	Nit	風格偏好。
-defaults	rules/defaults.ini	sha256:78eceabc098c64b562407a9bd23359eca313a2ee7686e495366a5d75ff7a0d64
+exclude	build	(^|/)(target|build|out|dist|/.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/
+exclude	lock	(^|/)(package-lock/.json|yarn/.lock|pnpm-lock/.yaml|gradle/.lockfile)$|/.lock$
+exclude	binary	/.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$
+exclude	generated	@(javax|jakarta)/.annotation/.(processing/.)?Generated|DO NOT EDIT|[Aa]uto-generated
+defaults	rules/defaults.ini	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
 ### --diff empty.diff --settings settings.ini
 error: empty.diff: the diff lists no file
+exit=2
+### --diff excluded.diff --settings settings.ini
+1 report(s):
+  - global v0.1: 1 file(s)
+  (3 file(s) not scored: excluded by [exclude] of defaults.ini)
+wrote OUT/plan/plan.tsv
+exit=0
+--- plan.tsv
+report	global	1
+file	README.md	global	global
+excluded	backend/src/main/java/Gen.java	marked as generated
+excluded	frontend/package-lock.json	lock file
+excluded	backend/target/classes/A.java	build output / generated
+--- confirm.tsv
+global	-	是否有靜態分析報告
+--- global.diff
+diff --git a/README.md b/README.md
+--- global.resolve
+standard	global	v0.1	sha256:e6aa58df041c9871e4fed2f1c60f4819cf9d92a991e5013b3fa99d699a7e63bc	ROOT/tests/standards/good-global.md
+ruleini	rules/global/rule.ini	sha256:9336da926e0e2a0641524d5767cc0d9c07a9eda51236fec00b80a64679b6607c
+points	A	25
+points	B	15
+points	C	15
+points	D	15
+points	E	10
+points	F	10
+points	G	10
+merge	false
+severity	Critical	10	B	Critical	資料損毀、資安事件或服務中斷。
+severity	Major	5	-	Major	特定情境下會出錯，或明顯降低品質。
+severity	Minor	2	-	Minor	能運作，但有更好的寫法。
+severity	Nit	1	-	Nit	風格偏好。
+grade	A	95	A
+grade	B	85	B
+grade	C	70	C
+grade	D	60	D
+grade	F	0	F
+exclude	build	(^|/)(target|build|out|dist|/.gradle|node_modules)/|(^|/)generated(-sources|-test-sources)?/
+exclude	lock	(^|/)(package-lock/.json|yarn/.lock|pnpm-lock/.yaml|gradle/.lockfile)$|/.lock$
+exclude	binary	/.(class|jar|war|png|jpe?g|gif|ico|pdf|zip)$
+exclude	generated	@(javax|jakarta)/.annotation/.(processing/.)?Generated|DO NOT EDIT|[Aa]uto-generated
+defaults	rules/defaults.ini	sha256:d8d87c8bc7d247b1bc801eb43deff1abc8fb93dc5d6a9cd5f4fd103ef06c0f8d
+### --diff all-excluded.diff --settings settings.ini
+error: all-excluded.diff: every file of the diff is excluded by [exclude] of defaults.ini; there is nothing to score
 exit=2
 ### --diff global-only.diff --settings settings-noglobal.ini
 error: global-only.diff: no enabled framework rule covers the files of this PR and no global rule is enabled
